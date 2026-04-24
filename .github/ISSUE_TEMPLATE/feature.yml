@@ -1,0 +1,76 @@
+name: "✨ Feature / Phase task"
+description: A new capability or an explicit PR from the implementation plan
+title: "[FEAT] "
+labels: ["type/feature", "triage/needed"]
+assignees: ["IJLee0812"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when proposing a new feature or filing a phase PR slot.
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      options:
+        - "Phase 1 — Scenario DNA + storage"
+        - "Phase 2 — Scout + YOLO26 Grounding"
+        - "Phase 3 — Search + UI"
+        - "Phase 4 — CARLA simulation"
+        - "Phase 5 — MLOps / Observability / CI"
+        - "Phase 6 — Production hardening"
+        - "Phase 7 — OSS / Portfolio"
+        - "Cross-cutting"
+    validations:
+      required: true
+
+  - type: input
+    id: pr_slot
+    attributes:
+      label: PR slot (if any)
+      description: "e.g. P2-3 (best-of-N aggregator). Leave blank if this is a new proposal."
+      placeholder: "P2-3"
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Which roadmap objective does this serve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / deliverables
+      description: Files to create/modify, test markers, services touched
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Mirror the "Acceptance" column in the implementation plan.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: resource
+    attributes:
+      label: Resource class
+      options:
+        - "Pure code (no GPU)"
+        - "GPU0 (DeepStream / Cosmos-Reason2)"
+        - "GPU1 (Milvus / Judge / Embedder / CARLA)"
+        - "Infra only (storage/network/CI)"
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Gate reminders
+      options:
+        - label: Will not inflate GPU0 VRAM ≥ 1 GB without justification
+        - label: Will not add ≥ 5 GB SSD without lifecycle policy
+        - label: Prompt/schema change flagged if applicable

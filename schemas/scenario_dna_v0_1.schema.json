@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/IJLee0812/My-Curator/schemas/scenario_dna_v0_1.schema.json",
+  "title": "Scenario DNA v0.1",
+  "description": "Four-layer AV driving scenario ontology. Enum sources: ASAM OpenSCENARIO v1.0 XSD, ASAM OSI v3.x, OpenDRIVE v1.5M XSD, WOD-E2E arXiv:2510.26125, PEGASUS 6LM arXiv:2012.06319, ISO 34502:2022, ISO 21448 SOTIF.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dna_version",
+    "clip_id",
+    "timestamp_range",
+    "odd",
+    "topology",
+    "actor_dynamics",
+    "planner_logic",
+    "confidence",
+    "provenance"
+  ],
+  "properties": {
+    "dna_version": {
+      "const": "0.1.0"
+    },
+    "clip_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "timestamp_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_s", "end_s"],
+      "properties": {
+        "start_s": {"type": "number", "minimum": 0},
+        "end_s":   {"type": "number", "minimum": 0}
+      }
+    },
+    "odd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weather", "lighting", "sensor_fidelity"],
+      "properties": {
+        "weather": {
+          "type": "string",
+          "enum": [
+            "clear",
+            "overcast",
+            "light_rain",
+            "heavy_rain",
+            "snow",
+            "heavy_snow",
+            "fog",
+            "mist",
+            "sleet"
+          ],
+          "$comment": "Sources: ASAM OpenSCENARIO CloudState (overcast); ASAM OSI PrecipitationIntensity split (heavy_snow); ISO automotive taxonomy (sleet)"
+        },
+        "lighting": {
+          "type": "string",
+          "enum": [
+            "day",
+            "dawn",
+            "dusk",
+            "night",
+            "tunnel",
+            "overcast_day"
+          ],
+          "$comment": "Sources: ASAM OSI AmbientIllumination lux-level buckets (dawn vs dusk operationally distinct; overcast_day ~100 lx vs full-sun day ~10000 lx)"
+        },
+        "sensor_fidelity": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "clean",
+              "lens_flare",
+              "droplets_on_lens",
+              "motion_blur",
+              "low_contrast",
+              "overexposed"
+            ]
+          },
+          "uniqueItems": true,
+          "$comment": "No authoritative standard defines these sensor degradation modes; domain-specific values retained."
+        }
+      }
+    },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["road_type", "lane_event", "intersection_type"],
+      "properties": {
+        "road_type": {
+          "type": "string",
+          "enum": [
+            "motorway",
+            "trunk",
+            "primary",
+            "secondary",
+            "residential",
+            "service",
+            "rural",
+            "parking",
+            "walkway",
+            "cycling"
+          ],
+          "$comment": "Source: OpenDRIVE v1.5M XSD e_roadType. 'highway' replaced by 'motorway'; 'urban' split into primary/secondary; 'tunnel_road' removed (tunnel is an OpenDRIVE road object, not a type)."
+        },
+        "lane_event": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "construction_divert",
+            "lane_closed",
+            "merge",
+            "split",
+            "unmarked"
+          ]
+        },
+        "intersection_type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "signalized",
+            "unsignalized",
+            "roundabout",
+            "t_junction",
+            "crosswalk",
+            "direct_connection"
+          ],
+          "$comment": "Source: OpenDRIVE junction types. 'direct_connection' = highway on/off-ramp merge zone (direct junction type)."
+        }
+      }
+    },
+    "actor_dynamics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actor_class",
+          "state",
+          "distance_bucket",
+          "confidence",
+          "grounded_by_yolo26"
+        ],
+        "properties": {
+          "actor_class": {
+            "type": "string",
+            "enum": [
+              "pedestrian",
+              "cyclist",
+              "motorcyclist",
+              "vehicle_car",
+              "vehicle_van",
+              "vehicle_truck",
+              "vehicle_bus",
+              "vehicle_emergency",
+              "vehicle_construction",
+              "animal",
+              "debris",
+              "construction_object",
+              "obstacle",
+              "standup_scooter_rider",
+              "e_bike_rider",
+              "delivery_motorcycle",
+              "wheelchair_user"
+            ],
+            "$comment": "Sources: ASAM OSI VehicleClassification.Type (vehicle_car=TYPE_CAR, vehicle_van=TYPE_VAN, vehicle_construction=TYPE_WORK_MACHINE, standup_scooter_rider=TYPE_STANDUP_SCOOTER); ASAM PedestrianCategory (wheelchair_user); ASAM MiscObjectCategory (obstacle). vehicle_sedan+vehicle_suv consolidated to vehicle_car per OSI; escooter_rider renamed to standup_scooter_rider per OSI TYPE_STANDUP_SCOOTER. e_bike_rider, delivery_motorcycle, standup_scooter_rider retained for Korean urban road coverage."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "crossing",
+              "hesitating",
+              "jaywalking",
+              "cutin",
+              "cutout",
+              "stopped",
+              "emerging",
+              "tailing",
+              "oncoming",
+              "parked",
+              "static"
+            ]
+          },
+          "distance_bucket": {
+            "type": "string",
+            "enum": ["near", "mid", "far"]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "grounded_by_yolo26": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "planner_logic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ego_maneuver", "risk_level"],
+      "properties": {
+        "ego_maneuver": {
+          "type": "string",
+          "enum": [
+            "cruise",
+            "accelerate",
+            "brake_soft",
+            "brake_hard",
+            "emergency_brake",
+            "nudge_left",
+            "nudge_right",
+            "lane_change_left",
+            "lane_change_right",
+            "yield",
+            "stop",
+            "reverse",
+            "swerve"
+          ],
+          "$comment": "Sources: WOD-E2E arXiv:2510.26125 Figure 4 (emergency_brake, swerve as distinct driving behaviors); PEGASUS HAD-F maneuver taxonomy (emergency braking as named category). emergency_brake = AEB/panic stop; brake_hard = intentional hard deceleration. swerve = lateral avoidance without completing a lane change."
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["nominal", "elevated", "critical"],
+          "$comment": "SOTIF mapping (ISO 21448): nominal=absence of unreasonable risk; elevated=tolerable with mitigation; critical=unreasonable risk (SOTIF trigger)."
+        },
+        "causal_trigger_actor_index": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "default": null,
+          "$comment": "Index into actor_dynamics[]; null allowed in single-Scout era. Expected to be populated once Judge lands (post-v0.1)."
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "scout_agreement", "hallucination_flags"],
+      "properties": {
+        "overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "scout_agreement": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "$comment": "1.0 for single Scout (no inter-model disagreement possible)."
+        },
+        "hallucination_flags": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scout_models",
+        "scout_prompt_hash",
+        "pipeline_version",
+        "is_synthetic",
+        "reference_standards"
+      ],
+      "properties": {
+        "scout_models": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "scout_prompt_hash": {
+          "type": "string",
+          "$comment": "SHA256 of normalized prompt (whitespace-collapsed, CRLF→LF, trailing newline stripped)."
+        },
+        "judge_model": {
+          "type": ["string", "null"],
+          "default": null,
+          "$comment": "Reserved for post-v0.1 Judge (Qwen2.5-14B-AWQ). Null in v0.1.0."
+        },
+        "judge_prompt_hash": {
+          "type": ["string", "null"],
+          "default": null
+        },
+        "pipeline_version": {
+          "type": "string"
+        },
+        "is_synthetic": {
+          "type": "boolean",
+          "default": false
+        },
+        "reference_standards": {
+          "type": "array",
+          "items": {"type": "string"},
+          "$comment": "Canonical value: see docs/implementation_plan.md §3.1 provenance block."
+        }
+      }
+    }
+  }
+}

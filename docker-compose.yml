@@ -1,0 +1,56 @@
+services:
+  # ─── DeepStream 9.0 + nvvllmvlm + Cosmos-Reason2-8B ───
+  deepstream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ds9-vlm:latest
+    container_name: ds9-vlm-dev
+    stdin_open: true
+    tty: true
+    privileged: true
+    ipc: host
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - HF_TOKEN=${HF_TOKEN}
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - .:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+    depends_on:
+      - kafka
+
+  # ─── Zookeeper ───
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: ds9-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  # ─── Kafka Broker ───
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: ds9-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168  # 7 days
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"

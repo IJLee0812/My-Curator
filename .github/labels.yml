@@ -1,0 +1,79 @@
+# Canonical label set. Apply with a labeler action or `gh label create` loop.
+# Keep in sync with labels referenced by ISSUE_TEMPLATE/*.yml and workflows.
+
+- name: type/bug
+  color: d73a4a
+  description: Defect to fix
+- name: type/feature
+  color: a2eeef
+  description: New capability or roadmap PR slot
+- name: type/chore
+  color: cfd3d7
+  description: Refactor / deps / CI / docs
+- name: type/discussion
+  color: d876e3
+  description: RFC / design / review request
+
+- name: triage/needed
+  color: fbca04
+  description: Awaiting triage
+- name: priority/P0
+  color: b60205
+  description: Drop everything
+- name: priority/P1
+  color: d93f0b
+  description: Current sprint
+- name: priority/P2
+  color: fbca04
+  description: Planned
+- name: priority/P3
+  color: 0e8a16
+  description: Backlog
+
+- name: phase/1
+  color: 0366d6
+  description: Scenario DNA + storage
+- name: phase/2
+  color: 0366d6
+  description: Scout + YOLO26 Grounding (Judge deferred to post-v0.1)
+- name: phase/3
+  color: 0366d6
+  description: Search + UI
+- name: phase/4
+  color: 0366d6
+  description: CARLA simulation
+- name: phase/5
+  color: 0366d6
+  description: MLOps / Observability / CI
+- name: phase/6
+  color: 0366d6
+  description: Production hardening
+- name: phase/7
+  color: 0366d6
+  description: OSS / Portfolio
+
+- name: area/pipeline
+  color: 5319e7
+  description: DeepStream / nvvllmvlm / probes
+- name: area/storage
+  color: 5319e7
+  description: MinIO / Postgres / Milvus
+- name: area/judge
+  color: 5319e7
+  description: Judge LLM + consistency check (post-v0.1)
+- name: area/search
+  color: 5319e7
+  description: curation-api + UI
+- name: area/simulation
+  color: 5319e7
+  description: CARLA + scenarios
+- name: area/ops
+  color: 5319e7
+  description: CI/CD / Prom / Grafana / runbook
+
+- name: risk
+  color: ee0701
+  description: Tracked risk from roadmap
+- name: good first issue
+  color: 7057ff
+  description: Good for newcomers

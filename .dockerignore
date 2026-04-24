@@ -1,0 +1,42 @@
+# Model caches (pulled at runtime, never baked into the image)
+models/hub/
+models/*.onnx
+models/*.engine
+models/*.pt
+models/*.ts
+models/*.labels.txt
+
+# Runtime outputs
+results/
+logs/
+
+# Third-party clones
+reference/
+
+# Docs / docs-adjacent user artifacts
+docs/
+
+# Environment
+.env
+*.env.local
+
+# Python caches / virtualenvs
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Git metadata
+.git/
+.gitignore
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

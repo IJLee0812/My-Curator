@@ -1,0 +1,71 @@
+name: "🐛 Bug report"
+description: Report a defect in My-Curator (pipeline, storage, judge, UI, etc.)
+title: "[BUG] "
+labels: ["type/bug", "triage/needed"]
+assignees: ["IJLee0812"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail for a reproducer.
+
+  - type: input
+    id: phase
+    attributes:
+      label: Affected phase
+      description: "e.g. Phase 2 (Scout + YOLO26 Grounding), Phase 3 (search), baseline pipeline"
+      placeholder: "Phase 2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong in one or two sentences?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Minimal command sequence. Attach config/prompt/DNA JSON as a gist if long.
+      placeholder: |
+        1. `docker compose -f infra/compose.base.yml up -d`
+        2. `python main.py sample.mp4 -c configs/config_driving_scene.yaml`
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: GPU(s), driver, DeepStream/vLLM versions, git SHA
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-filing checks
+      options:
+        - label: I checked `README.md` and `.github/` for known limitations and the roadmap
+          required: true
+        - label: I searched existing issues for duplicates
+          required: true

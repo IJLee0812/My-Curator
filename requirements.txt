@@ -1,0 +1,29 @@
+# Runtime Python dependencies for the ds9-vlm-dev container.
+# Versions pinned to the reference environment
+# (RTX 4090 / DS 9.0 / CUDA 13.1 / TRT 10.14). vLLM is hard-pinned
+# because the FP8 Cosmos-Reason2-8B checkpoint produces gibberish on
+# 0.15.1+.
+#
+# Runtime (pipeline execution):
+vllm==0.14.0
+kafka-python==2.3.1
+PyYAML==6.0.3
+Pillow==12.2.0
+pydantic==2.12.5
+
+# Detector export toolchain (YOLO26 / YOLOE ONNX export paths).
+# onnxscript + onnx-ir are pulled in by recent torch.onnx.export even
+# with dynamo=False; pin them alongside to keep the build reproducible.
+ultralytics==8.4.39
+onnx==1.21.0
+onnxslim==0.1.91
+onnxscript==0.6.2
+onnx-ir==0.2.0
+
+# Used by scripts/gen_desc_visuals.py for frame extraction.
+opencv-python-headless==4.13.0.92
+
+# In-container test runner (host-side dev installs use pyproject extras).
+pytest==9.0.2
+pytest-mock==3.15.1
+pytest-cov==7.1.0

@@ -1,0 +1,54 @@
+[project]
+name = "deepstream-vlm"
+version = "0.1.0"
+description = "DeepStream 9.0 + Cosmos-Reason2-8B FP8 VLM pipeline with YOLO26 / YOLOE detection hints"
+requires-python = ">=3.10"
+# Runtime deps managed by Dockerfile + requirements.txt (not here,
+# because vllm/torch require CUDA which is unavailable on host).
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "pytest-mock>=3.15",
+    "PyYAML>=6.0",
+    "jsonschema>=4.0",
+]
+lint = [
+    "ruff>=0.15",
+]
+dev = [
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "pytest-mock>=3.15",
+    "PyYAML>=6.0",
+    "jsonschema>=4.0",
+    "ruff>=0.15",
+]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["reference/", "models/", ".venv/", "results/", "logs/", "docs/"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",    # line length handled by formatter
+    "E402",    # module-level import not at top (GStreamer gi.require_version pattern)
+    "F401",    # unused import (gstnvvllmvlm imported for side-effect registration)
+    "SIM102",  # nested if — GStreamer pad callbacks are clearer expanded
+    "SIM105",  # contextlib.suppress — try/except/pass is more explicit for CUDA/GStreamer
+    "SIM108",  # ternary — multi-line if/else is clearer for nanosecond math
+    "UP035",   # typing.Dict/List deprecated — keep for compatibility with older type checkers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"plugin/gstnvvllmvlm.py" = ["E402", "B007"]
+"src/vllm_ds_app_kafka_publish.py" = ["E402", "F401"]
+"scripts/*" = ["E402", "B007"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

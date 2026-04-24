@@ -1,0 +1,51 @@
+# Model weights & caches (incl. symlinks — e.g. models/hub points to an external dir)
+models/hub
+models/hub/
+models/*.onnx
+models/*.engine
+models/*.pt
+models/*.ts
+models/*.labels.txt
+*.bin
+*.safetensors
+*.gguf
+*.ts
+
+# Runtime outputs
+results/
+logs/
+
+# Test artifacts
+.coverage
+.coverage.*
+htmlcov/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+*.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Third-party clones
+reference/
+
+# ─── Agent harness + private planning docs — local-only, NEVER push ───
+.claude/
+.omc/
+CLAUDE.md
+AGENTS.md
+docs/

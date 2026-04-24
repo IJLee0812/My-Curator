@@ -1,0 +1,32 @@
+name: "🧹 Chore / Infra"
+description: Refactor, dependency bump, CI tweak, docs, runbook
+title: "[CHORE] "
+labels: ["type/chore"]
+assignees: ["IJLee0812"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - refactor
+        - dependency
+        - ci
+        - docs
+        - runbook
+        - tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What and why
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Blast radius
+      description: Which modules/services are affected? Any migration needed?

@@ -1,0 +1,17 @@
+# Default owner — auto-requested as reviewer on every PR.
+# Also combined with .github/workflows/auto-assign.yml which sets
+# the PR author (= same account in solo-dev mode) as assignee.
+*                           @IJLee0812
+
+# Planning docs and GitHub config: explicit ownership.
+/docs/                      @IJLee0812
+/.github/                   @IJLee0812
+
+# Runtime-critical code paths: same owner, listed for clarity.
+/plugin/                    @IJLee0812
+/src/                       @IJLee0812
+/infra/                     @IJLee0812
+/services/                  @IJLee0812
+/prompts/                   @IJLee0812
+/schemas/                   @IJLee0812
+/scenarios/                 @IJLee0812

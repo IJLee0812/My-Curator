@@ -1,0 +1,89 @@
+# Driving Scene Description - Cosmos-Reason2-8B FP8
+# Unified config: Pure VLM by default; auto-augments with detection hints
+# when --detect is enabled. {detection_hints} renders empty when no
+# detections are present, so the same file serves both modes.
+# Usage:
+#   Pure VLM:         python3 main.py video.mp4 -c configs/config_driving_scene.yaml
+#   VLM + Detection:  python3 main.py video.mp4 -c configs/config_driving_scene.yaml --detect
+
+model:
+  path: "/workspace/models/hub/cosmos-reason2-8b_v1208-fp8-static-kv8"
+  max_model_len: 8192
+  trust_remote_code: true
+  gpu_memory_utilization: 0.8
+  enforce_eager: false
+  video_mode: 1
+  tensor_format: "pytorch"
+
+segment:
+  length_sec: 5
+  overlap_sec: 0
+  subsample_interval: 1
+  selection_fps: 1
+
+inference:
+  max_tokens: 1024
+  temperature: 0.3
+  top_p: 0.9
+  top_k: 50
+  repetition_penalty: 1.1
+
+  system_prompt: |
+    You are an expert autonomous-vehicle front-camera video analyst.
+    Given a driving video segment, provide a detailed scene description.
+
+    Respond ONLY with valid JSON in the following format:
+    {
+      "scene_summary": "English scene summary in up to 5 sentences",
+      "road_type": "urban_road" | "highway" | "residential" | "intersection" | "parking_lot" | "bridge" | "tunnel" | "other",
+      "road_features": {
+        "num_lanes": 1-6,
+        "lane_markings": "solid_white" | "dashed_white" | "solid_yellow" | "double_yellow" | "none" | "mixed",
+        "road_surface": "dry_asphalt" | "wet_asphalt" | "concrete" | "gravel" | "other",
+        "road_condition": "good" | "moderate" | "poor"
+      },
+      "weather": "clear" | "cloudy" | "rain" | "snow" | "fog" | "night" | "dusk" | "dawn" | "other",
+      "visibility": "good" | "moderate" | "poor",
+      "traffic_density": "sparse" | "moderate" | "heavy" | "congested",
+      "key_objects": [
+        {"type": "vehicle|pedestrian|cyclist|bus|truck|motorcycle|traffic_sign|traffic_light|other", "description": "brief English description"}
+      ],
+      "ego_vehicle": {
+        "action": "going_straight" | "turning_left" | "turning_right" | "lane_change" | "stopped" | "decelerating" | "accelerating" | "reversing" | "other",
+        "estimated_speed": "slow (<20km/h)" | "moderate (20-60km/h)" | "fast (>60km/h)" | "stationary"
+      },
+      "potential_risks": ["list of notable risk factors in English, or empty if none"]
+    }
+
+    Regarding auxiliary object cues (when present in the user message):
+    - They are best-effort outputs from an external object detector and may
+      be incomplete, noisy, or mislabeled.
+    - Trust your own visual perception first. Use the cues only to
+      sanity-check or refine your "key_objects" list - never include an
+      object solely because the cues mention it if you cannot actually see
+      it in the video.
+    - Do NOT let the cues influence non-object fields (weather,
+      road_features, visibility, traffic_density, ego_vehicle,
+      potential_risks). Derive those purely from the video frames.
+
+  user_prompt: |
+    Analyze this {num_frames}-frame driving video segment from front camera
+    (stream {stream_id}, timestamps {timestamps}).
+
+    {detection_hints}
+
+    Describe the scene based on what you observe in the video. The
+    auxiliary cues above (if any) are supplementary hints only - your own
+    observation takes precedence. Respond with the JSON schema strictly.
+
+pipeline:
+  queue_maxsize: 8
+  max_wait_timeout: 300
+
+video:
+  default_fps_numerator: 30
+  default_fps_denominator: 1
+
+detection_hints:
+  enabled: true
+  min_confidence: 0.3
