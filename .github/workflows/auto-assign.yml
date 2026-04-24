@@ -62,3 +62,20 @@ jobs:
                 owner, repo, issue_number: pr.number, labels: [label]
               });
             } catch (e) { core.warning(`label failed: ${e.message}`); }
+
+      # Same treatment for issues: "[P2-3] ..." or "[PHASE 2] ..." in title.
+      - name: Derive phase label from issue title
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const m = /\[P(\d)-\d+\]/i.exec(issue.title || '');
+            if (!m) return;
+            const label = `phase/${m[1]}`;
+            try {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: issue.number, labels: [label]
+              });
+            } catch (e) { core.warning(`label failed: ${e.message}`); }
