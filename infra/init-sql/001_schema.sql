@@ -9,9 +9,9 @@ BEGIN;
 -- ──────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sessions (
     session_id      TEXT        PRIMARY KEY,
-    project         TEXT        NOT NULL,
-    subproject      TEXT        NOT NULL,
-    version         TEXT        NOT NULL,
+    dataset         TEXT        NOT NULL,
+    subset          TEXT        NOT NULL,
+    dataset_version TEXT        NOT NULL,
     recorded_at     TIMESTAMPTZ NOT NULL,
     source_kind     TEXT        NOT NULL CHECK (source_kind IN ('real', 'synthetic')),
     notes           TEXT,
