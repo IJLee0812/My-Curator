@@ -5,11 +5,14 @@ Markers: schema + unit — runs on every PR push (no Docker, no GPU required).
 
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 import uuid
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 SCHEMA_PATH = pathlib.Path(__file__).parents[2] / "schemas" / "scenario_dna_v0_1.schema.json"
 
@@ -624,3 +627,237 @@ def test_missing_required_top_level_field_fails(validator, field):
     doc = _valid_doc()
     del doc[field]
     assert _fails(validator, doc)
+
+
+# ── Property-based tests (hypothesis) ────────────────────────────────────────
+
+_WEATHER = [
+    "clear",
+    "overcast",
+    "light_rain",
+    "heavy_rain",
+    "snow",
+    "heavy_snow",
+    "fog",
+    "mist",
+    "sleet",
+]
+_LIGHTING = ["day", "dawn", "dusk", "night", "tunnel", "overcast_day"]
+_SENSOR_FIDELITY_ITEMS = [
+    "clean",
+    "lens_flare",
+    "droplets_on_lens",
+    "motion_blur",
+    "low_contrast",
+    "overexposed",
+]
+_ROAD_TYPE = [
+    "motorway",
+    "trunk",
+    "primary",
+    "secondary",
+    "residential",
+    "service",
+    "rural",
+    "parking",
+    "walkway",
+    "cycling",
+]
+_LANE_EVENT = ["normal", "construction_divert", "lane_closed", "merge", "split", "unmarked"]
+_INTERSECTION_TYPE = [
+    "none",
+    "signalized",
+    "unsignalized",
+    "roundabout",
+    "t_junction",
+    "crosswalk",
+    "direct_connection",
+]
+_ACTOR_CLASS = [
+    "pedestrian",
+    "cyclist",
+    "motorcyclist",
+    "vehicle_car",
+    "vehicle_van",
+    "vehicle_truck",
+    "vehicle_bus",
+    "vehicle_emergency",
+    "vehicle_construction",
+    "animal",
+    "debris",
+    "construction_object",
+    "obstacle",
+    "standup_scooter_rider",
+    "e_bike_rider",
+    "delivery_motorcycle",
+    "wheelchair_user",
+]
+_ACTOR_STATE = [
+    "crossing",
+    "hesitating",
+    "jaywalking",
+    "cutin",
+    "cutout",
+    "stopped",
+    "emerging",
+    "tailing",
+    "oncoming",
+    "parked",
+    "static",
+]
+_DISTANCE_BUCKET = ["near", "mid", "far"]
+_EGO_MANEUVER = [
+    "cruise",
+    "accelerate",
+    "brake_soft",
+    "brake_hard",
+    "emergency_brake",
+    "nudge_left",
+    "nudge_right",
+    "lane_change_left",
+    "lane_change_right",
+    "yield",
+    "stop",
+    "reverse",
+    "swerve",
+]
+_RISK_LEVEL = ["nominal", "elevated", "critical"]
+_REQUIRED_TOP_LEVEL = [
+    "dna_version",
+    "clip_id",
+    "timestamp_range",
+    "odd",
+    "topology",
+    "actor_dynamics",
+    "planner_logic",
+    "confidence",
+    "provenance",
+]
+_ENUM_PATHS = [
+    ("odd", "weather"),
+    ("odd", "lighting"),
+    ("topology", "road_type"),
+    ("topology", "lane_event"),
+    ("topology", "intersection_type"),
+    ("planner_logic", "ego_maneuver"),
+    ("planner_logic", "risk_level"),
+]
+_CONFIDENCE_PATHS = [("confidence", "overall"), ("confidence", "scout_agreement")]
+
+_unit_float = st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False)
+_nn_float = st.floats(min_value=0.0, max_value=1e6, allow_nan=False, allow_infinity=False)
+
+_actor_st = st.fixed_dictionaries(
+    {
+        "actor_class": st.sampled_from(_ACTOR_CLASS),
+        "state": st.sampled_from(_ACTOR_STATE),
+        "distance_bucket": st.sampled_from(_DISTANCE_BUCKET),
+        "confidence": _unit_float,
+        "grounded_by_yolo26": st.booleans(),
+    }
+)
+
+_safe_text = st.text(
+    alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd", "Pd", "Po", "Zs")),
+    min_size=1,
+    max_size=50,
+)
+
+_valid_dna_st = st.fixed_dictionaries(
+    {
+        "dna_version": st.just("0.1.0"),
+        "clip_id": st.uuids().map(str),
+        "timestamp_range": st.fixed_dictionaries(
+            {
+                "start_s": _nn_float,
+                "end_s": _nn_float,
+            }
+        ),
+        "odd": st.fixed_dictionaries(
+            {
+                "weather": st.sampled_from(_WEATHER),
+                "lighting": st.sampled_from(_LIGHTING),
+                "sensor_fidelity": st.lists(
+                    st.sampled_from(_SENSOR_FIDELITY_ITEMS),
+                    min_size=0,
+                    max_size=len(_SENSOR_FIDELITY_ITEMS),
+                    unique=True,
+                ),
+            }
+        ),
+        "topology": st.fixed_dictionaries(
+            {
+                "road_type": st.sampled_from(_ROAD_TYPE),
+                "lane_event": st.sampled_from(_LANE_EVENT),
+                "intersection_type": st.sampled_from(_INTERSECTION_TYPE),
+            }
+        ),
+        "actor_dynamics": st.lists(_actor_st, min_size=0, max_size=3),
+        "planner_logic": st.fixed_dictionaries(
+            {
+                "ego_maneuver": st.sampled_from(_EGO_MANEUVER),
+                "risk_level": st.sampled_from(_RISK_LEVEL),
+                "causal_trigger_actor_index": st.one_of(
+                    st.none(), st.integers(min_value=0, max_value=9)
+                ),
+            }
+        ),
+        "confidence": st.fixed_dictionaries(
+            {
+                "overall": _unit_float,
+                "scout_agreement": _unit_float,
+                "hallucination_flags": st.lists(_safe_text, max_size=5),
+            }
+        ),
+        "provenance": st.fixed_dictionaries(
+            {
+                "scout_models": st.lists(_safe_text, min_size=1, max_size=3),
+                "scout_prompt_hash": _safe_text,
+                "pipeline_version": st.from_regex(r"\d+\.\d+\.\d+", fullmatch=True),
+                "is_synthetic": st.booleans(),
+                "reference_standards": st.lists(_safe_text, max_size=5),
+            }
+        ),
+    }
+)
+
+
+@st.composite
+def _corrupt_dna_st(draw):
+    doc = copy.deepcopy(draw(_valid_dna_st))
+    strategy = draw(st.sampled_from(["enum", "missing_required", "extra_field", "out_of_range"]))
+    if strategy == "enum":
+        parent, key = draw(st.sampled_from(_ENUM_PATHS))
+        doc[parent][key] = "__invalid_enum_value__"
+    elif strategy == "missing_required":
+        del doc[draw(st.sampled_from(_REQUIRED_TOP_LEVEL))]
+    elif strategy == "extra_field":
+        doc["_undeclared_field_"] = "corrupted"
+    else:  # out_of_range
+        parent, key = draw(st.sampled_from(_CONFIDENCE_PATHS))
+        doc[parent][key] = draw(
+            st.one_of(
+                st.floats(min_value=1.0001, max_value=1e6, allow_nan=False, allow_infinity=False),
+                st.floats(min_value=-1e6, max_value=-0.0001, allow_nan=False, allow_infinity=False),
+            )
+        )
+    return doc
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+@given(doc=_valid_dna_st)
+def test_property_valid_dna_passes(validator, doc):
+    """500 randomly generated valid Scenario DNA v0.1 documents must all pass schema validation."""
+    errors = list(validator.iter_errors(doc))
+    assert errors == [], [e.message for e in errors]
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+@given(doc=_corrupt_dna_st())
+def test_property_corrupted_dna_fails(validator, doc):
+    """500 deterministically corrupted DNAs must all fail schema validation."""
+    assert _fails(validator, doc), f"Corrupted doc unexpectedly passed validation: {doc}"

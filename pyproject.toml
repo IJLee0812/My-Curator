@@ -18,6 +18,7 @@ test = [
     "testcontainers[postgres]==4.14.2",
     "pymilvus==2.6.12",
     "boto3==1.42.96",
+    "hypothesis==6.152.3",
 ]
 lint = [
     "ruff>=0.15",
@@ -33,6 +34,7 @@ dev = [
     "testcontainers[postgres]==4.14.2",
     "pymilvus==2.6.12",
     "boto3==1.42.96",
+    "hypothesis==6.152.3",
     "ruff>=0.15",
 ]
 
