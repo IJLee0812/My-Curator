@@ -65,6 +65,9 @@ def make_osd_label_probe(class_mapping: dict[int, str]):
                     display_meta = batch_meta.acquire_display_meta()
                     texts_in_meta = 0
 
+                # Suppress the default nvinfer/nvtracker label so only our text renders
+                object_meta.text_params.display_text = ""
+
                 label = class_mapping.get(object_meta.class_id, f"class_{object_meta.class_id}")
                 track_id = getattr(object_meta, "object_id", None)
                 display_text = format_object_label(label, track_id)
