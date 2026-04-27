@@ -26,6 +26,7 @@ opencv-python-headless==4.13.0.92
 # Storage DAL.
 asyncpg==0.31.0
 pymilvus==2.6.12
+boto3==1.42.96
 
 # In-container test runner (host-side dev installs use pyproject extras).
 pytest==9.0.2

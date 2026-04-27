@@ -17,6 +17,7 @@ test = [
     "pytest-asyncio==1.3.0",
     "testcontainers[postgres]==4.14.2",
     "pymilvus==2.6.12",
+    "boto3==1.42.96",
 ]
 lint = [
     "ruff>=0.15",
@@ -31,6 +32,7 @@ dev = [
     "pytest-asyncio==1.3.0",
     "testcontainers[postgres]==4.14.2",
     "pymilvus==2.6.12",
+    "boto3==1.42.96",
     "ruff>=0.15",
 ]
 
