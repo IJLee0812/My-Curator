@@ -86,4 +86,4 @@ video:
 
 detection_hints:
   enabled: true
-  min_confidence: 0.3
+  min_confidence: 0.25

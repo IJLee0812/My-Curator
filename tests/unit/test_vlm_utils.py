@@ -13,6 +13,7 @@ from vlm_utils import (
     compute_sample_interval_ns,
     compute_step_ns,
     format_detection_hints,
+    format_object_label,
     format_user_prompt,
     get_stream_config,
     is_segmentation_config,
@@ -31,8 +32,8 @@ def _make_frame(detections=None):
     return SimpleNamespace(detections=detections or [])
 
 
-def _make_detection(label, confidence, bbox):
-    return {"label": label, "confidence": confidence, "bbox": bbox}
+def _make_detection(label, confidence, bbox, track_id=None):
+    return {"label": label, "confidence": confidence, "bbox": bbox, "track_id": track_id}
 
 
 # ── YOLO26_CLASS_MAPPING ──
@@ -177,6 +178,36 @@ class TestFormatDetectionHints:
         result = format_detection_hints(frames, enabled=True)
         assert "Object counts across 1 frames: Trafficlight x 1" in result
         assert "VRU positions:" not in result
+
+    # ── Track-ID dedup tests ──
+
+    def test_same_track_id_counts_once(self):
+        """Same track_id appearing across multiple frames is deduplicated to count=1."""
+        frames = [
+            _make_frame([_make_detection("Car", 0.9, (0.1, 0.2, 0.3, 0.4), track_id=7)]),
+            _make_frame([_make_detection("Car", 0.85, (0.1, 0.2, 0.3, 0.4), track_id=7)]),
+        ]
+        result = format_detection_hints(frames, enabled=True)
+        assert "Car x 1" in result
+
+    def test_different_track_ids_count_separately(self):
+        """Each unique track_id is counted as one distinct object."""
+        frames = [
+            _make_frame([_make_detection("Car", 0.9, (0.1, 0.2, 0.3, 0.4), track_id=1)]),
+            _make_frame([_make_detection("Car", 0.85, (0.1, 0.2, 0.3, 0.4), track_id=2)]),
+            _make_frame([_make_detection("Car", 0.8, (0.1, 0.2, 0.3, 0.4), track_id=3)]),
+        ]
+        result = format_detection_hints(frames, enabled=True)
+        assert "Car x 3" in result
+
+    def test_none_track_id_uses_frame_det_fallback(self):
+        """track_id=None falls back to (frame_idx, det_idx); no false dedup between frames."""
+        frames = [
+            _make_frame([_make_detection("Car", 0.9, (0.1, 0.2, 0.3, 0.4), track_id=None)]),
+            _make_frame([_make_detection("Car", 0.85, (0.1, 0.2, 0.3, 0.4), track_id=None)]),
+        ]
+        result = format_detection_hints(frames, enabled=True)
+        assert "Car x 2" in result
 
 
 class TestVruClasses:
@@ -485,24 +516,24 @@ class TestCollectDetections:
 
     def test_known_class_id(self):
         objs = [self._make_obj(2, 0.9, 100, 200, 50, 60)]
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         assert len(result) == 1
         assert result[0]["label"] == "Car"
         assert result[0]["confidence"] == 0.9
 
     def test_unknown_class_id_ignored(self):
         objs = [self._make_obj(4, 0.9, 100, 200, 50, 60)]  # class 4 not in mapping
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         assert len(result) == 0
 
     def test_below_min_confidence_filtered(self):
-        objs = [self._make_obj(2, 0.2, 100, 200, 50, 60)]  # conf 0.2 < 0.3
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        objs = [self._make_obj(2, 0.2, 100, 200, 50, 60)]  # conf 0.2 < 0.25
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         assert len(result) == 0
 
     def test_normalized_bbox(self):
         objs = [self._make_obj(2, 0.9, 960, 540, 192, 108)]
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         bbox = result[0]["bbox"]
         assert bbox[0] == 0.5  # x1 = 960/1920
         assert bbox[1] == 0.5  # y1 = 540/1080
@@ -512,7 +543,7 @@ class TestCollectDetections:
     def test_zero_frame_dimensions(self):
         """frame_width=0 or frame_height=0 should not cause division by zero."""
         objs = [self._make_obj(2, 0.9, 100, 200, 50, 60)]
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 0, 0)
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 0, 0)
         assert len(result) == 1  # should not crash
 
     def test_multiple_detections(self):
@@ -521,7 +552,7 @@ class TestCollectDetections:
             self._make_obj(2, 0.8, 300, 400, 70, 80),  # Car
             self._make_obj(7, 0.7, 500, 600, 90, 100),  # Truck
         ]
-        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         assert len(result) == 3
         labels = [d["label"] for d in result]
         assert "Pedestrian" in labels
@@ -529,8 +560,21 @@ class TestCollectDetections:
         assert "Truck" in labels
 
     def test_empty_object_items(self):
-        result = collect_detections([], YOLO26_CLASS_MAPPING, 0.3, 1920, 1080)
+        result = collect_detections([], YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
         assert result == []
+
+    def test_track_id_from_object_id(self):
+        """collect_detections reads object_id → track_id when nvtracker is active."""
+        obj = self._make_obj(2, 0.9, 100, 200, 50, 60)
+        obj.object_id = 42
+        result = collect_detections([obj], YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
+        assert result[0]["track_id"] == 42
+
+    def test_track_id_none_when_no_object_id(self):
+        """track_id is None when the object has no object_id attribute (no tracker)."""
+        objs = [self._make_obj(2, 0.9, 100, 200, 50, 60)]
+        result = collect_detections(objs, YOLO26_CLASS_MAPPING, 0.25, 1920, 1080)
+        assert result[0]["track_id"] is None
 
 
 # ── to_uri ──
@@ -696,3 +740,21 @@ class TestFormatDetectionHintsDetectorName:
         frame = _make_frame([_make_detection("Car", 0.8, (0.0, 0.0, 1.0, 1.0))])
         out = format_detection_hints([frame], enabled=True, detector_name="YOLOE-26 Seg")
         assert "[Auxiliary object cues from YOLOE-26 Seg - may be incomplete or noisy]" in out
+
+
+# ── format_object_label ──
+
+
+class TestFormatObjectLabel:
+    def test_with_track_id(self):
+        assert format_object_label("Car", 42) == "Car (TrackID: 42)"
+
+    def test_with_none_track_id(self):
+        assert format_object_label("Pedestrian", None) == "Pedestrian"
+
+    def test_zero_track_id(self):
+        """track_id=0 is a valid ID and must be rendered, not treated as falsy."""
+        assert format_object_label("Bus", 0) == "Bus (TrackID: 0)"
+
+    def test_large_track_id(self):
+        assert format_object_label("Truck", 9999) == "Truck (TrackID: 9999)"

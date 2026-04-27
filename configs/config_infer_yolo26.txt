@@ -46,7 +46,7 @@ pre-cluster-threshold=0.25
 pre-cluster-threshold=0.25
 
 [class-attrs-9]
-pre-cluster-threshold=0.30
+pre-cluster-threshold=0.25
 
 [class-attrs-11]
-pre-cluster-threshold=0.30
+pre-cluster-threshold=0.25

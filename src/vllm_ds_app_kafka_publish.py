@@ -60,6 +60,7 @@ except ImportError:
 from vlm_utils import (  # noqa: E402
     check_onnx_exists,
     is_segmentation_config,
+    load_class_mapping,
     move_built_engine,
     parse_nvinfer_config,
     parse_vlm_json,
@@ -278,6 +279,7 @@ class VLMKafkaApp:
         self.nvinfer_config = nvinfer_config
         self.osd_output_path = osd_output_path
         self.seg_mode = seg_mode
+        self._class_mapping = load_class_mapping(os.environ.get("VLM_DETECT_LABELFILE"))
 
         # Initialize Kafka publisher
         self.kafka_publisher = VLMKafkaSignalPublisher(
@@ -407,6 +409,25 @@ class VLMKafkaApp:
             else:
                 print("✗ Failed to create nvinfer element")
 
+        # Tracker (NvDCF) — assigns stable object_id per detected object
+        nvtracker = None
+        if nvinfer:
+            nvtracker = Gst.ElementFactory.make("nvtracker", "tracker")
+            if nvtracker:
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                tracker_config = os.path.normpath(
+                    os.path.join(script_dir, "..", "configs", "config_tracker_NvDCF_perf.yml")
+                )
+                tracker_lib = (
+                    "/opt/nvidia/deepstream/deepstream/lib/libnvds_nvmultiobjecttracker.so"
+                )
+                nvtracker.set_property("ll-config-file", tracker_config)
+                nvtracker.set_property("ll-lib-file", tracker_lib)
+                self.pipeline.add(nvtracker)
+                print("✓ nvtracker (NvDCF) loaded")
+            else:
+                print("✗ Failed to create nvtracker element")
+
         # Video converter
         nvvidconv = Gst.ElementFactory.make("nvvideoconvert", "convertor")
         nvvidconv.set_property("nvbuf-memory-type", 0)
@@ -439,17 +460,25 @@ class VLMKafkaApp:
             osd_tee = self._build_osd_branch(self.osd_output_path, self.seg_mode)
 
         # Link pipeline
-        #   With OSD tee:  streammux → nvinfer → tee ─┬→ queue_vlm → nvvidconv → caps → nvvllm → sink
-        #                                             └→ queue_osd → nvvideoconvert → nvdsosd → ... → filesink
-        #   Without OSD:   streammux → [nvinfer →] nvvidconv → caps → nvvllm → sink
+        #   With OSD tee:  streammux → nvinfer → nvtracker → tee ─┬→ queue_vlm → nvvidconv → caps → nvvllm → sink
+        #                                                         └→ queue_osd → nvosdbin → ... → filesink
+        #   Without OSD:   streammux → [nvinfer → nvtracker →] nvvidconv → caps → nvvllm → sink
         if osd_tee is not None:
             streammux.link(nvinfer)
-            nvinfer.link(osd_tee)
+            if nvtracker:
+                nvinfer.link(nvtracker)
+                nvtracker.link(osd_tee)
+            else:
+                nvinfer.link(osd_tee)
             queue_vlm = self.pipeline.get_by_name("queue_vlm")
             queue_vlm.link(nvvidconv)
         elif nvinfer:
             streammux.link(nvinfer)
-            nvinfer.link(nvvidconv)
+            if nvtracker:
+                nvinfer.link(nvtracker)
+                nvtracker.link(nvvidconv)
+            else:
+                nvinfer.link(nvvidconv)
         else:
             streammux.link(nvvidconv)
         nvvidconv.link(caps_filter)
@@ -496,6 +525,20 @@ class VLMKafkaApp:
         nvosdbin.set_property("display-text", True)
         nvosdbin.set_property("display-bbox", True)
         nvosdbin.set_property("display-mask", bool(seg_mode))
+
+        # Attach OSD label probe: overlays "ClassName (TrackID: N)" on each bbox
+        try:
+            from probes.osd_label_probe import make_osd_label_probe
+
+            osd_sink = nvosdbin.get_static_pad("sink")
+            if osd_sink:
+                osd_sink.add_probe(
+                    Gst.PadProbeType.BUFFER,
+                    make_osd_label_probe(self._class_mapping),
+                )
+                print("✓ OSD label probe attached (ClassName + TrackID)")
+        except ImportError:
+            print("✗ probes.osd_label_probe not importable; OSD labels disabled")
 
         encoder = Gst.ElementFactory.make("nvv4l2h264enc", "h264enc")
         encoder_is_gpu = encoder is not None

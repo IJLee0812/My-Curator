@@ -1,0 +1,86 @@
+%YAML:1.0
+###################################################################################################
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+###################################################################################################
+
+# NvDCF tracker config tuned for My-Curator driving-scene pipeline.
+# Derived from the stock NvDCF perf preset with confidence thresholds
+# unified to 0.25 (matching nvinfer pre-cluster-threshold and
+# detection_hints.min_confidence in the YAML config).
+
+BaseConfig:
+  minDetectorConfidence: 0.2500    # Unified with nvinfer pre-cluster-threshold
+
+TargetManagement:
+  enableBboxUnClipping: 1
+  preserveStreamUpdateOrder: 0
+  maxTargetsPerStream: 150
+
+  # [Creation & Termination Policy]
+  minIouDiff4NewTarget: 0.7418
+  minTrackerConfidence: 0.0500
+  probationAge: 0
+  maxShadowTrackingAge: 90
+  earlyTerminationAge: 10
+
+TrajectoryManagement:
+  useUniqueID: 0
+
+DataAssociator:
+  dataAssociatorType: 0
+  associationMatcherType: 1
+  checkClassMatch: 1
+
+  # [Association Metric: Thresholds for valid candidates]
+  minMatchingScore4Overall: 0.3000
+  minMatchingScore4SizeSimilarity: 0.3627
+  minMatchingScore4Iou: 0.2575
+  minMatchingScore4VisualSimilarity: 0.5356
+
+  # [Association Metric: Weights]
+  matchingScoreWeight4VisualSimilarity: 0.3370
+  matchingScoreWeight4SizeSimilarity: 0.4354
+  matchingScoreWeight4Iou: 0.3656
+
+  # [Tentative detections] — set equal to minDetectorConfidence so there
+  # is no tentative band: every detection that passes nvinfer is treated
+  # as full-confidence from the tracker's perspective.
+  tentativeDetectorConfidence: 0.2500
+  minMatchingScore4TentativeIou: 0.5296
+
+StateEstimator:
+  stateEstimatorType: 1
+
+  # [Dynamics Modeling]
+  processNoiseVar4Loc: 1.5110
+  processNoiseVar4Size: 1.3159
+  processNoiseVar4Vel: 0.0300
+  measurementNoiseVar4Detector: 3.0283
+  measurementNoiseVar4Tracker: 8.1505
+
+VisualTracker:
+  visualTrackerType: 1    # NvDCF
+
+  # [NvDCF: Feature Extraction]
+  useColorNames: 1
+  useHog: 0
+  featureImgSizeLevel: 2
+  featureFocusOffsetFactor_y: -0.2000
+
+  # [NvDCF: Correlation Filter]
+  filterLr: 0.0750
+  filterChannelWeightsLr: 0.1000
+  gaussianSigma: 0.7500
