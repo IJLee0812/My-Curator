@@ -192,7 +192,7 @@ class Config:
 
     @property
     def detection_hints_min_confidence(self) -> float:
-        return self._config.get("detection_hints", {}).get("min_confidence", 0.3)
+        return self._config.get("detection_hints", {}).get("min_confidence", 0.25)
 
 
 # Global config instance
