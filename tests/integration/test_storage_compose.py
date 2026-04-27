@@ -45,9 +45,7 @@ def _docker_available() -> bool:
     if shutil.which("docker") is None:
         return False
     try:
-        r = subprocess.run(
-            ["docker", "info"], capture_output=True, text=True, timeout=5
-        )
+        r = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=5)
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
@@ -56,9 +54,7 @@ def _docker_available() -> bool:
 DOCKER_AVAILABLE = _docker_available()
 STACK_UP = DOCKER_AVAILABLE and _tcp_open("127.0.0.1", 9000)
 
-requires_docker = pytest.mark.skipif(
-    not DOCKER_AVAILABLE, reason="Docker daemon not reachable"
-)
+requires_docker = pytest.mark.skipif(not DOCKER_AVAILABLE, reason="Docker daemon not reachable")
 requires_stack_up = pytest.mark.skipif(
     not STACK_UP,
     reason="Storage stack not up (run: docker compose -f infra/compose.base.yml --env-file .env up -d)",
@@ -66,6 +62,7 @@ requires_stack_up = pytest.mark.skipif(
 
 
 # ── Structural checks — run without Docker ───────────────────────────────────
+
 
 @pytest.mark.integration
 def test_compose_file_parses():
@@ -82,9 +79,7 @@ def test_compose_pins_every_image_tag():
         image = spec["image"]
         assert ":" in image, f"{name}: image must be tagged, got {image!r}"
         tag = image.rsplit(":", 1)[1]
-        assert tag not in {"latest", "main", "master"}, (
-            f"{name}: floating tag {tag!r} not allowed"
-        )
+        assert tag not in {"latest", "main", "master"}, f"{name}: floating tag {tag!r} not allowed"
 
 
 @pytest.mark.integration
@@ -124,24 +119,35 @@ def test_env_example_declares_required_vars():
 
 # ── Live-stack probes — skipped unless the operator already brought it up ──
 
+
 @requires_stack_up
 @pytest.mark.integration
 def test_minio_buckets_present():
     """All five buckets were created by the minio-init sidecar."""
     r = subprocess.run(
         [
-            "docker", "exec", "my-curator-minio",
-            "mc", "alias", "set", "local", "http://localhost:9000",
+            "docker",
+            "exec",
+            "my-curator-minio",
+            "mc",
+            "alias",
+            "set",
+            "local",
+            "http://localhost:9000",
             os.environ.get("MINIO_USER", "minio-admin"),
             os.environ.get("MINIO_PASSWORD", "change-me-please"),
         ],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert r.returncode == 0, r.stderr
 
     r = subprocess.run(
         ["docker", "exec", "my-curator-minio", "mc", "ls", "local"],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert r.returncode == 0, r.stderr
     for bucket in EXPECTED_BUCKETS:
@@ -155,12 +161,21 @@ def test_postgres_schema_initialized():
     user = os.environ.get("PG_USER", "curation")
     r = subprocess.run(
         [
-            "docker", "exec", "my-curator-postgres",
-            "psql", "-U", user, "-d", "curation", "-tAc",
+            "docker",
+            "exec",
+            "my-curator-postgres",
+            "psql",
+            "-U",
+            user,
+            "-d",
+            "curation",
+            "-tAc",
             "SELECT table_name FROM information_schema.tables "
             "WHERE table_schema='public' ORDER BY table_name;",
         ],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert r.returncode == 0, r.stderr
     tables = {line.strip() for line in r.stdout.splitlines() if line.strip()}
@@ -168,12 +183,21 @@ def test_postgres_schema_initialized():
 
     r = subprocess.run(
         [
-            "docker", "exec", "my-curator-postgres",
-            "psql", "-U", user, "-d", "curation", "-tAc",
+            "docker",
+            "exec",
+            "my-curator-postgres",
+            "psql",
+            "-U",
+            user,
+            "-d",
+            "curation",
+            "-tAc",
             "SELECT indexname FROM pg_indexes "
             "WHERE tablename='scenario_dna' AND indexdef LIKE '%gin%';",
         ],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     assert "idx_scenario_dna_json_gin" in r.stdout
 

@@ -79,6 +79,7 @@ def _fails(validator, doc: dict) -> bool:
 
 # ── Schema file integrity ─────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
 def test_schema_file_is_valid_json():
@@ -113,6 +114,7 @@ def test_full_valid_document_with_actor(validator):
 
 # ── dna_version ───────────────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
 def test_dna_version_correct(validator):
@@ -130,6 +132,7 @@ def test_dna_version_wrong_fails(validator):
 
 
 # ── timestamp_range ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -157,12 +160,23 @@ def test_timestamp_range_negative_fails(validator):
 
 # ── ODD — weather ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "clear", "overcast", "light_rain", "heavy_rain",
-    "snow", "heavy_snow", "fog", "mist", "sleet",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "clear",
+        "overcast",
+        "light_rain",
+        "heavy_rain",
+        "snow",
+        "heavy_snow",
+        "fog",
+        "mist",
+        "sleet",
+    ],
+)
 def test_weather_valid(validator, value):
     doc = _valid_doc()
     doc["odd"]["weather"] = value
@@ -178,6 +192,7 @@ def test_weather_invalid_fails(validator):
 
 
 # ── ODD — lighting ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -197,6 +212,7 @@ def test_lighting_invalid_fails(validator):
 
 
 # ── ODD — sensor_fidelity ─────────────────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -232,12 +248,24 @@ def test_sensor_fidelity_duplicates_fail(validator):
 
 # ── Topology — road_type ──────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "motorway", "trunk", "primary", "secondary", "residential",
-    "service", "rural", "parking", "walkway", "cycling",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "motorway",
+        "trunk",
+        "primary",
+        "secondary",
+        "residential",
+        "service",
+        "rural",
+        "parking",
+        "walkway",
+        "cycling",
+    ],
+)
 def test_road_type_valid(validator, value):
     doc = _valid_doc()
     doc["topology"]["road_type"] = value
@@ -273,11 +301,20 @@ def test_road_type_old_tunnel_road_fails(validator):
 
 # ── Topology — lane_event ─────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "normal", "construction_divert", "lane_closed", "merge", "split", "unmarked",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "normal",
+        "construction_divert",
+        "lane_closed",
+        "merge",
+        "split",
+        "unmarked",
+    ],
+)
 def test_lane_event_valid(validator, value):
     doc = _valid_doc()
     doc["topology"]["lane_event"] = value
@@ -294,12 +331,21 @@ def test_lane_event_invalid_fails(validator):
 
 # ── Topology — intersection_type ──────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "none", "signalized", "unsignalized", "roundabout",
-    "t_junction", "crosswalk", "direct_connection",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "none",
+        "signalized",
+        "unsignalized",
+        "roundabout",
+        "t_junction",
+        "crosswalk",
+        "direct_connection",
+    ],
+)
 def test_intersection_type_valid(validator, value):
     doc = _valid_doc()
     doc["topology"]["intersection_type"] = value
@@ -316,16 +362,31 @@ def test_intersection_type_invalid_fails(validator):
 
 # ── Actor Dynamics — actor_class ──────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "pedestrian", "cyclist", "motorcyclist",
-    "vehicle_car", "vehicle_van", "vehicle_truck", "vehicle_bus",
-    "vehicle_emergency", "vehicle_construction",
-    "animal", "debris", "construction_object", "obstacle",
-    "standup_scooter_rider", "e_bike_rider", "delivery_motorcycle",
-    "wheelchair_user",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "pedestrian",
+        "cyclist",
+        "motorcyclist",
+        "vehicle_car",
+        "vehicle_van",
+        "vehicle_truck",
+        "vehicle_bus",
+        "vehicle_emergency",
+        "vehicle_construction",
+        "animal",
+        "debris",
+        "construction_object",
+        "obstacle",
+        "standup_scooter_rider",
+        "e_bike_rider",
+        "delivery_motorcycle",
+        "wheelchair_user",
+    ],
+)
 def test_actor_class_valid(validator, value):
     doc = _valid_doc()
     doc["actor_dynamics"] = [_actor(value)]
@@ -361,12 +422,25 @@ def test_actor_class_old_escooter_rider_fails(validator):
 
 # ── Actor Dynamics — state & distance_bucket ──────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "crossing", "hesitating", "jaywalking", "cutin", "cutout",
-    "stopped", "emerging", "tailing", "oncoming", "parked", "static",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "crossing",
+        "hesitating",
+        "jaywalking",
+        "cutin",
+        "cutout",
+        "stopped",
+        "emerging",
+        "tailing",
+        "oncoming",
+        "parked",
+        "static",
+    ],
+)
 def test_actor_state_valid(validator, value):
     doc = _valid_doc()
     doc["actor_dynamics"] = [_actor("pedestrian")]
@@ -385,6 +459,7 @@ def test_actor_distance_bucket_valid(validator, value):
 
 
 # ── Actor Dynamics — confidence range ────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -416,13 +491,27 @@ def test_actor_confidence_negative_fails(validator):
 
 # ── Planner Logic — ego_maneuver ──────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("value", [
-    "cruise", "accelerate", "brake_soft", "brake_hard", "emergency_brake",
-    "nudge_left", "nudge_right", "lane_change_left", "lane_change_right",
-    "yield", "stop", "reverse", "swerve",
-])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "cruise",
+        "accelerate",
+        "brake_soft",
+        "brake_hard",
+        "emergency_brake",
+        "nudge_left",
+        "nudge_right",
+        "lane_change_left",
+        "lane_change_right",
+        "yield",
+        "stop",
+        "reverse",
+        "swerve",
+    ],
+)
 def test_ego_maneuver_valid(validator, value):
     doc = _valid_doc()
     doc["planner_logic"]["ego_maneuver"] = value
@@ -438,6 +527,7 @@ def test_ego_maneuver_invalid_fails(validator):
 
 
 # ── Planner Logic — risk_level ────────────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -457,6 +547,7 @@ def test_risk_level_invalid_fails(validator):
 
 
 # ── Planner Logic — causal_trigger_actor_index ───────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -483,6 +574,7 @@ def test_causal_trigger_string_fails(validator):
 
 
 # ── additionalProperties: false ───────────────────────────────────────────────
+
 
 @pytest.mark.schema
 @pytest.mark.unit
@@ -511,13 +603,23 @@ def test_extra_field_in_actor_fails(validator):
 
 # ── Required fields ───────────────────────────────────────────────────────────
 
+
 @pytest.mark.schema
 @pytest.mark.unit
-@pytest.mark.parametrize("field", [
-    "dna_version", "clip_id", "timestamp_range",
-    "odd", "topology", "actor_dynamics",
-    "planner_logic", "confidence", "provenance",
-])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "dna_version",
+        "clip_id",
+        "timestamp_range",
+        "odd",
+        "topology",
+        "actor_dynamics",
+        "planner_logic",
+        "confidence",
+        "provenance",
+    ],
+)
 def test_missing_required_top_level_field_fails(validator, field):
     doc = _valid_doc()
     del doc[field]
