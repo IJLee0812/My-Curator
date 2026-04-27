@@ -20,9 +20,6 @@ onnxslim==0.1.91
 onnxscript==0.6.2
 onnx-ir==0.2.0
 
-# Used by scripts/gen_desc_visuals.py for frame extraction.
-opencv-python-headless==4.13.0.92
-
 # Storage DAL.
 asyncpg==0.31.0
 pymilvus==2.6.12
