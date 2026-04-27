@@ -124,6 +124,15 @@ class MilvusRepository:
         await asyncio.to_thread(self._client.delete, self._collection_name, ids=[str(clip_id)])
 
     async def count(self) -> int:
-        """Return the number of vectors currently in the collection."""
-        stats = await asyncio.to_thread(self._client.get_collection_stats, self._collection_name)
-        return int(stats["row_count"])
+        """Return the number of live vectors in the collection.
+
+        Uses query(count(*)) rather than get_collection_stats() because
+        row_count includes soft-deleted rows until compaction completes.
+        """
+        result = await asyncio.to_thread(
+            self._client.query,
+            self._collection_name,
+            filter="",
+            output_fields=["count(*)"],
+        )
+        return int(result[0]["count(*)"])
