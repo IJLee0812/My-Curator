@@ -18,6 +18,7 @@ logs/
 # Test artifacts
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 
 # Python

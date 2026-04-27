@@ -23,6 +23,9 @@ onnx-ir==0.2.0
 # Used by scripts/gen_desc_visuals.py for frame extraction.
 opencv-python-headless==4.13.0.92
 
+# Storage DAL.
+asyncpg==0.31.0
+
 # In-container test runner (host-side dev installs use pyproject extras).
 pytest==9.0.2
 pytest-mock==3.15.1
