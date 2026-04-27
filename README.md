@@ -2,7 +2,7 @@
 
 > An **Autonomous Driving front-camera data curation & validation platform**, built on top of [DeepStream-VLM](https://github.com/IJLee0812/DeepStream-VLM) (NVIDIA DeepStream 9.0 + `nvvllmvlm` + Cosmos-Reason2-8B FP8 + **YOLO26** closed-vocab detector). Upstream YOLOE code paths are inherited but not used in My-Curator.
 
-> **Status**: baseline pipeline is live (DeepStream-VLM, ported as-is). Expansion to Scenario-DNA schema + Scout + YOLO26 grounding + storage tri-stack (MinIO + Postgres + Milvus) + CARLA + MLOps is in progress (Judge deferred to post-v0.1).
+> **Status**: baseline pipeline is live. **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. Phase 2 (Scout + YOLO26 grounding + Kafka event bus) in progress (Judge deferred to post-v0.1).
 
 ---
 
@@ -156,7 +156,11 @@ My-Curator/
 │   └── output_schema.py                  # DrivingSceneResult (Pydantic) — Phase-1 replaced by Scenario DNA
 ├── src/
 │   ├── vllm_ds_app_kafka_publish.py      # pipeline builder + Kafka + OSD branch
-│   └── consumer.py                       # optional Kafka consumer
+│   ├── consumer.py                       # optional Kafka consumer
+│   └── storage/
+│       ├── pg.py                         # PGRepository — asyncpg Postgres DAL
+│       ├── milvus.py                     # MilvusRepository — Milvus GPU_CAGRA DAL
+│       └── minio.py                      # MinIORepository — S3-compatible object store DAL
 ├── scripts/                              # YOLO26 / YOLOE download + ONNX export
 ├── configs/                              # nvinfer .txt + YAML prompts
 ├── lib/                                  # DS 9.0 custom YOLO parsers (.so)
@@ -174,16 +178,20 @@ My-Curator/
 
 ## Tests
 
-Baseline repository ships **238 test functions** (pre-P1-1 count, confirmed). All must stay green while the expansion lands.
+The test suite now has **401 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
 
 ```bash
-# host — unit + integration, no GPU/Docker needed
+# host — unit + integration + schema, no GPU/Docker needed
 uv venv .venv --python 3.10
-uv pip install --python .venv/bin/python pytest pytest-mock pytest-cov PyYAML pydantic
+uv pip install --python .venv/bin/python \
+    pytest pytest-asyncio pytest-mock pytest-cov \
+    PyYAML pydantic jsonschema hypothesis \
+    asyncpg pymilvus boto3
 .venv/bin/pytest tests/unit tests/integration -q
 
-# full suite inside Docker
-pytest tests/ -v
+# storage integration tests require the compose stack
+docker compose -f infra/compose.base.yml --env-file .env up -d
+.venv/bin/pytest tests/integration -m integration -q
 ```
 
 The expansion adds new pytest markers — `schema`, `performance`, `simulation`, `prompt_regression`, `gpu`, `slow`. These are promoted to the repo-root `pytest.ini` in PR `P1-1`.
@@ -212,9 +220,9 @@ Lint: `ruff check . && ruff format --check .` (config in `pyproject.toml`).
 | TensorRT | 10.14 | `nvinfer` backend |
 | CUDA | 13.1 | Toolchain |
 | Kafka | 7.6 | Result publishing |
-| *Milvus (GPU_CAGRA)* | 2.6 | *Phase 1 — vector search* |
-| *PostgreSQL (JSONB+GIN)* | 17 | *Phase 1 — DNA store* |
-| *MinIO* | 2026.01 | *Phase 1 — blob store* |
+| Milvus (GPU_CAGRA) | 2.6.15 | Vector search — `clip_video_embed` collection (1024-dim, IP metric) |
+| PostgreSQL (JSONB+GIN) | 17 | DNA store — `scenario_dna` table with GIN index |
+| MinIO | latest | Object store — `raw/`, `clips/`, `frames/`, `artifacts/` buckets |
 | *Qwen2.5-14B-AWQ* | — | *Phase 2 — Judge LLM* |
 | *CARLA* | 0.9.15 | *Phase 4 — synthetic corner cases* |
 
