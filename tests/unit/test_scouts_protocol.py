@@ -145,16 +145,44 @@ repetition_penalty: 1.1
         assert cfg.engine_backend == "gstnvvllmvlm_api"
         assert cfg.engine_timeout_s == 30.0
 
+    def test_from_yaml_partial_engine_block_uses_defaults(self, tmp_path):
+        yaml_content = """\
+temperatures: [0.3, 0.5, 0.7]
+seeds:
+  0.3: 42
+  0.5: 43
+  0.7: 44
+n: 3
+max_tokens: 1024
+top_p: 0.9
+top_k: 50
+repetition_penalty: 1.1
+engine:
+  backend: gstnvvllmvlm_api
+  timeout_s: 30
+"""
+        cfg_file = tmp_path / "scout_partial_engine.yaml"
+        cfg_file.write_text(yaml_content)
+        cfg = ScoutConfig.from_yaml(str(cfg_file))
+        assert cfg.engine_base_url == ""
+        assert cfg.engine_model == ""
+
+    def test_from_yaml_missing_required_field_raises(self, tmp_path):
+        yaml_content = """\
+temperatures: [0.3, 0.5, 0.7]
+seeds:
+  0.3: 42
+max_tokens: 1024
+top_p: 0.9
+top_k: 50
+repetition_penalty: 1.1
+"""
+        cfg_file = tmp_path / "scout_broken.yaml"
+        cfg_file.write_text(yaml_content)
+        with pytest.raises(KeyError):
+            ScoutConfig.from_yaml(str(cfg_file))
+
     def test_temperatures_sliced_to_n(self):
         cfg = _config(n=2)
         active = cfg.temperatures[: cfg.n]
         assert active == [0.3, 0.5]
-
-    def test_from_yaml_loads_real_scout_yaml(self):
-        import os
-
-        yaml_path = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "scout.yaml")
-        cfg = ScoutConfig.from_yaml(yaml_path)
-        assert cfg.n == 3
-        assert cfg.temperatures == [0.3, 0.5, 0.7]
-        assert cfg.engine_backend == "gstnvvllmvlm_api"

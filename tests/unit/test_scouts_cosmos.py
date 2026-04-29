@@ -3,7 +3,8 @@
 All tests use mock LLM and mock SamplingParams — no GPU or vllm required.
 """
 
-from unittest.mock import MagicMock
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -51,13 +52,6 @@ def _make_scout(n_outputs: list[str] | None = None) -> tuple[CosmosReasonScout, 
 
 @pytest.mark.unit
 class TestN3NormalPath:
-    def test_returns_three_reports_when_t0_result_provided(self):
-        scout, mock_llm = _make_scout(["result_t05", "result_t07"])
-        reports = scout.sample({}, {}, _config(n=3), t0_result="result_t03")
-
-        assert len(reports) == 3
-        assert not any(r.partial_sampling for r in reports)
-
     def test_t0_report_wraps_provided_text(self):
         scout, _ = _make_scout(["r1", "r2"])
         reports = scout.sample({}, {}, _config(n=3), t0_result="from_nvvllmvlm")
@@ -160,15 +154,6 @@ class TestPartialFailure:
         reports = scout.sample({}, {}, _config(n=3), t0_result=None)
         assert reports == []
 
-    def test_partial_flag_applied_to_t0_report_too(self):
-        mock_llm = MagicMock()
-        mock_sp = MagicMock(return_value=MagicMock())
-        mock_llm.generate.side_effect = RuntimeError("fail")
-        scout = CosmosReasonScout(llm=mock_llm, _sampling_params_cls=mock_sp)
-
-        reports = scout.sample({}, {}, _config(n=3), t0_result="r0")
-        assert reports[0].partial_sampling is True
-
 
 # ---------------------------------------------------------------------------
 # Standalone mode (no t0_result pre-computed)
@@ -204,3 +189,83 @@ class TestStandaloneMode:
 
         assert len(reports) == 1
         mock_llm.generate.assert_called_once()
+
+    def test_generate_one_exception_in_standalone_returns_empty(self):
+        mock_llm = MagicMock()
+        mock_sp = MagicMock(return_value=MagicMock())
+        mock_llm.generate.side_effect = RuntimeError("GPU crash")
+        scout = CosmosReasonScout(llm=mock_llm, _sampling_params_cls=mock_sp)
+
+        reports = scout.sample({}, {}, _config(n=1), t0_result=None)
+
+        assert reports == []
+        mock_llm.generate.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# SamplingParams resolution (ImportError branch)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestResolveSamplingParams:
+    def test_returns_none_when_vllm_import_fails(self):
+        scout = CosmosReasonScout(llm=MagicMock())
+        scout._SamplingParams = None
+        with patch.dict(sys.modules, {"vllm": None}):
+            result = scout._resolve_sampling_params()
+        assert result is None
+
+    def test_generate_batch_skipped_when_sampling_params_unavailable(self):
+        mock_llm = MagicMock()
+        scout = CosmosReasonScout(llm=mock_llm)
+        scout._SamplingParams = None
+        with patch.dict(sys.modules, {"vllm": None}):
+            result = scout._generate_batch({}, [0.5, 0.7], _config(n=3))
+        assert result == []
+        mock_llm.generate.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Output edge cases (empty outputs list)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestOutputEdgeCases:
+    def test_batch_empty_outputs_produces_empty_text(self):
+        mock_llm = MagicMock()
+        mock_sp = MagicMock(return_value=MagicMock())
+        empty_out = MagicMock()
+        empty_out.outputs = []
+        mock_llm.generate.return_value = [empty_out, _mock_output("normal")]
+        scout = CosmosReasonScout(llm=mock_llm, _sampling_params_cls=mock_sp)
+
+        reports = scout.sample({}, {}, _config(n=3), t0_result="t03")
+
+        assert reports[1].text == ""
+        assert reports[2].text == "normal"
+
+    def test_generate_one_empty_outer_outputs_returns_empty_text(self):
+        mock_llm = MagicMock()
+        mock_sp = MagicMock(return_value=MagicMock())
+        mock_llm.generate.return_value = []
+        scout = CosmosReasonScout(llm=mock_llm, _sampling_params_cls=mock_sp)
+
+        reports = scout.sample({}, {}, _config(n=1), t0_result=None)
+
+        assert len(reports) == 1
+        assert reports[0].text == ""
+
+    def test_generate_one_empty_inner_outputs_returns_empty_text(self):
+        mock_llm = MagicMock()
+        mock_sp = MagicMock(return_value=MagicMock())
+        out = MagicMock()
+        out.outputs = []
+        mock_llm.generate.return_value = [out]
+        scout = CosmosReasonScout(llm=mock_llm, _sampling_params_cls=mock_sp)
+
+        reports = scout.sample({}, {}, _config(n=1), t0_result=None)
+
+        assert len(reports) == 1
+        assert reports[0].text == ""

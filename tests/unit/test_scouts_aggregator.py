@@ -118,3 +118,47 @@ class TestEdgeCases:
         r03 = _report("car and pedestrian", 0.3, partial=True)  # score 2
         r05 = _report("car only", 0.5, partial=True)  # score 1
         assert agg.select([r03, r05], inventory) is r03
+
+    def test_substring_match_documents_known_behavior(self):
+        # "car" appears in "cargo" — intended substring behavior, not a bug.
+        # Documented here so future readers understand the matching contract.
+        agg = BestOfNAggregator()
+        r03 = _report("cargo truck ahead", 0.3)  # "car" found in "cargo" → score 1
+        r05 = _report("no objects", 0.5)  # score 0
+        assert agg.select([r03, r05], {"car": 1}) is r03
+
+    def test_zero_count_inventory_class_still_scores(self):
+        # A class with count=0 in inventory still contributes to score if
+        # it appears in text (keys are iterated, not filtered by count).
+        agg = BestOfNAggregator()
+        r03 = _report("car visible", 0.3)  # score 1 even though count=0
+        r05 = _report("no objects", 0.5)  # score 0
+        assert agg.select([r03, r05], {"car": 0}) is r03
+
+
+# ---------------------------------------------------------------------------
+# Order independence and duplicate temperatures
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestOrderAndDuplicates:
+    def test_selection_is_order_independent(self):
+        agg = BestOfNAggregator()
+        inventory = {"car": 1}
+        r03 = _report("car detected", 0.3)
+        r05 = _report("a car visible", 0.5)
+        r07 = _report("car spotted", 0.7)
+        # T=0.3 wins regardless of input list order
+        assert agg.select([r07, r05, r03], inventory) is r03
+        assert agg.select([r05, r07, r03], inventory) is r03
+        assert agg.select([r03, r07, r05], inventory) is r03
+
+    def test_duplicate_temperatures_first_in_list_wins(self):
+        # Two reports with identical temperature and identical score:
+        # Python's min() is stable — first encountered wins. Documented behavior.
+        agg = BestOfNAggregator()
+        r1 = _report("car detected", 0.3)
+        r2 = _report("car visible", 0.3)
+        assert agg.select([r1, r2], {"car": 1}) is r1
+        assert agg.select([r2, r1], {"car": 1}) is r2
