@@ -2,7 +2,7 @@
 
 > An **Autonomous Driving front-camera data curation & validation platform**, built on top of [DeepStream-VLM](https://github.com/IJLee0812/DeepStream-VLM) (NVIDIA DeepStream 9.0 + `nvvllmvlm` + Cosmos-Reason2-8B FP8 + **YOLO26** closed-vocab detector). Upstream YOLOE code paths are inherited but not used in My-Curator.
 
-> **Status**: baseline pipeline is live. **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. Phase 2 (Scout + YOLO26 grounding + Kafka event bus) in progress (Judge deferred to post-v0.1).
+> **Status**: baseline pipeline is live. **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. **Phase 2 in progress** — P2-2 (Scout N=3 temperature sampling) and P2-3 (Best-of-N aggregator) complete; P2-4 (Kafka event bus) next (Judge deferred to post-v0.1).
 
 ---
 
@@ -169,8 +169,8 @@ My-Curator/
 │   └── implementation_plan_KOR.md        # Korean mirror
 ├── .github/                              # issue/PR templates + auto-assign + CODEOWNERS
 └── tests/
-    ├── unit/                             # 148 tests — host-runnable
-    ├── integration/                      # 73 tests — GStreamer auto-mocked
+    ├── unit/                             # 353 tests — host-runnable
+    ├── integration/                      # 106 tests — GStreamer auto-mocked
     └── e2e/                               #   5 tests — Docker + GPU
 ```
 
@@ -178,7 +178,7 @@ My-Curator/
 
 ## Tests
 
-The test suite now has **401 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
+The test suite now has **464 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
 
 ```bash
 # host — unit + integration + schema, no GPU/Docker needed
