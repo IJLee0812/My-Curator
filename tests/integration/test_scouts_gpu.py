@@ -1,38 +1,79 @@
-"""GPU live-engine smoke test for CosmosReasonScout.
+"""GPU live-engine smoke test for CosmosReasonScout via NvVllmVLM.get_llm().
 
 Requires:
   - @pytest.mark.gpu — GPU CI runner or manual run with --run-gpu flag.
-  - Running DS pipeline with NvVllmVLM element (P2-4 integration).
+  - DS 9.0 container with CUDA available and Cosmos-Reason2-8B FP8 model loaded.
+  - configs/config_driving_scene.yaml present (for model path / params).
 
-Until P2-4 wires the llm reference, this test is skipped with a clear message.
+Run inside container:
+    pytest tests/integration/test_scouts_gpu.py -m gpu -v
 """
 
-import pytest
+import os
+import sys
 
-from src.scouts.base import ScoutConfig
+import pytest
 
 
 @pytest.mark.gpu
 @pytest.mark.integration
 def test_cosmos_reason_scout_gpu_smoke():
-    """Live smoke: CosmosReasonScout returns ≥1 ScoutReport on real vLLM engine.
+    """Live smoke: CosmosReasonScout returns ≥1 ScoutReport via NvVllmVLM.get_llm().
 
-    Skipped until P2-4 wires NvVllmVLM.get_llm() into the Scout adapter.
+    Flow:
+      1. Register NvVllmVLM as GStreamer element (triggers vLLM model load).
+      2. Call element.get_llm() — verifies P2-4 accessor wiring.
+      3. Run CosmosReasonScout.sample() with a synthetic black frame.
+      4. Assert ≥1 report with non-negative latency.
     """
-    pytest.skip(
-        "GPU smoke test requires running DS pipeline with NvVllmVLM.get_llm() "
-        "(wired in P2-4). Re-enable after P2-4 merge."
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gst", "1.0")  # type: ignore[attr-defined]
+    import numpy as np
+    from gi.repository import Gst  # type: ignore[import]
+
+    # Ensure plugin directory is on path
+    plugin_dir = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "plugin")
+    )
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+
+    Gst.init(None)
+    import gstnvvllmvlm  # noqa: PLC0415
+    from gstnvvllmvlm import NvVllmVLM
+
+    Gst.Element.register(None, "nvvllmvlm", Gst.Rank.NONE, NvVllmVLM)
+
+    # Creating the element triggers __init__ which loads the vLLM model
+    element = Gst.ElementFactory.make("nvvllmvlm", "smoke-vlm")
+    assert element is not None, "Failed to create NvVllmVLM GStreamer element"
+
+    # P2-4 acceptance criterion: get_llm() returns the live LLM instance
+    llm = element.get_llm()
+    assert llm is not None, (
+        "get_llm() returned None — vLLM model not loaded. "
+        "Ensure the Cosmos-Reason2-8B FP8 checkpoint is present."
     )
 
-    # --- Template (activate post P2-4) ---
-    # from src.scouts.cosmos_reason import CosmosReasonScout
-    # llm = get_llm_from_pipeline()  # P2-4 helper
-    # scout = CosmosReasonScout(llm=llm)
-    # config = ScoutConfig.from_yaml("configs/scout.yaml")
-    # inputs = build_test_inputs()   # P2-4 helper
-    #
-    # reports = scout.sample(inputs, {}, config, t0_result=None)
-    #
-    # assert len(reports) >= 1
-    # assert all(r.text for r in reports)
-    # assert reports[0].latency_ms > 0
+    from src.scouts.base import ScoutConfig
+    from src.scouts.cosmos_reason import CosmosReasonScout
+
+    scout = CosmosReasonScout(llm=llm)
+    config = ScoutConfig.from_yaml("configs/scout.yaml")
+
+    # Minimal synthetic frame: 224×224 black image (HWC uint8, numpy)
+    frame = np.zeros((224, 224, 3), dtype=np.uint8)
+    inputs = {
+        "prompt": "Describe this driving scene frame.",
+        "multi_modal_data": {"image": frame},
+    }
+
+    reports = scout.sample(inputs, {}, config, t0_result=None)
+
+    assert len(reports) >= 1, f"Expected ≥1 ScoutReport, got {len(reports)}"
+    assert all(isinstance(r.text, str) for r in reports), "Report text must be str"
+    assert reports[0].latency_ms >= 0, "latency_ms must be non-negative"

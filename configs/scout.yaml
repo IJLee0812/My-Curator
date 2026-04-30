@@ -22,3 +22,10 @@ engine:
   base_url: ""
   model: cosmos-reason2-8b
   timeout_s: 30
+
+kafka:
+  # Curation routing topics (P2-4).
+  # scouted   : clip passed Best-of-N grounding check → downstream DNA pipeline.
+  # needs_review: partial batch failure OR zero YOLO grounding → manual review queue.
+  topic_scouted: "curation.clip.scouted"
+  topic_needs_review: "curation.clip.needs_review"

@@ -118,6 +118,13 @@ class StreamContext:
         self.latest_text: str | None = None
         self.latest_lock: threading.Lock = threading.Lock()
 
+        # P2-4: YOLO class inventory accumulated per clip window (reset at segment boundary)
+        self.yolo_inventory: dict[str, int] = {}
+        # P2-4: vLLM inputs dict used for T=0.3 inference; stored for Scout reuse
+        self.last_inputs: dict | None = None
+        # P2-4: snapshot of yolo_inventory for the segment currently being inferred
+        self.last_inventory: dict[str, int] = {}
+
     def update_result(self, text: str, start_sec: float, end_sec: float):
         """Update the latest result for this stream"""
         with self.latest_lock:
@@ -128,10 +135,18 @@ class StreamContext:
 class SegmentRequest:
     """Request for VLM inference on a segment"""
 
-    def __init__(self, stream_id: int, segment: Segment, prompt_config: dict):
+    def __init__(
+        self,
+        stream_id: int,
+        segment: Segment,
+        prompt_config: dict,
+        inventory: dict[str, int] | None = None,
+    ):
         self.stream_id = stream_id
         self.segment = segment
         self.prompt_config = prompt_config
+        # P2-4: snapshot of YOLO inventory at segment boundary (lowercase keys)
+        self.inventory: dict[str, int] = inventory if inventory is not None else {}
 
 
 class NvVllmVLM(GstBase.BaseTransform):
@@ -625,6 +640,10 @@ class NvVllmVLM(GstBase.BaseTransform):
             msg = f"{GST_PLUGIN_NAME}: Unknown property '{prop.name}'"
             raise AttributeError(msg)
 
+    def get_llm(self):
+        """Return the live vllm.LLM instance (None if not yet initialised)."""
+        return self.llm
+
     def do_start(self) -> bool:
         if self.llm is None:
             Gst.error(f"{GST_PLUGIN_NAME}: vLLM not initialized")
@@ -759,7 +778,10 @@ class NvVllmVLM(GstBase.BaseTransform):
                 if repetition_penalty is not None:
                     prompt_config["repetition_penalty"] = repetition_penalty
 
-                request = SegmentRequest(ctx.stream_id, seg, prompt_config)
+                # P2-4: snapshot YOLO inventory at segment boundary and reset
+                inventory_snapshot = dict(ctx.yolo_inventory)
+                ctx.yolo_inventory.clear()
+                request = SegmentRequest(ctx.stream_id, seg, prompt_config, inventory=inventory_snapshot)
                 try:
                     self._infer_queue.put_nowait(request)
                     ctx.segments_submitted += 1
@@ -827,6 +849,12 @@ class NvVllmVLM(GstBase.BaseTransform):
                     )
                 except Exception:
                     pass  # No object_items if nvinfer is not in pipeline
+
+                # P2-4: accumulate YOLO inventory for this clip window.
+                # Keys are lowercased so aggregator substring matching works correctly.
+                for det in frame_detections:
+                    label = det["label"].lower()
+                    ctx.yolo_inventory[label] = ctx.yolo_inventory.get(label, 0) + 1
 
                 bd_created = False
                 bd = None
@@ -974,9 +1002,13 @@ class NvVllmVLM(GstBase.BaseTransform):
             print(msg)
 
             try:
+                # P2-4: store inventory snapshot so on_vlm_result can read it
+                ctx = self.stream_contexts.get(stream_id)
+                if ctx is not None:
+                    ctx.last_inventory = dict(request.inventory)
+
                 result_text = self._run_vlm_batch(segment, request.prompt_config)  # noqa: BLK100
                 if result_text:
-                    ctx = self.stream_contexts.get(stream_id)
                     if ctx:
                         ctx.update_result(result_text, start_sec, end_sec)
                         print(
@@ -999,6 +1031,10 @@ class NvVllmVLM(GstBase.BaseTransform):
                         )
                 else:
                     print(f"{GST_PLUGIN_NAME}{stream_label}: VLM returned empty result")
+                    # P2-4: release per-segment resources when no result produced
+                    if ctx is not None:
+                        ctx.last_inputs = None
+                        ctx.last_inventory = {}
             except Exception as e:
                 msg = f"{GST_PLUGIN_NAME}{stream_label}: Worker error - {e}"
                 print(msg)
@@ -1241,6 +1277,11 @@ class NvVllmVLM(GstBase.BaseTransform):
                         "multi_modal_data": {"video": video_input},
                     }
 
+                # P2-4: persist inputs for Scout reuse in on_vlm_result
+                _ctx = self.stream_contexts.get(segment.stream_id)
+                if _ctx is not None:
+                    _ctx.last_inputs = inputs
+
                 outputs = self.llm.generate(inputs, sampling_params=sampling_params)  # noqa: BLK100
                 if outputs:
                     return outputs[0].outputs[0].text
@@ -1305,7 +1346,10 @@ class NvVllmVLM(GstBase.BaseTransform):
                             if self.repetition_penalty is not None:
                                 prompt_config["repetition_penalty"] = self.repetition_penalty
 
-                            request = SegmentRequest(stream_id, seg, prompt_config)  # noqa: BLK100
+                            # P2-4: snapshot inventory for remaining segment
+                            inventory_snapshot = dict(ctx.yolo_inventory)
+                            ctx.yolo_inventory.clear()
+                            request = SegmentRequest(stream_id, seg, prompt_config, inventory=inventory_snapshot)  # noqa: BLK100
                             try:
                                 self._infer_queue.put_nowait(request)
                                 ctx.segments_submitted += 1

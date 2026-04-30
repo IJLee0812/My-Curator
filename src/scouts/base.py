@@ -23,6 +23,8 @@ class ScoutConfig:
     engine_base_url: str = ""
     engine_model: str = ""
     engine_timeout_s: float = 30.0
+    kafka_topic_scouted: str = "curation.clip.scouted"
+    kafka_topic_needs_review: str = "curation.clip.needs_review"
 
     @classmethod
     def from_yaml(cls, path: str) -> ScoutConfig:
@@ -31,6 +33,7 @@ class ScoutConfig:
         with open(path) as fh:
             data = yaml.safe_load(fh)
         engine = data.get("engine", {})
+        kafka = data.get("kafka", {})
         seeds = {float(k): int(v) for k, v in data.get("seeds", {}).items()}
         return cls(
             temperatures=data["temperatures"],
@@ -44,6 +47,8 @@ class ScoutConfig:
             engine_base_url=engine.get("base_url", ""),
             engine_model=engine.get("model", ""),
             engine_timeout_s=float(engine.get("timeout_s", 30.0)),
+            kafka_topic_scouted=kafka.get("topic_scouted", "curation.clip.scouted"),
+            kafka_topic_needs_review=kafka.get("topic_needs_review", "curation.clip.needs_review"),
         )
 
     def seed_for(self, temperature: float) -> int:

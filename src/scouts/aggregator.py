@@ -11,6 +11,15 @@ class BestOfNAggregator:
     Validated paradigm: Semantic-Drive arXiv:2512.12012 §3.2.
     """
 
+    def score(self, report: ScoutReport, inventory: dict[str, int]) -> int:
+        """Return the YOLO class-presence overlap score for a single report.
+
+        Both inventory keys and report text are lowercased before comparison
+        so caller-side capitalisation does not affect the result.
+        """
+        text = report.text.lower()
+        return sum(1 for cls in inventory if cls.lower() in text)
+
     def select(
         self,
         reports: list[ScoutReport],
@@ -26,8 +35,4 @@ class BestOfNAggregator:
         if len(reports) == 1:
             return reports[0]
 
-        def _score(report: ScoutReport) -> int:
-            text = report.text.lower()
-            return sum(1 for cls in inventory if cls in text)
-
-        return min(reports, key=lambda r: (-_score(r), r.temperature))
+        return min(reports, key=lambda r: (-self.score(r, inventory), r.temperature))
