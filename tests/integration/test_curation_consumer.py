@@ -294,6 +294,7 @@ class TestCurationConsumerIntegration:
         assert len(after) == len(before) + 1
 
     async def test_scouted_increases_milvus_count(self, consumer, milvus):
+        await milvus.flush()  # seal any unflushed entities from prior tests
         before = await milvus.count()
         await consumer.handle("curation.clip.scouted", _make_scouted_msg())
         await milvus.flush()

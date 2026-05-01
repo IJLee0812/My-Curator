@@ -48,7 +48,9 @@ class Config:
             # Search in common locations
             search_paths = [
                 Path.cwd() / "config.yaml",
+                Path.cwd() / "configs" / "config_driving_scene.yaml",
                 Path(__file__).parent / "config.yaml",
+                Path(__file__).parent.parent / "configs" / "config_driving_scene.yaml",
             ]
 
             for path in search_paths:

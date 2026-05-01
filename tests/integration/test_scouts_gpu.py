@@ -36,9 +36,7 @@ def test_cosmos_reason_scout_gpu_smoke():
     from gi.repository import Gst  # type: ignore[import]
 
     # Ensure plugin directory is on path
-    plugin_dir = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "plugin")
-    )
+    plugin_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "plugin"))
     if plugin_dir not in sys.path:
         sys.path.insert(0, plugin_dir)
 
@@ -59,17 +57,36 @@ def test_cosmos_reason_scout_gpu_smoke():
         "Ensure the Cosmos-Reason2-8B FP8 checkpoint is present."
     )
 
+    from PIL import Image as PILImage
+
     from src.scouts.base import ScoutConfig
     from src.scouts.cosmos_reason import CosmosReasonScout
 
     scout = CosmosReasonScout(llm=llm)
     config = ScoutConfig.from_yaml("configs/scout.yaml")
 
-    # Minimal synthetic frame: 224×224 black image (HWC uint8, numpy)
-    frame = np.zeros((224, 224, 3), dtype=np.uint8)
+    # Minimal synthetic frame: 224×224 black image, converted to PIL
+    frame_np = np.zeros((224, 224, 3), dtype=np.uint8)
+    frame_pil = PILImage.fromarray(frame_np)
+
+    # Build chat-template formatted prompt with <image> token so vLLM can
+    # apply the multimodal placeholder replacement (required by Qwen3VL).
+    tokenizer = element.tokenizer
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image"},
+                {"type": "text", "text": "Describe this driving scene frame."},
+            ],
+        }
+    ]
+    prompt_text = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
     inputs = {
-        "prompt": "Describe this driving scene frame.",
-        "multi_modal_data": {"image": frame},
+        "prompt": prompt_text,
+        "multi_modal_data": {"image": [frame_pil]},
     }
 
     reports = scout.sample(inputs, {}, config, t0_result=None)
