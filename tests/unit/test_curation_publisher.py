@@ -4,13 +4,13 @@ Mocks element, Scout, and Aggregator — no GPU, GStreamer, or Kafka required.
 Covers: legacy path, Scout lazy-init, topic routing, N=1 fallback,
         message format, and per-segment resource release.
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.scouts.aggregator import BestOfNAggregator
 from src.scouts.base import ScoutConfig, ScoutReport
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,7 +49,9 @@ def _make_report(
 def _make_ctx(last_inventory=None, last_inputs=None):
     ctx = MagicMock()
     ctx.last_inventory = last_inventory if last_inventory is not None else {}
-    ctx.last_inputs = last_inputs if last_inputs is not None else {"prompt": "t", "multi_modal_data": {}}
+    ctx.last_inputs = (
+        last_inputs if last_inputs is not None else {"prompt": "t", "multi_modal_data": {}}
+    )
     return ctx
 
 
@@ -73,8 +75,14 @@ def _make_publisher(aggregator=None, scout_config=None):
     )
 
 
-def _invoke(publisher, element=None, stream_id: int = 0, start: float = 0.0,
-            end: float = 5.0, text: str = "scene description"):
+def _invoke(
+    publisher,
+    element=None,
+    stream_id: int = 0,
+    start: float = 0.0,
+    end: float = 5.0,
+    text: str = "scene description",
+):
     publisher.on_vlm_result(element, stream_id, start, end, text)
 
 
@@ -298,6 +306,26 @@ class TestN1Fallback:
         _invoke(pub, element=_make_element())  # count=1
 
         assert cfg.n == 3  # still 3 — never hit 3 consecutive
+
+    def test_sample_called_with_n1_after_fallback(self):
+        """After fallback activates, the next scout.sample() must observe n=1.
+
+        Verifies the effect of cfg.n mutation on subsequent invocations —
+        i.e. AC11 is not just a counter assertion but actually propagates to
+        the Scout. ScoutConfig is shared by reference, so mutation in the
+        publisher is visible to sample() at the next call site.
+        """
+        pub, cfg = self._pub_always_partial()
+        for _ in range(3):
+            _invoke(pub, element=_make_element())
+        assert cfg.n == 1  # fallback engaged
+
+        pub._scout.sample.reset_mock()
+        _invoke(pub, element=_make_element())  # 4th invocation
+        assert pub._scout.sample.call_count == 1
+        passed_cfg = pub._scout.sample.call_args.args[2]
+        assert passed_cfg is cfg
+        assert passed_cfg.n == 1
 
 
 # ---------------------------------------------------------------------------
