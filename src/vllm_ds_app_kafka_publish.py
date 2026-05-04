@@ -111,7 +111,7 @@ class VLMKafkaSignalPublisher:
         # P2-4: Scout + Aggregator curation (None = legacy path, backward-compatible)
         self._aggregator = aggregator
         self._scout_config = scout_config
-        self._scout = None          # lazy-init on first vlm-result via element.get_llm()
+        self._scout = None  # lazy-init on first vlm-result via element.get_llm()
         self._partial_count: int = 0  # consecutive partial-failure counter for N=1 fallback
 
         # Initialize Kafka producer
@@ -200,9 +200,7 @@ class VLMKafkaSignalPublisher:
 
         # Scout sampling (T=0.5 + T=0.7 batch; T=0.3 already computed as t0_result)
         if self._scout is not None and last_inputs is not None:
-            reports = self._scout.sample(
-                last_inputs, {}, self._scout_config, t0_result=result_text
-            )
+            reports = self._scout.sample(last_inputs, {}, self._scout_config, t0_result=result_text)
         else:
             # Fallback: wrap t0_result as single partial report
             from src.scouts.base import ScoutReport
@@ -417,14 +415,16 @@ class VLMKafkaApp:
         )
         if os.path.exists(_scout_yaml):
             try:
-                from src.scouts.base import ScoutConfig
                 from src.scouts.aggregator import BestOfNAggregator
+                from src.scouts.base import ScoutConfig
 
                 _scout_config = ScoutConfig.from_yaml(_scout_yaml)
                 _aggregator = BestOfNAggregator()
-                print(f"✓ Scout config loaded (N={_scout_config.n}, topics: "
-                      f"{_scout_config.kafka_topic_scouted} / "
-                      f"{_scout_config.kafka_topic_needs_review})")
+                print(
+                    f"✓ Scout config loaded (N={_scout_config.n}, topics: "
+                    f"{_scout_config.kafka_topic_scouted} / "
+                    f"{_scout_config.kafka_topic_needs_review})"
+                )
             except Exception as e:
                 print(f"✗ Failed to load scout config: {e} — curation disabled")
 

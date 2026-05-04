@@ -781,7 +781,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                 # P2-4: snapshot YOLO inventory at segment boundary and reset
                 inventory_snapshot = dict(ctx.yolo_inventory)
                 ctx.yolo_inventory.clear()
-                request = SegmentRequest(ctx.stream_id, seg, prompt_config, inventory=inventory_snapshot)
+                request = SegmentRequest(
+                    ctx.stream_id, seg, prompt_config, inventory=inventory_snapshot
+                )
                 try:
                     self._infer_queue.put_nowait(request)
                     ctx.segments_submitted += 1
@@ -1349,7 +1351,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                             # P2-4: snapshot inventory for remaining segment
                             inventory_snapshot = dict(ctx.yolo_inventory)
                             ctx.yolo_inventory.clear()
-                            request = SegmentRequest(stream_id, seg, prompt_config, inventory=inventory_snapshot)  # noqa: BLK100
+                            request = SegmentRequest(
+                                stream_id, seg, prompt_config, inventory=inventory_snapshot
+                            )  # noqa: BLK100
                             try:
                                 self._infer_queue.put_nowait(request)
                                 ctx.segments_submitted += 1
