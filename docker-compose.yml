@@ -4,8 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ds9-vlm:latest
-    container_name: ds9-vlm-dev
+    image: my-curator-vlm:latest
+    container_name: my-curator-ds9-vlm-dev
     stdin_open: true
     tty: true
     privileged: true
@@ -32,7 +32,7 @@ services:
   # ─── Zookeeper ───
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
-    container_name: ds9-zookeeper
+    container_name: my-curator-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -42,7 +42,7 @@ services:
   # ─── Kafka Broker ───
   kafka:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: ds9-kafka
+    container_name: my-curator-kafka
     depends_on:
       - zookeeper
     ports:

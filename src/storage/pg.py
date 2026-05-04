@@ -211,6 +211,25 @@ class PGRepository:
                 pipeline_version,
             )
 
+    async def insert_review_queue(
+        self,
+        *,
+        clip_id: UUID,
+        state: str,
+        reason: str | None = None,
+        reviewer: str | None = None,
+    ) -> None:
+        await self._pool.execute(
+            """
+            INSERT INTO review_queue (clip_id, state, reason, reviewer)
+            VALUES ($1, $2, $3, $4)
+            """,
+            clip_id,
+            state,
+            reason,
+            reviewer,
+        )
+
     # ── reads ──────────────────────────────────────────────────────────────
 
     async def get_dna(self, clip_id: UUID) -> dict[str, Any] | None:

@@ -130,7 +130,14 @@ class TestConfigEdgeCases:
         cfg = Config("/nonexistent/path/config.yaml")
         assert cfg.model_path == "nvidia/Cosmos-Reason2-8B"
 
-    def test_none_path_uses_defaults(self):
+    def test_none_path_uses_defaults(self, monkeypatch):
+        # Force every search_path to miss so Config falls back to property
+        # defaults. P2-4 hotfix cb2088b added a __file__-relative search path
+        # (configs/config_driving_scene.yaml under the repo root) that resolves
+        # regardless of cwd, so chdir-only isolation is insufficient.
+        from pathlib import Path
+
+        monkeypatch.setattr(Path, "exists", lambda self: False)
         cfg = Config(None)
         # Should not raise; uses defaults
         assert cfg.max_tokens == 2048

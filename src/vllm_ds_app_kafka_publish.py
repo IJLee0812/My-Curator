@@ -37,14 +37,18 @@ import sys
 import time
 from typing import Optional
 
-import gi
+try:
+    import gi
 
-gi.require_version("Gst", "1.0")  # noqa: E402, I003, BLK100
-# Register the custom plugin
-import gstnvvllmvlm  # noqa: E402
-from gi.repository import GLib, Gst  # noqa: E402, I003
+    gi.require_version("Gst", "1.0")  # noqa: E402, I003, BLK100
+    # Register the custom plugin
+    import gstnvvllmvlm  # noqa: E402
+    from gi.repository import GLib, Gst  # noqa: E402, I003
 
-Gst.Element.register(None, "nvvllmvlm", Gst.Rank.NONE, gstnvvllmvlm.NvVllmVLM)
+    Gst.Element.register(None, "nvvllmvlm", Gst.Rank.NONE, gstnvvllmvlm.NvVllmVLM)
+    GI_AVAILABLE = True
+except (ImportError, ValueError):
+    GI_AVAILABLE = False
 
 # Kafka imports (with graceful fallback)
 try:
@@ -82,15 +86,19 @@ class VLMKafkaSignalPublisher:
         topic: str,
         dry_run: bool = False,
         detect_hints: bool = False,
+        aggregator=None,
+        scout_config=None,
     ):
         """
         Initialize Kafka publisher.
 
         Args:
             kafka_config: Kafka connection configuration
-            topic: Topic name to publish to
+            topic: Topic name to publish to (used for legacy path and dry-run default)
             dry_run: If True, print messages instead of sending to Kafka
             detect_hints: If True, include detect_hints flag in message metadata
+            aggregator: BestOfNAggregator instance (P2-4; None = legacy path)
+            scout_config: ScoutConfig instance (P2-4; None = legacy path)
         """
         self.topic = topic
         self.dry_run = dry_run
@@ -99,6 +107,12 @@ class VLMKafkaSignalPublisher:
         self.messages_sent = 0
         self.messages_failed = 0
         self._collected_results: list = []
+
+        # P2-4: Scout + Aggregator curation (None = legacy path, backward-compatible)
+        self._aggregator = aggregator
+        self._scout_config = scout_config
+        self._scout = None  # lazy-init on first vlm-result via element.get_llm()
+        self._partial_count: int = 0  # consecutive partial-failure counter for N=1 fallback
 
         # Initialize Kafka producer
         if not dry_run and KAFKA_AVAILABLE:
@@ -131,33 +145,130 @@ class VLMKafkaSignalPublisher:
             self.producer = None
 
     def on_vlm_result(self, element, stream_id, start_time, end_time, result_text):
-        """
-        Signal handler for vlm-result signal.
-        Called immediately when VLM inference completes.
+        """Signal handler for vlm-result signal (called from _infer_thread)."""
 
-        Args:
-            element: The nvvllmvlm element that emitted the signal
-            stream_id: Stream identifier
-            start_time: Segment start time in seconds
-            end_time: Segment end time in seconds
-            result_text: VLM inference result
-        """
-        # Validate VLM output against the DrivingSceneResult schema.
-        # Invalid output is still published — flag-only, never dropped.
-        parsed, parse_err = parse_vlm_json(result_text)
+        if self._aggregator is None or self._scout_config is None:
+            # ── Legacy path (no Scout/Aggregator) — backward-compatible ────────
+            parsed, parse_err = parse_vlm_json(result_text)
+            if parsed is None:
+                json_valid = False
+            else:
+                ok, _ = validate_driving_scene_json(parsed)
+                json_valid = ok
+            if not json_valid:
+                reason = parse_err or "schema validation failed"
+                print(
+                    f"VLMKafkaPublisher: json_valid=False for stream {stream_id} "
+                    f"[{start_time:.2f}s-{end_time:.2f}s] — {reason}"
+                )
+            message = {
+                "stream_id": stream_id,
+                "timestamp": time.time(),
+                "segment": {
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "duration": end_time - start_time,
+                },
+                "result": result_text,
+                "metadata": {
+                    "source": "vllm-ds-plugin",
+                    "version": "1.0",
+                    **({"detect_hints": True} if self.detect_hints else {}),
+                    "json_valid": json_valid,
+                },
+            }
+            self._collected_results.append(message)
+            self.publish(message, stream_id)
+            return
+
+        # ── P2-4 curation path: Scout + Best-of-N Aggregator ────────────────
+
+        # Lazy Scout init via element.get_llm()
+        if self._scout is None:
+            llm = element.get_llm() if element is not None and hasattr(element, "get_llm") else None
+            if llm is not None:
+                from src.scouts.cosmos_reason import CosmosReasonScout
+
+                self._scout = CosmosReasonScout(llm=llm)
+
+        # Retrieve per-segment data stored by _inference_worker / _run_vlm_batch
+        ctx = None
+        if element is not None and hasattr(element, "stream_contexts"):
+            ctx = element.stream_contexts.get(stream_id)
+        inventory: dict[str, int] = ctx.last_inventory if ctx is not None else {}
+        last_inputs: dict | None = ctx.last_inputs if ctx is not None else None
+
+        # Scout sampling (T=0.5 + T=0.7 batch; T=0.3 already computed as t0_result)
+        if self._scout is not None and last_inputs is not None:
+            reports = self._scout.sample(last_inputs, {}, self._scout_config, t0_result=result_text)
+        else:
+            # Fallback: wrap t0_result as single partial report
+            from src.scouts.base import ScoutReport
+
+            t0_temp = self._scout_config.temperatures[0] if self._scout_config.temperatures else 0.3
+            reports = [
+                ScoutReport(
+                    text=result_text,
+                    temperature=t0_temp,
+                    seed=self._scout_config.seed_for(t0_temp),
+                    latency_ms=0.0,
+                    partial_sampling=True,
+                )
+            ]
+
+        # Release per-segment resources immediately after Scout completes
+        if ctx is not None:
+            ctx.last_inputs = None
+            ctx.last_inventory = {}
+
+        # Best-of-N selection
+        best = self._aggregator.select(reports, inventory)
+        n_samples = len(reports)
+
+        if best is None:
+            # Defensive: empty reports list (shouldn't happen in practice)
+            from src.scouts.base import ScoutReport
+
+            t0_temp = self._scout_config.temperatures[0] if self._scout_config.temperatures else 0.3
+            best = ScoutReport(
+                text=result_text,
+                temperature=t0_temp,
+                seed=self._scout_config.seed_for(t0_temp),
+                latency_ms=0.0,
+                partial_sampling=True,
+            )
+            n_samples = 0
+
+        # Routing decision
+        needs_review = False
+        reason = None
+
+        if best.partial_sampling:
+            needs_review = True
+            reason = "partial_batch"
+            self._partial_count += 1
+            if self._partial_count >= 3:
+                self._scout_config.n = 1
+                print(
+                    f"VLMKafkaPublisher: N=1 fallback activated after "
+                    f"{self._partial_count} consecutive partial failures "
+                    f"(stream {stream_id})"
+                )
+        else:
+            self._partial_count = 0  # reset on success
+            # Zero-grounding: inventory non-empty but no class matched in selected report
+            if inventory and self._aggregator.score(best, inventory) == 0:
+                needs_review = True
+                reason = "zero_grounding"
+
+        # Validate selected report text against schema
+        parsed, parse_err = parse_vlm_json(best.text)
         if parsed is None:
             json_valid = False
         else:
             ok, _ = validate_driving_scene_json(parsed)
             json_valid = ok
-        if not json_valid:
-            reason = parse_err or "schema validation failed"
-            print(
-                f"VLMKafkaPublisher: json_valid=False for stream {stream_id} "
-                f"[{start_time:.2f}s-{end_time:.2f}s] — {reason}"
-            )
 
-        # Construct message
         message = {
             "stream_id": stream_id,
             "timestamp": time.time(),
@@ -166,7 +277,16 @@ class VLMKafkaSignalPublisher:
                 "end_time": end_time,
                 "duration": end_time - start_time,
             },
-            "result": result_text,
+            "result": best.text,
+            "curation": {
+                "temperature": best.temperature,
+                "seed": best.seed,
+                "latency_ms": round(best.latency_ms, 1),
+                "partial_sampling": best.partial_sampling,
+                "n_samples": n_samples,
+                "needs_review": needs_review,
+                "reason": reason,
+            },
             "metadata": {
                 "source": "vllm-ds-plugin",
                 "version": "1.0",
@@ -175,20 +295,25 @@ class VLMKafkaSignalPublisher:
             },
         }
 
-        # Collect for JSON output
         self._collected_results.append(message)
 
-        # Publish to Kafka or print to console
-        self.publish(message, stream_id)
+        pub_topic = (
+            self._scout_config.kafka_topic_needs_review
+            if needs_review
+            else self._scout_config.kafka_topic_scouted
+        )
+        self.publish(message, stream_id, topic=pub_topic)
 
-    def publish(self, message: dict, stream_id: int):
+    def publish(self, message: dict, stream_id: int, topic: str | None = None):
         """
         Publish message to Kafka or print to console.
 
         Args:
             message: Message payload
             stream_id: Stream ID (used as partition key)
+            topic: Kafka topic override; defaults to self.topic when None
         """
+        topic = topic or self.topic
         # Use stream_id as partition key for ordering
         partition_key = f"stream_{stream_id}"
 
@@ -197,7 +322,7 @@ class VLMKafkaSignalPublisher:
             print(f"\n{'=' * 80}")
             print("📤 KAFKA MESSAGE (Dry-Run)")
             print(f"{'=' * 80}")
-            print(f"Topic: {self.topic}")
+            print(f"Topic: {topic}")
             print(f"Key: {partition_key}")
             print(f"Value: {json.dumps(message, indent=2)}")
             print(f"{'=' * 80}\n")
@@ -205,7 +330,7 @@ class VLMKafkaSignalPublisher:
         else:
             # Send to Kafka
             try:
-                future = self.producer.send(self.topic, key=partition_key, value=message)
+                future = self.producer.send(topic, key=partition_key, value=message)
 
                 # Optional: wait for acknowledgment
                 record_metadata = future.get(timeout=10)
@@ -215,6 +340,7 @@ class VLMKafkaSignalPublisher:
                     f"✓ Published to Kafka: stream={stream_id}, "
                     f"time={message['segment']['start_time']:.1f}s-"
                     f"{message['segment']['end_time']:.1f}s, "
+                    f"topic={topic}, "
                     f"partition={record_metadata.partition}, "
                     f"offset={record_metadata.offset}"
                 )
@@ -281,9 +407,35 @@ class VLMKafkaApp:
         self.seg_mode = seg_mode
         self._class_mapping = load_class_mapping(os.environ.get("VLM_DETECT_LABELFILE"))
 
+        # P2-4: load ScoutConfig + BestOfNAggregator for curation wiring
+        _scout_config = None
+        _aggregator = None
+        _scout_yaml = os.path.normpath(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "configs", "scout.yaml")
+        )
+        if os.path.exists(_scout_yaml):
+            try:
+                from src.scouts.aggregator import BestOfNAggregator
+                from src.scouts.base import ScoutConfig
+
+                _scout_config = ScoutConfig.from_yaml(_scout_yaml)
+                _aggregator = BestOfNAggregator()
+                print(
+                    f"✓ Scout config loaded (N={_scout_config.n}, topics: "
+                    f"{_scout_config.kafka_topic_scouted} / "
+                    f"{_scout_config.kafka_topic_needs_review})"
+                )
+            except Exception as e:
+                print(f"✗ Failed to load scout config: {e} — curation disabled")
+
         # Initialize Kafka publisher
         self.kafka_publisher = VLMKafkaSignalPublisher(
-            kafka_config, topic, dry_run, detect_hints=bool(nvinfer_config)
+            kafka_config,
+            topic,
+            dry_run,
+            detect_hints=bool(nvinfer_config),
+            aggregator=_aggregator,
+            scout_config=_scout_config,
         )
 
     def bus_call(self, bus, message, loop):
