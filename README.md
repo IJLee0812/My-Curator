@@ -64,8 +64,8 @@ Prerequisites: Docker w/ NVIDIA Container Toolkit, NVIDIA driver 580+, an RTX 40
 git clone https://github.com/IJLee0812/My-Curator.git
 cd My-Curator
 cp .env.example .env          # fill in NGC_API_KEY / HF_TOKEN
-docker compose up -d          # ds9-vlm-dev + Kafka + Zookeeper
-docker exec -it ds9-vlm-dev bash
+docker compose up -d          # my-curator-ds9-vlm-dev + Kafka + Zookeeper
+docker exec -it my-curator-ds9-vlm-dev bash
 ```
 
 ### 2. Download the VLM (once, ~9 GB FP8)
@@ -148,7 +148,7 @@ In My-Curator, this becomes the **Scout's symbolic grounding**: YOLOE inventory 
 ```
 My-Curator/
 ├── main.py                               # entrypoint
-├── docker-compose.yml                    # baseline: ds9-vlm-dev + Kafka + Zookeeper
+├── docker-compose.yml                    # baseline: my-curator-ds9-vlm-dev + Kafka + Zookeeper
 ├── plugin/
 │   ├── gstnvvllmvlm.py                   # GStreamer VLM element (nvvllmvlm)
 │   ├── vlm_utils.py                      # pure utils (host-testable)
