@@ -40,11 +40,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
+from src.scouts.versioning import assert_prompt_registered, resolve_dna_version
+
 log = logging.getLogger(__name__)
 
 _SCOUT_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
-DNA_VERSION = "0.1.0"
-PIPELINE_VERSION = "p2-4"
+PIPELINE_VERSION = "p2-5"
 ZERO_VECTOR = [0.0] * 1024
 
 
@@ -200,7 +201,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=DNA_VERSION,
+                dna_version=resolve_dna_version(self._scout_prompt_hash),
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
@@ -247,7 +248,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=DNA_VERSION,
+                dna_version=resolve_dna_version(self._scout_prompt_hash),
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
@@ -357,6 +358,12 @@ def main() -> None:
 
     scout_prompt_hash = _compute_prompt_hash(_SCOUT_PROMPT_PATH)
     log.info("Scout prompt hash: %s (from %s)", scout_prompt_hash, _SCOUT_PROMPT_PATH.name)
+
+    try:
+        assert_prompt_registered(scout_prompt_hash)
+    except ValueError as exc:
+        log.error("%s", exc)
+        sys.exit(1)
 
     asyncio.run(_run(args, scout_prompt_hash))
 
