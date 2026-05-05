@@ -26,6 +26,7 @@ import download_model as dm  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestFilenameFor:
     def test_yolo26_small(self):
         assert dm._filename_for("yolo26", "s") == "yolo26s.pt"
@@ -64,6 +65,7 @@ class TestFilenameFor:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestDownloadModel:
     def test_skips_download_when_file_already_exists(self, tmp_path, capsys):
         existing = tmp_path / "yolo26m.pt"
@@ -175,6 +177,7 @@ class TestDownloadModel:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestProgressHook:
     def test_does_not_raise_with_known_size(self, capsys):
         dm._progress_hook(1, 1024, 102400)

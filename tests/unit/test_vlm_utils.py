@@ -39,6 +39,7 @@ def _make_detection(label, confidence, bbox, track_id=None):
 # ── YOLO26_CLASS_MAPPING ──
 
 
+@pytest.mark.unit
 class TestYOLO26ClassMapping:
     def test_expected_classes(self):
         assert YOLO26_CLASS_MAPPING[0] == "Pedestrian"
@@ -57,6 +58,7 @@ class TestYOLO26ClassMapping:
 # ── format_detection_hints ──
 
 
+@pytest.mark.unit
 class TestFormatDetectionHints:
     """Tests for the aggregated, VRU-zone detection-hint format."""
 
@@ -210,6 +212,7 @@ class TestFormatDetectionHints:
         assert "Car x 2" in result
 
 
+@pytest.mark.unit
 class TestVruClasses:
     def test_vru_set_contains_expected_labels(self):
         assert {"Pedestrian", "Bike", "Motorcycle"} == VRU_CLASSES
@@ -219,6 +222,7 @@ class TestVruClasses:
         assert VRU_CLASSES.issubset(yolo26_labels)
 
 
+@pytest.mark.unit
 class TestBboxToZone:
     """Zone and proximity classification from normalized bbox."""
 
@@ -270,6 +274,7 @@ class TestBboxToZone:
         assert prox == "near"
 
 
+@pytest.mark.unit
 class TestParseVlmJson:
     def test_raw_json_parsed(self):
         data, err = parse_vlm_json('{"a": 1, "b": "x"}')
@@ -318,6 +323,7 @@ class TestParseVlmJson:
         assert "object" in err.lower()
 
 
+@pytest.mark.unit
 class TestValidateDrivingSceneJson:
     """Schema validation against DrivingSceneResult."""
 
@@ -396,6 +402,7 @@ class TestValidateDrivingSceneJson:
 # ── format_user_prompt ──
 
 
+@pytest.mark.unit
 class TestFormatUserPrompt:
     def test_all_placeholders(self):
         prompt = (
@@ -437,6 +444,7 @@ class TestFormatUserPrompt:
 # ── compute_step_ns ──
 
 
+@pytest.mark.unit
 class TestComputeStepNs:
     def test_normal_case(self):
         assert compute_step_ns(10, 2) == 8_000_000_000
@@ -460,6 +468,7 @@ class TestComputeStepNs:
 # ── compute_sample_interval_ns ──
 
 
+@pytest.mark.unit
 class TestComputeSampleIntervalNs:
     def test_fps_2(self):
         assert compute_sample_interval_ns(2) == 500_000_000
@@ -481,6 +490,7 @@ class TestComputeSampleIntervalNs:
 # ── get_stream_config ──
 
 
+@pytest.mark.unit
 class TestGetStreamConfig:
     def test_override_exists(self):
         prompts = {0: {"user_prompt": "Override!", "temperature": 0.1}}
@@ -506,6 +516,7 @@ class TestGetStreamConfig:
 # ── collect_detections ──
 
 
+@pytest.mark.unit
 class TestCollectDetections:
     def _make_obj(self, class_id, confidence, left, top, width, height):
         return SimpleNamespace(
@@ -580,6 +591,7 @@ class TestCollectDetections:
 # ── to_uri ──
 
 
+@pytest.mark.unit
 class TestToUri:
     def test_absolute_path(self):
         result = to_uri("/workspace/video.mp4")
@@ -607,6 +619,7 @@ class TestToUri:
 # ── load_class_mapping (YOLOE runtime labels, YOLO26 fallback) ──
 
 
+@pytest.mark.unit
 class TestLoadClassMapping:
     def test_missing_path_falls_back_to_yolo26(self):
         assert load_class_mapping(None) is YOLO26_CLASS_MAPPING
@@ -664,6 +677,7 @@ class TestLoadClassMapping:
 # ── parse_nvinfer_config ──
 
 
+@pytest.mark.unit
 class TestParseNvinferConfig:
     def test_basic_keyvalue(self, tmp_path):
         cfg = tmp_path / "config.txt"
@@ -702,6 +716,7 @@ class TestParseNvinferConfig:
 # ── is_segmentation_config ──
 
 
+@pytest.mark.unit
 class TestIsSegmentationConfig:
     def test_detection_config_false(self, tmp_path):
         cfg = tmp_path / "config.txt"
@@ -725,6 +740,7 @@ class TestIsSegmentationConfig:
 # ── format_detection_hints with custom detector_name ──
 
 
+@pytest.mark.unit
 class TestFormatDetectionHintsDetectorName:
     def test_default_detector_name_yolo26(self):
         frame = _make_frame([_make_detection("Car", 0.9, (0.1, 0.2, 0.3, 0.4))])
@@ -745,6 +761,7 @@ class TestFormatDetectionHintsDetectorName:
 # ── format_object_label ──
 
 
+@pytest.mark.unit
 class TestFormatObjectLabel:
     def test_with_track_id(self):
         assert format_object_label("Car", 42) == "Car (TrackID: 42)"

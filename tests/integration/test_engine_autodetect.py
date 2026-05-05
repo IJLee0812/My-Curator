@@ -8,9 +8,11 @@ These tests exercise it in isolation using tmp_path fixtures.
 import os
 from pathlib import Path
 
+import pytest
 from vlm_utils import move_built_engine
 
 
+@pytest.mark.integration
 class TestMoveBuiltEngine:
     def test_returns_none_when_dest_is_none(self):
         assert move_built_engine(None) is None

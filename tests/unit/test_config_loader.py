@@ -4,6 +4,7 @@ import pytest
 from config_loader import Config, get_config, reload_config
 
 
+@pytest.mark.unit
 class TestConfigDefaults:
     """All defaults when config is empty or missing."""
 
@@ -51,6 +52,7 @@ class TestConfigDefaults:
         assert cfg.detection_hints_min_confidence == 0.25
 
 
+@pytest.mark.unit
 class TestConfigCustomValues:
     """Custom values loaded from YAML."""
 
@@ -108,6 +110,7 @@ class TestConfigCustomValues:
         assert cfg.detection_hints_min_confidence == 0.25
 
 
+@pytest.mark.unit
 class TestConfigSingleton:
     """Singleton pattern via get_config / reload_config."""
 
@@ -123,6 +126,7 @@ class TestConfigSingleton:
         assert c2.model_path == "nvidia/Cosmos-Reason2-8B"  # default
 
 
+@pytest.mark.unit
 class TestConfigEdgeCases:
     """Edge cases: nonexistent file, None path."""
 

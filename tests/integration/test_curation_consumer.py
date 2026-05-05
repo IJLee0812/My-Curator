@@ -102,6 +102,7 @@ def _mock_consumer(pg=None, milvus=None, prompt_hash="abcd1234abcd1234") -> Cura
 # ─── pure-Python helper tests ─────────────────────────────────────────────────
 
 
+@pytest.mark.integration
 class TestParseDnaJson:
     def test_valid_json_parsed(self):
         result = _parse_dna_json(json.dumps({"scene_summary": "x"}), {})
@@ -125,6 +126,7 @@ class TestParseDnaJson:
         assert "raw_text" in result
 
 
+@pytest.mark.integration
 class TestComputePromptHash:
     def test_hash_is_16_hex_chars(self, tmp_path):
         f = tmp_path / "prompt.md"
@@ -155,6 +157,7 @@ class TestComputePromptHash:
 # ─── mocked DAL tests ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.integration
 class TestCurationConsumerMocked:
     async def test_scouted_calls_write_clip_with_dna(self):
         pg = AsyncMock()
