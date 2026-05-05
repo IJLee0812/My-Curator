@@ -45,7 +45,7 @@ from src.scouts.versioning import assert_prompt_registered, resolve_dna_version
 log = logging.getLogger(__name__)
 
 _SCOUT_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
-PIPELINE_VERSION = "p2-5"
+PIPELINE_VERSION = "p2-6"
 ZERO_VECTOR = [0.0] * 1024
 
 
@@ -121,32 +121,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _parse_dna_json(result_text: str, curation_meta: dict) -> dict:
-    """Build dna_json from result text + curation metadata.
+def _parse_dna_json(result_text: str, curation_meta: dict) -> tuple[dict, dict]:
+    """Extract DNA JSON from CoT text; return (dna_json, curation_meta).
 
-    Tries to parse result as JSON; falls back to raw_text wrapper.
-    Always merges curation metadata under the '_curation' key.
+    Uses DNAValidator 3-stage extraction (last ```json``` fence →
+    outermost {...} block → raw_text fallback).  curation_meta is
+    returned separately for storage in the curation_meta column —
+    it is never merged into dna_json.
     """
-    try:
-        dna = json.loads(result_text)
-        if not isinstance(dna, dict):
-            dna = {"raw_text": result_text}
-    except (json.JSONDecodeError, TypeError):
-        # Strip markdown code fences if present
-        stripped = result_text.strip()
-        if stripped.startswith("```"):
-            lines = stripped.split("\n")
-            inner = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-            try:
-                dna = json.loads(inner)
-                if not isinstance(dna, dict):
-                    dna = {"raw_text": result_text}
-            except (json.JSONDecodeError, TypeError):
-                dna = {"raw_text": result_text}
-        else:
-            dna = {"raw_text": result_text}
-    dna["_curation"] = curation_meta
-    return dna
+    from src.scouts.dna_validator import DNAValidator
+
+    validator = DNAValidator()
+    dna = validator.extract_json(result_text)
+    if dna is None:
+        dna = {"raw_text": result_text}
+    return dna, curation_meta
 
 
 class CurationConsumer:
@@ -190,8 +179,7 @@ class CurationConsumer:
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
-        curation_meta = data.get("curation", {})
-        dna_json = _parse_dna_json(data.get("result", ""), curation_meta)
+        dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
 
         # PG write — system of record; abort on failure
         try:
@@ -205,6 +193,7 @@ class CurationConsumer:
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
+                curation_meta=curation_meta,
             )
         except Exception:
             log.exception("PG write failed for scouted clip %s — skipping Milvus", clip_id)
@@ -238,8 +227,7 @@ class CurationConsumer:
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
-        curation_meta = data.get("curation", {})
-        dna_json = _parse_dna_json(data.get("result", ""), curation_meta)
+        dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
 
         try:
             await self._pg.write_clip_with_dna(
@@ -252,6 +240,7 @@ class CurationConsumer:
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
+                curation_meta=curation_meta,
             )
         except Exception:
             log.exception("PG write failed for needs_review clip %s", clip_id)

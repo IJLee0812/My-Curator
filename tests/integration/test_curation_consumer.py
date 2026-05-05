@@ -24,7 +24,6 @@ from uuid import UUID
 import pytest
 
 from src.bus.kafka import (
-    DNA_VERSION,
     PIPELINE_VERSION,
     ZERO_VECTOR,
     CurationConsumer,
@@ -105,25 +104,27 @@ def _mock_consumer(pg=None, milvus=None, prompt_hash="abcd1234abcd1234") -> Cura
 @pytest.mark.integration
 class TestParseDnaJson:
     def test_valid_json_parsed(self):
-        result = _parse_dna_json(json.dumps({"scene_summary": "x"}), {})
-        assert result["scene_summary"] == "x"
+        dna, _ = _parse_dna_json(json.dumps({"scene_summary": "x"}), {})
+        assert dna["scene_summary"] == "x"
 
     def test_invalid_json_wraps_raw_text(self):
-        result = _parse_dna_json("just a sentence", {})
-        assert result["raw_text"] == "just a sentence"
+        dna, _ = _parse_dna_json("just a sentence", {})
+        assert dna["raw_text"] == "just a sentence"
 
-    def test_curation_meta_merged(self):
-        result = _parse_dna_json("{}", {"temperature": 0.7})
-        assert result["_curation"] == {"temperature": 0.7}
+    def test_curation_meta_returned_separately(self):
+        """_curation is no longer merged into dna_json — it is returned as the second tuple element."""
+        dna, meta = _parse_dna_json("{}", {"temperature": 0.7})
+        assert "_curation" not in dna
+        assert meta["temperature"] == 0.7
 
     def test_code_fence_stripped(self):
         inner = json.dumps({"scene_summary": "fenced"})
-        result = _parse_dna_json(f"```json\n{inner}\n```", {})
-        assert result["scene_summary"] == "fenced"
+        dna, _ = _parse_dna_json(f"```json\n{inner}\n```", {})
+        assert dna["scene_summary"] == "fenced"
 
     def test_non_dict_json_wrapped(self):
-        result = _parse_dna_json("[1, 2, 3]", {})
-        assert "raw_text" in result
+        dna, _ = _parse_dna_json("[1, 2, 3]", {})
+        assert "raw_text" in dna
 
 
 @pytest.mark.integration
@@ -172,7 +173,7 @@ class TestCurationConsumerMocked:
         kwargs = pg.write_clip_with_dna.call_args.kwargs
         assert kwargs["session_id"] == "test-session-001"
         assert kwargs["blob_uri"] == "stream://0/0.00-5.00"
-        assert kwargs["dna_version"] == DNA_VERSION
+        assert kwargs["dna_version"] == "0.1.0"
         assert kwargs["pipeline_version"] == PIPELINE_VERSION
         assert isinstance(kwargs["clip_id"], UUID)
 

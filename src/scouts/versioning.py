@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 
 # hash_prefix (16 hex chars) → dna_version string
 PROMPT_VERSION_MAP: dict[str, str] = {
-    "f823defb040481ce": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-4 baseline)
+    "f823defb040481ce": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-4 baseline, pre-P2-6)
+    "223892aa4a72b577": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-6: DNA v0.1 CoT prompt)
 }
 
 

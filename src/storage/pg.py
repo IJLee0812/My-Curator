@@ -131,18 +131,21 @@ class PGRepository:
         scout_prompt_hash: str,
         pipeline_version: str,
         judge_prompt_hash: str | None = None,
+        curation_meta: dict[str, Any] | None = None,
     ) -> None:
         await self._pool.execute(
             """
             INSERT INTO scenario_dna
-                (clip_id, dna_version, dna_json, scout_prompt_hash, judge_prompt_hash, pipeline_version)
-            VALUES ($1, $2, $3, $4, $5, $6)
+                (clip_id, dna_version, dna_json, scout_prompt_hash, judge_prompt_hash,
+                 pipeline_version, curation_meta)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (clip_id) DO UPDATE SET
                 dna_version       = EXCLUDED.dna_version,
                 dna_json          = EXCLUDED.dna_json,
                 scout_prompt_hash = EXCLUDED.scout_prompt_hash,
                 judge_prompt_hash = EXCLUDED.judge_prompt_hash,
-                pipeline_version  = EXCLUDED.pipeline_version
+                pipeline_version  = EXCLUDED.pipeline_version,
+                curation_meta     = EXCLUDED.curation_meta
             """,
             clip_id,
             dna_version,
@@ -150,6 +153,7 @@ class PGRepository:
             scout_prompt_hash,
             judge_prompt_hash,
             pipeline_version,
+            curation_meta or {},
         )
 
     # ── atomic composite write ─────────────────────────────────────────────
@@ -170,6 +174,7 @@ class PGRepository:
         is_gold: bool = False,
         is_synthetic: bool = False,
         judge_prompt_hash: str | None = None,
+        curation_meta: dict[str, Any] | None = None,
     ) -> None:
         """Insert clip + scenario_dna atomically in one transaction."""
         async with self._pool.acquire() as conn, conn.transaction():
@@ -194,14 +199,15 @@ class PGRepository:
                 """
                 INSERT INTO scenario_dna
                     (clip_id, dna_version, dna_json, scout_prompt_hash,
-                     judge_prompt_hash, pipeline_version)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                     judge_prompt_hash, pipeline_version, curation_meta)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (clip_id) DO UPDATE SET
                     dna_version       = EXCLUDED.dna_version,
                     dna_json          = EXCLUDED.dna_json,
                     scout_prompt_hash = EXCLUDED.scout_prompt_hash,
                     judge_prompt_hash = EXCLUDED.judge_prompt_hash,
-                    pipeline_version  = EXCLUDED.pipeline_version
+                    pipeline_version  = EXCLUDED.pipeline_version,
+                    curation_meta     = EXCLUDED.curation_meta
                 """,
                 clip_id,
                 dna_version,
@@ -209,6 +215,7 @@ class PGRepository:
                 scout_prompt_hash,
                 judge_prompt_hash,
                 pipeline_version,
+                curation_meta or {},
             )
 
     async def insert_review_queue(
