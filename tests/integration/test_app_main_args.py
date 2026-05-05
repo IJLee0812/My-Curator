@@ -32,6 +32,7 @@ def _write_cfg(tmp_path, lines: list[str], name: str = "config_infer.txt") -> st
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 class TestMainArgParser:
     """Test the argparse layer of main() without running any pipeline."""
 
@@ -117,6 +118,7 @@ class TestMainArgParser:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 class TestSegModeEnvVarExport:
     """Verify the env-var export block in main() sets the right values."""
 
@@ -198,6 +200,7 @@ class TestSegModeEnvVarExport:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 class TestBuildOsdBranch:
     """
     Unit-test _build_osd_branch with Gst.ElementFactory fully mocked.

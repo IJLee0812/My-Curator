@@ -73,6 +73,7 @@ def _run_pipeline(*extra_args, timeout: int = 300) -> subprocess.CompletedProces
 @requires_workspace
 @requires_gpu
 @requires_gstreamer
+@pytest.mark.e2e
 class TestPureVLMPipeline:
     def test_dry_run_exits_zero(self, tmp_path):
         """Pure VLM pipeline with --dry-run completes without error."""
@@ -118,6 +119,7 @@ class TestPureVLMPipeline:
 @requires_gpu
 @requires_gstreamer
 @requires_yolo26m_onnx
+@pytest.mark.e2e
 class TestDetectModePipeline:
     # First run triggers a TRT engine build (several minutes) plus VLM
     # model load and inference on all segments of the sample clip.

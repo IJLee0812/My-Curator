@@ -17,6 +17,7 @@ def publisher():
     return VLMKafkaSignalPublisher({}, "test-topic", dry_run=True)
 
 
+@pytest.mark.integration
 class TestVLMKafkaSignalPublisherInit:
     def test_dry_run_no_producer(self, publisher):
         assert publisher.producer is None
@@ -35,6 +36,7 @@ class TestVLMKafkaSignalPublisherInit:
         assert publisher.topic == "test-topic"
 
 
+@pytest.mark.integration
 class TestOnVlmResult:
     def test_message_appended_to_collected(self, publisher):
         publisher.on_vlm_result(None, 0, 10.0, 15.0, "scene description")
@@ -124,6 +126,7 @@ class TestOnVlmResult:
         assert publisher._collected_results[0]["metadata"]["json_valid"] is True
 
 
+@pytest.mark.integration
 class TestPublishDryRun:
     def test_increments_messages_sent(self, publisher, capsys):
         publisher.publish({"test": True}, 0)
@@ -156,6 +159,7 @@ class TestPublishDryRun:
         assert parsed["stream_id"] == 0
 
 
+@pytest.mark.integration
 class TestClose:
     def test_close_prints_stats(self, publisher, capsys):
         publisher.messages_sent = 3

@@ -7,6 +7,7 @@ import pytest
 from consumer import _build_arg_parser, _format_result_text
 
 
+@pytest.mark.unit
 class TestFormatResultText:
     """Tests for consumer._format_result_text() — the real production function."""
 
@@ -60,6 +61,7 @@ class TestFormatResultText:
         assert "교차로" in output
 
 
+@pytest.mark.unit
 class TestConsumerArgParser:
     """Tests for consumer._build_arg_parser() — the real argparse configuration."""
 
