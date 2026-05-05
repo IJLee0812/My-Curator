@@ -12,6 +12,32 @@ import pytest
 from src.scouts.aggregator import BestOfNAggregator
 from src.scouts.base import ScoutConfig, ScoutReport
 
+# Minimal valid DNA v0.1 CoT output. Contains "vehicle_car" so the aggregator
+# score > 0 when inventory has {"car": N} (substring match).
+_VALID_DNA_COT_OUTPUT = """\
+Reasoning: clear day, primary road, one vehicle_car tailing at mid range, ego cruising.
+
+```json
+{
+  "dna_version": "0.1.0",
+  "clip_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp_range": {"start_s": 0, "end_s": 5},
+  "odd": {"weather": "clear", "lighting": "day", "sensor_fidelity": ["clean"]},
+  "topology": {"road_type": "primary", "lane_event": "normal", "intersection_type": "none"},
+  "actor_dynamics": [
+    {"actor_class": "vehicle_car", "state": "tailing", "distance_bucket": "mid",
+     "confidence": 0.9, "grounded_by_yolo26": false}
+  ],
+  "planner_logic": {"ego_maneuver": "cruise", "risk_level": "nominal"},
+  "confidence": {"overall": 0.9, "scout_agreement": 1.0, "hallucination_flags": []},
+  "provenance": {
+    "scout_models": ["cosmos-reason2-8b"], "scout_prompt_hash": "abcd1234",
+    "pipeline_version": "p2-6", "is_synthetic": false,
+    "reference_standards": ["ASAM OSI v3.x"]
+  }
+}
+```"""
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -192,8 +218,8 @@ class TestKafkaTopicRouting:
         return pub
 
     def test_success_routes_to_scouted_topic(self, capsys):
-        # Text mentions "car" so score > 0; not partial → scouted
-        best = _make_report(text="car detected ahead", partial=False)
+        # Valid DNA JSON with vehicle_car → score > 0 for {"car": 2}; not partial → scouted
+        best = _make_report(text=_VALID_DNA_COT_OUTPUT, partial=False)
         pub = self._pub_with_mock_scout([best])
         _invoke(pub, element=_make_element(last_inventory={"car": 2}))
         assert "curation.clip.scouted" in capsys.readouterr().out
@@ -224,13 +250,13 @@ class TestKafkaTopicRouting:
         assert pub._collected_results[0]["curation"]["reason"] == "partial_batch"
 
     def test_success_reason_is_none(self):
-        best = _make_report(text="car spotted", partial=False)
+        best = _make_report(text=_VALID_DNA_COT_OUTPUT, partial=False)
         pub = self._pub_with_mock_scout([best])
         _invoke(pub, element=_make_element(last_inventory={"car": 1}))
         assert pub._collected_results[0]["curation"]["reason"] is None
 
     def test_empty_inventory_never_triggers_zero_grounding(self):
-        best = _make_report(text="empty road", partial=False)
+        best = _make_report(text=_VALID_DNA_COT_OUTPUT, partial=False)
         pub = self._pub_with_mock_scout([best])
         _invoke(pub, element=_make_element(last_inventory={}))
         msg = pub._collected_results[0]
@@ -364,7 +390,7 @@ class TestCurationMessageFormat:
         assert self._get_msg()["curation"]["n_samples"] == 1
 
     def test_curation_needs_review_false_on_success(self):
-        msg = self._get_msg(text="car on road", inventory={"car": 1})
+        msg = self._get_msg(text=_VALID_DNA_COT_OUTPUT, inventory={"car": 1})
         assert msg["curation"]["needs_review"] is False
 
     def test_curation_needs_review_true_on_partial(self):

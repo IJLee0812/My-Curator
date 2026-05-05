@@ -2,13 +2,13 @@
 
 > An **Autonomous Driving front-camera data curation & validation platform**, built on top of [DeepStream-VLM](https://github.com/IJLee0812/DeepStream-VLM) (NVIDIA DeepStream 9.0 + `nvvllmvlm` + Cosmos-Reason2-8B FP8 + **YOLO26** closed-vocab detector). Upstream YOLOE code paths are inherited but not used in My-Curator.
 
-> **Status**: baseline pipeline is live. **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. **Phase 2 in progress** — P2-2 (Scout N=3 temperature sampling) and P2-3 (Best-of-N aggregator) complete; P2-4 (Kafka event bus) next (Judge deferred to post-v0.1).
+> **Status**: **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. **Phase 2 complete** — Scout N=3 temperature sampling, Best-of-N aggregator, Kafka event bus, DNAValidator (3-stage CoT JSON extraction + jsonschema enforcement), `curation_meta` separation, and Phase-2 E2E smoke test all operational. **Phase 3 next** — embedding worker (P3-1, Cosmos-Embed1) and curation-api (P3-2).
 
 ---
 
 ## What it does (today)
 
-A GStreamer pipeline that splits a driving video into temporal windows (e.g. 5-second segments) and, for each segment, produces a **schema-validated scene description** from a VLM. Three detector modes are available via `--detect-config`:
+A GStreamer pipeline that splits a driving video into temporal windows (e.g. 5-second segments) and, for each segment, produces a **Scenario DNA v0.1** record — a schema-validated 4-layer scene description (ODD / Topology / Actor Dynamics / Planner Logic) emitted by Cosmos-Reason2-8B via chain-of-thought reasoning and enforced by `DNAValidator` against `scenario_dna_v0_1.schema.json`. Valid clips are published to Kafka, consumed by `CurationConsumer`, and stored as JSONB rows in `scenario_dna` (Postgres) with a zero-vector stub in Milvus (P3-1 will replace stubs with real embeddings). Schema-invalid or partial outputs are routed to `review_queue` for human review. Three detector modes are available via `--detect-config`:
 
 | Mode | `nvinfer` config | Vocabulary | Mask |
 |---|---|---|---|
@@ -153,48 +153,65 @@ My-Curator/
 │   ├── gstnvvllmvlm.py                   # GStreamer VLM element (nvvllmvlm)
 │   ├── vlm_utils.py                      # pure utils (host-testable)
 │   ├── config_loader.py                  # YAML config singleton
-│   └── output_schema.py                  # DrivingSceneResult (Pydantic) — Phase-1 replaced by Scenario DNA
+│   └── output_schema.py                  # DrivingSceneResult (Pydantic) — legacy; superseded by Scenario DNA
 ├── src/
 │   ├── vllm_ds_app_kafka_publish.py      # pipeline builder + Kafka + OSD branch
 │   ├── consumer.py                       # optional Kafka consumer
+│   ├── scouts/
+│   │   ├── base.py                       # ScoutConfig, ScoutReport dataclasses
+│   │   ├── cosmos_reason.py              # CosmosReasonScout — N=3 temperature sampling
+│   │   ├── aggregator.py                 # BestOfNAggregator — symbolic reward + YOLO26 inventory overlap
+│   │   ├── dna_validator.py              # DNAValidator — 3-stage CoT JSON extraction + jsonschema validation
+│   │   └── versioning.py                 # PROMPT_VERSION_MAP — prompt hash → dna_version
+│   ├── bus/
+│   │   └── kafka.py                      # CurationConsumer — Kafka → Postgres + Milvus bridge
 │   └── storage/
 │       ├── pg.py                         # PGRepository — asyncpg Postgres DAL
 │       ├── milvus.py                     # MilvusRepository — Milvus GPU_CAGRA DAL
 │       └── minio.py                      # MinIORepository — S3-compatible object store DAL
+├── schemas/
+│   └── scenario_dna_v0_1.schema.json     # Scenario DNA v0.1 JSON Schema (frozen; additionalProperties: false)
+├── prompts/
+│   └── scout_cosmos_reason2.v1.md        # hash artifact — mirrors config_driving_scene.yaml system_prompt
+├── infra/
+│   ├── compose.base.yml                  # Postgres + Milvus + MinIO + etcd
+│   ├── compose.curate.yml                # curation service overlay
+│   └── init-sql/
+│       ├── 001_schema.sql                # base schema (sessions, clips, scenario_dna, review_queue)
+│       └── 002_curation_meta.sql         # P2-6: curation_meta JSONB column on scenario_dna
+├── configs/                              # nvinfer .txt + YAML configs (config_driving_scene.yaml = inference driver)
 ├── scripts/                              # YOLO26 / YOLOE download + ONNX export
-├── configs/                              # nvinfer .txt + YAML prompts
 ├── lib/                                  # DS 9.0 custom YOLO parsers (.so)
 ├── docs/                                 # planning + context docs
 │   ├── implementation_plan.md            # self-contained PR-level plan
 │   └── implementation_plan_KOR.md        # Korean mirror
 ├── .github/                              # issue/PR templates + auto-assign + CODEOWNERS
 └── tests/
-    ├── unit/                             # 353 tests — host-runnable
-    ├── integration/                      # 106 tests — GStreamer auto-mocked
-    └── e2e/                               #   5 tests — Docker + GPU
+    ├── unit/                             # 533 tests — host-runnable (no GPU/Docker)
+    ├── integration/                      # 35 tests — real Postgres via testcontainers + AsyncMock DALs
+    └── e2e/                              #   7 tests — DS Docker container + GPU + compose stack
 ```
 
 ---
 
 ## Tests
 
-The test suite now has **464 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
+The test suite has **575 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
 
 ```bash
-# host — unit + integration + schema, no GPU/Docker needed
-uv venv .venv --python 3.10
-uv pip install --python .venv/bin/python \
-    pytest pytest-asyncio pytest-mock pytest-cov \
-    PyYAML pydantic jsonschema hypothesis \
-    asyncpg pymilvus boto3
+# host — unit + integration, no GPU/Docker needed  (568 tests)
 .venv/bin/pytest tests/unit tests/integration -q
 
 # storage integration tests require the compose stack
 docker compose -f infra/compose.base.yml --env-file .env up -d
 .venv/bin/pytest tests/integration -m integration -q
+
+# e2e — inside DS Docker container with compose stack  (7 tests)
+docker exec my-curator-ds9-vlm-dev \
+  bash -c "cd /workspace && python3 -m pytest tests/e2e -v"
 ```
 
-The expansion adds new pytest markers — `schema`, `performance`, `simulation`, `prompt_regression`, `gpu`, `slow`. These are promoted to the repo-root `pytest.ini` in PR `P1-1`.
+pytest markers: `unit`, `integration`, `schema`, `e2e`, `performance`, `simulation`, `prompt_regression`, `gpu`, `slow`.
 
 Lint: `ruff check . && ruff format --check .` (config in `pyproject.toml`).
 

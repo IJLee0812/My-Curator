@@ -261,13 +261,21 @@ class VLMKafkaSignalPublisher:
                 needs_review = True
                 reason = "zero_grounding"
 
-        # Validate selected report text against schema
-        parsed, parse_err = parse_vlm_json(best.text)
-        if parsed is None:
+        # Extract and schema-validate DNA JSON from CoT output (P2-6)
+        from src.scouts.dna_validator import DNAValidator
+
+        _validator = DNAValidator()
+        dna_dict = _validator.extract_json(best.text)
+        if dna_dict is None:
+            needs_review = True
+            reason = reason or "rejected_schema_invalid"
             json_valid = False
         else:
-            ok, _ = validate_driving_scene_json(parsed)
-            json_valid = ok
+            _dna_valid, _ = _validator.validate(dna_dict)
+            if not _dna_valid:
+                needs_review = True
+                reason = reason or "rejected_schema_invalid"
+            json_valid = _dna_valid
 
         message = {
             "stream_id": stream_id,
