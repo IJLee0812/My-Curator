@@ -30,11 +30,13 @@ Features:
 - File and RTSP source support via uridecodebin
 """
 
+import concurrent.futures
 import json
 import os
 import re
 import sys
 import time
+import uuid as _uuid_module
 from typing import Optional
 
 try:
@@ -73,6 +75,33 @@ from vlm_utils import (  # noqa: E402
 )
 
 
+def _upload_frames_sync(minio_client, key_prefix: str, frames, bucket: str) -> None:
+    """Upload 8 JPEG frames to MinIO synchronously (runs in background thread).
+
+    Args:
+        minio_client: boto3 S3 client.
+        key_prefix: MinIO key prefix, e.g. ``frames/{session_id}/{clip_id}``.
+        frames: ``[8, C, H, W]`` uint8 CPU tensor.
+        bucket: MinIO bucket name.
+    """
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    for i in range(frames.shape[0]):
+        arr = frames[i].permute(1, 2, 0).numpy().astype(np.uint8)  # [H, W, C]
+        img = Image.fromarray(arr, "RGB").resize((336, 336), Image.BILINEAR)
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=95)
+        minio_client.put_object(
+            Bucket=bucket,
+            Key=f"{key_prefix}/frame_{i}.jpg",
+            Body=buf.getvalue(),
+            ContentType="image/jpeg",
+        )
+
+
 class VLMKafkaSignalPublisher:
     """
     Kafka publisher that uses GObject signals to receive VLM results.
@@ -107,6 +136,31 @@ class VLMKafkaSignalPublisher:
         self.messages_sent = 0
         self.messages_failed = 0
         self._collected_results: list = []
+
+        # P3-1: frame capture — MinIO boto3 client + background upload executor
+        self._upload_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="frame-upload"
+        )
+        self._session_id = os.environ.get("CURATOR_SESSION_ID", "default")
+        self._frames_bucket = os.environ.get("MINIO_FRAMES_BUCKET", "frames")
+        self._minio_client = None
+        _ep = os.environ.get("MINIO_ENDPOINT")
+        _ak = os.environ.get("MINIO_ACCESS_KEY")
+        _sk = os.environ.get("MINIO_SECRET_KEY")
+        if _ep and _ak and _sk:
+            try:
+                import boto3
+                from botocore.config import Config as _BotoConfig
+
+                self._minio_client = boto3.client(
+                    "s3",
+                    endpoint_url=_ep,
+                    aws_access_key_id=_ak,
+                    aws_secret_access_key=_sk,
+                    config=_BotoConfig(signature_version="s3v4"),
+                )
+            except Exception as _exc:
+                print(f"✗ MinIO client init failed ({_exc}) — frame capture disabled")
 
         # P2-4: Scout + Aggregator curation (None = legacy path, backward-compatible)
         self._aggregator = aggregator
@@ -161,6 +215,7 @@ class VLMKafkaSignalPublisher:
                     f"VLMKafkaPublisher: json_valid=False for stream {stream_id} "
                     f"[{start_time:.2f}s-{end_time:.2f}s] — {reason}"
                 )
+            clip_id = _uuid_module.uuid4()
             message = {
                 "stream_id": stream_id,
                 "timestamp": time.time(),
@@ -176,6 +231,7 @@ class VLMKafkaSignalPublisher:
                     **({"detect_hints": True} if self.detect_hints else {}),
                     "json_valid": json_valid,
                 },
+                "clip_id": str(clip_id),
             }
             self._collected_results.append(message)
             self.publish(message, stream_id)
@@ -215,6 +271,33 @@ class VLMKafkaSignalPublisher:
                     partial_sampling=True,
                 )
             ]
+
+        # P3-1: generate clip_id and capture 8 frames before releasing ctx.last_inputs
+        clip_id = _uuid_module.uuid4()
+        minio_frames_key = None
+        if (
+            last_inputs is not None
+            and (end_time - start_time) >= 3.0
+            and self._minio_client is not None
+        ):
+            try:
+                import numpy as np
+
+                video_tuple = last_inputs["multi_modal_data"]["video"]
+                batch_tensor = video_tuple[0]  # [T, C, H, W] cpu uint8
+                T = batch_tensor.shape[0]
+                indices = np.linspace(0, T - 1, 8).astype(int)
+                sampled = batch_tensor[indices].cpu()
+                minio_frames_key = f"frames/{self._session_id}/{clip_id}"
+                self._upload_executor.submit(
+                    _upload_frames_sync,
+                    self._minio_client,
+                    minio_frames_key,
+                    sampled,
+                    self._frames_bucket,
+                )
+            except Exception as _exc:
+                print(f"VLMKafkaPublisher: frame capture failed: {_exc}")
 
         # Release per-segment resources immediately after Scout completes
         if ctx is not None:
@@ -301,6 +384,8 @@ class VLMKafkaSignalPublisher:
                 **({"detect_hints": True} if self.detect_hints else {}),
                 "json_valid": json_valid,
             },
+            "clip_id": str(clip_id),
+            **({"minio_frames_key": minio_frames_key} if minio_frames_key else {}),
         }
 
         self._collected_results.append(message)
@@ -362,6 +447,7 @@ class VLMKafkaSignalPublisher:
 
     def close(self):
         """Close Kafka producer and print statistics"""
+        self._upload_executor.shutdown(wait=True)
         if self.producer:
             print("\nFlushing Kafka producer...")
             self.producer.flush(timeout=10)
