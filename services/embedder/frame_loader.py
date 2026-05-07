@@ -47,5 +47,5 @@ async def load_frames(
         arr = np.array(img, dtype=np.uint8)  # [H, W, 3]
         t = torch.from_numpy(arr).permute(2, 0, 1)  # [3, H, W]
         frames.append(t)
-    stacked = torch.stack(frames)   # [8, 3, H, W]
-    return stacked.unsqueeze(0)     # [1, 8, 3, H, W]
+    stacked = torch.stack(frames)  # [8, 3, H, W]
+    return stacked.unsqueeze(0)  # [1, 8, 3, H, W]

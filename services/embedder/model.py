@@ -31,9 +31,7 @@ class CosmosEmbed1:
         from transformers import AutoModel, AutoProcessor
 
         model_dir = Path(model_dir)
-        self._processor = AutoProcessor.from_pretrained(
-            str(model_dir), trust_remote_code=True
-        )
+        self._processor = AutoProcessor.from_pretrained(str(model_dir), trust_remote_code=True)
         model = AutoModel.from_pretrained(
             str(model_dir),
             trust_remote_code=True,

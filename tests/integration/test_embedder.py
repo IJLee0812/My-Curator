@@ -113,9 +113,7 @@ async def test_bulk_embed_parquet(tmp_path):
 
     assert embedded == n_rows
     assert mock_milvus.batch_upsert.called
-    total_upserted = sum(
-        len(call[0][0]) for call in mock_milvus.batch_upsert.call_args_list
-    )
+    total_upserted = sum(len(call[0][0]) for call in mock_milvus.batch_upsert.call_args_list)
     assert total_upserted == n_rows
 
 
