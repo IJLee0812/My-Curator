@@ -46,7 +46,7 @@ log = logging.getLogger(__name__)
 
 _SCOUT_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
 PIPELINE_VERSION = "p2-6"
-ZERO_VECTOR = [0.0] * 1024
+ZERO_VECTOR = [0.0] * 768
 
 
 def _compute_prompt_hash(path: Path) -> str:
@@ -174,7 +174,9 @@ class CurationConsumer:
         self.processed += 1
 
     async def _handle_scouted(self, data: dict) -> None:
-        clip_id = uuid.uuid4()
+        # P3-1: DS pipeline sets clip_id in message so MinIO frames key aligns with Milvus key.
+        _clip_id_str = data.get("clip_id")
+        clip_id = uuid.UUID(_clip_id_str) if _clip_id_str else uuid.uuid4()
         stream_id = data["stream_id"]
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]

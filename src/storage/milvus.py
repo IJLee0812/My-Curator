@@ -9,8 +9,8 @@ Public surface:
   delete / count             — maintenance helpers
 
 Embedding contract: all vectors stored here MUST be L2-normalised (‖v‖ = 1).
-IP(a, b) then equals cosine similarity.  Normalisation is the embedder's
-responsibility (P3-1 Cosmos-Embed1 worker, spatial variant 336p).
+IP(a, b) then equals cosine similarity.  Cosmos-Embed1-336p outputs already
+L2-normalised vectors; no additional normalisation step is required.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from uuid import UUID
 from pymilvus import DataType, MilvusClient
 
 COLLECTION_NAME = "clip_video_embed"
-DIM = 1024  # Cosmos-Embed1 output dim (224p / 336p / 448p all produce 1024-d)
+DIM = 768  # Cosmos-Embed1-336p output dim
 
 # GPU_CAGRA with cuVS defaults — adequate for <1M vectors.
 # Tune intermediate_graph_degree / graph_degree / itopk_size at P3-2 (1M+ scale).
