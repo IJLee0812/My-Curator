@@ -10,7 +10,6 @@ kafka-python==2.3.1
 PyYAML==6.0.3
 Pillow==12.2.0
 pydantic==2.12.5
-av==17.0.1
 
 # Detector export toolchain (YOLO26 / YOLOE ONNX export paths).
 # onnxscript + onnx-ir are pulled in by recent torch.onnx.export even
