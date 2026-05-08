@@ -3,13 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 ###################################################################################################
 
-"""CurationConsumer — Kafka → Postgres + Milvus storage bridge (P2-4).
+"""CurationConsumer — Kafka → Postgres storage bridge (P2-4 / P3-2 follow-up).
 
-Subscribes to curation.clip.scouted and curation.clip.needs_review, then
-writes clip metadata + scenario DNA to Postgres and a zero-vector stub to
-Milvus.  The full asyncio lifecycle (PGRepository pool, MilvusClient) runs
-inside one asyncio.run() call; the blocking KafkaConsumer iteration lives
-inside the async function — safe and correct at < 1 clip/s throughput.
+Subscribes to curation.clip.scouted and curation.clip.needs_review and writes
+clip metadata + scenario DNA to Postgres.  Postgres is the system of record
+for all ingested clips.
+
+Milvus writes are owned exclusively by EmbedderWorker (DS pipeline path) and
+the /v1/ingest endpoint (text-embedding path).  This consumer never writes
+Milvus, eliminating the prior zero-vector stub race with EmbedderWorker.
 
 CLI usage:
   python -m src.bus.kafka \\
@@ -18,12 +20,11 @@ CLI usage:
       --subset val \\
       --dataset-version 1.0 \\
       [--broker localhost:9092] \\
-      [--milvus-uri http://localhost:19530] \\
       [--timeout 300000]
 
 Environment variable fallbacks (useful in Docker):
   SESSION_ID, CURATOR_DATASET, CURATOR_SUBSET, CURATOR_DATASET_VERSION,
-  KAFKA_BROKER, MILVUS_URI, PG_USER, PG_PASSWORD, PG_HOST, PG_PORT, PG_DB
+  KAFKA_BROKER, PG_USER, PG_PASSWORD, PG_HOST, PG_PORT, PG_DB
 """
 
 from __future__ import annotations
@@ -46,7 +47,6 @@ log = logging.getLogger(__name__)
 
 _SCOUT_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
 PIPELINE_VERSION = "p2-6"
-ZERO_VECTOR = [0.0] * 768
 
 
 def _compute_prompt_hash(path: Path) -> str:
@@ -98,11 +98,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Kafka bootstrap servers (env: KAFKA_BROKER, default: localhost:9092)",
     )
     p.add_argument(
-        "--milvus-uri",
-        default=_env("MILVUS_URI") or "http://localhost:19530",
-        help="Milvus URI (env: MILVUS_URI, default: http://localhost:19530)",
-    )
-    p.add_argument(
         "--timeout",
         type=int,
         default=300000,
@@ -139,23 +134,23 @@ def _parse_dna_json(result_text: str, curation_meta: dict) -> tuple[dict, dict]:
 
 
 class CurationConsumer:
-    """Processes Kafka curation messages and writes to Postgres + Milvus.
+    """Processes Kafka curation messages and writes to Postgres.
 
-    Designed for injection in tests: pass pg/milvus repos directly.
+    Designed for injection in tests: pass pg repo directly.
     The public handle_* methods are async and await the DAL calls.
+    Milvus writes are NOT performed here — EmbedderWorker (DS pipeline path)
+    and /v1/ingest (text path) are the sole Milvus writers.
     """
 
     def __init__(
         self,
         pg,
-        milvus,
         scout_prompt_hash: str,
         session_id: str,
         topic_scouted: str = "curation.clip.scouted",
         topic_needs_review: str = "curation.clip.needs_review",
     ) -> None:
         self._pg = pg
-        self._milvus = milvus
         self._scout_prompt_hash = scout_prompt_hash
         self._session_id = session_id
         self._topic_scouted = topic_scouted
@@ -165,7 +160,10 @@ class CurationConsumer:
 
     async def handle(self, topic: str, data: dict) -> None:
         if topic == self._topic_scouted:
-            await self._handle_scouted(data)
+            if "dna_json" in data:
+                await self._handle_scouted_ingest(data)
+            else:
+                await self._handle_scouted(data)
         elif topic == self._topic_needs_review:
             await self._handle_needs_review(data)
         else:
@@ -181,9 +179,12 @@ class CurationConsumer:
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        frames_blob_uri = data.get("frames_blob_uri")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
 
-        # PG write — system of record; abort on failure
+        # PG write — system of record; abort on failure.
+        # Milvus is written by EmbedderWorker (DS path) consuming the same Kafka
+        # topic in parallel; this consumer never touches Milvus.
         try:
             await self._pg.write_clip_with_dna(
                 session_id=self._session_id,
@@ -196,17 +197,12 @@ class CurationConsumer:
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
                 curation_meta=curation_meta,
+                frames_blob_uri=frames_blob_uri,
             )
         except Exception:
-            log.exception("PG write failed for scouted clip %s — skipping Milvus", clip_id)
+            log.exception("PG write failed for scouted clip %s", clip_id)
             self.errors += 1
             return
-
-        # Milvus upsert — zero-vector stub (P3-1 will replace with real embedding)
-        try:
-            await self._milvus.upsert(clip_id, ZERO_VECTOR)
-        except Exception:
-            log.warning("Milvus upsert failed for clip %s (non-fatal)", clip_id)
 
         # Extra review_queue row for schema-invalid clips
         if not data.get("metadata", {}).get("json_valid", True):
@@ -223,12 +219,63 @@ class CurationConsumer:
             "Scouted clip %s written (stream %s, %.2f–%.2f s)", clip_id, stream_id, start_s, end_s
         )
 
+    async def _handle_scouted_ingest(self, data: dict) -> None:
+        """Handle /v1/ingest format messages — pre-computed DNA, no VLM parsing (P3-2)."""
+        clip_id = uuid.UUID(data["clip_id"])
+        session_id = data.get("session_id") or self._session_id
+        blob_uri = data["blob_uri"]
+        start_s: float = data["start_s"]
+        end_s: float = data["end_s"]
+        dna_json: dict = data["dna_json"]
+        dna_version: str = data.get("dna_version") or "0.1"
+        scout_prompt_hash: str = data.get("scout_prompt_hash") or self._scout_prompt_hash
+        pipeline_version: str = data.get("pipeline_version") or PIPELINE_VERSION
+        curation_meta: dict = data.get("curation_meta") or {}
+
+        # Ensure session row exists (ON CONFLICT DO NOTHING)
+        try:
+            await self._pg.insert_session(
+                session_id=session_id,
+                dataset=data.get("dataset", "ingest"),
+                subset=data.get("subset", "api"),
+                dataset_version=data.get("dataset_version", "0"),
+                recorded_at=datetime.now(timezone.utc),
+                source_kind="synthetic" if data.get("is_synthetic") else "real",
+            )
+        except Exception:
+            log.warning("insert_session failed for ingest session %s (non-fatal)", session_id)
+
+        try:
+            await self._pg.write_clip_with_dna(
+                session_id=session_id,
+                clip_id=clip_id,
+                blob_uri=blob_uri,
+                start_s=start_s,
+                end_s=end_s,
+                dna_version=dna_version,
+                dna_json=dna_json,
+                scout_prompt_hash=scout_prompt_hash,
+                pipeline_version=pipeline_version,
+                curation_meta=curation_meta,
+            )
+        except Exception:
+            log.exception("PG write failed for ingest clip %s", clip_id)
+            self.errors += 1
+            return
+
+        # Milvus embedding is written by the /v1/ingest handler before publishing
+        # this message; writing here would race-overwrite it with a stale vector.
+        log.debug(
+            "Ingest clip %s written (session %s, %.2f–%.2f s)", clip_id, session_id, start_s, end_s
+        )
+
     async def _handle_needs_review(self, data: dict) -> None:
         clip_id = uuid.uuid4()
         stream_id = data["stream_id"]
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        frames_blob_uri = data.get("frames_blob_uri")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
 
         try:
@@ -243,6 +290,7 @@ class CurationConsumer:
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
                 curation_meta=curation_meta,
+                frames_blob_uri=frames_blob_uri,
             )
         except Exception:
             log.exception("PG write failed for needs_review clip %s", clip_id)
@@ -269,7 +317,6 @@ class CurationConsumer:
 
 
 async def _run(args: argparse.Namespace, scout_prompt_hash: str) -> None:
-    from src.storage.milvus import MilvusRepository
     from src.storage.pg import PGRepository, dsn_from_env
 
     try:
@@ -280,7 +327,6 @@ async def _run(args: argparse.Namespace, scout_prompt_hash: str) -> None:
 
     dsn = getattr(args, "pg_dsn", None) or dsn_from_env()
     pg = await PGRepository.create(dsn)
-    milvus = await MilvusRepository.create(args.milvus_uri)
 
     # Upsert session row (idempotent — ON CONFLICT DO NOTHING in PGRepository)
     await pg.insert_session(
@@ -295,14 +341,13 @@ async def _run(args: argparse.Namespace, scout_prompt_hash: str) -> None:
 
     consumer = CurationConsumer(
         pg,
-        milvus,
         scout_prompt_hash=scout_prompt_hash,
         session_id=args.session_id,
         topic_scouted=args.topic_scouted,
         topic_needs_review=args.topic_needs_review,
     )
 
-    timeout_ms: int | None = None if args.timeout == 0 else args.timeout
+    timeout_ms: int = -1 if args.timeout == 0 else args.timeout
     kafka = KafkaConsumer(
         args.topic_scouted,
         args.topic_needs_review,
@@ -332,7 +377,6 @@ async def _run(args: argparse.Namespace, scout_prompt_hash: str) -> None:
     finally:
         kafka.close()
         await pg.close()
-        await milvus.close()
 
     log.info("Done — processed=%d errors=%d", consumer.processed, consumer.errors)
 

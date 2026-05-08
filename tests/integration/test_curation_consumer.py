@@ -2,7 +2,7 @@
 
 Two test classes:
   TestCurationConsumerMocked   — AsyncMock DALs; no external services needed.
-  TestCurationConsumerIntegration — real Postgres + Milvus (compose.base.yml).
+  TestCurationConsumerIntegration — real Postgres (compose.base.yml).
 
 Run only mocked tests (CI):
   pytest tests/integration/test_curation_consumer.py -m "not integration"
@@ -15,17 +15,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
 
 from src.bus.kafka import (
     PIPELINE_VERSION,
-    ZERO_VECTOR,
     CurationConsumer,
     _compute_prompt_hash,
     _parse_dna_json,
@@ -74,6 +72,28 @@ def _make_scouted_msg(json_valid: bool = True) -> dict:
     }
 
 
+def _make_ingest_msg(session_id: str = "ingest-session-001") -> dict:
+    """Simulate a /v1/ingest Kafka payload (P3-2 format)."""
+    import uuid as _uuid
+
+    return {
+        "clip_id": str(_uuid.uuid4()),
+        "session_id": session_id,
+        "blob_uri": f"clips/{session_id}/test.mp4",
+        "start_s": 0.0,
+        "end_s": 5.0,
+        "dna_version": "0.1",
+        "dna_json": _VALID_DNA,
+        "scout_prompt_hash": "aabbccddaabbccdd",
+        "pipeline_version": "0.1.0",
+        "frame_count": None,
+        "is_gold": False,
+        "is_synthetic": False,
+        "judge_prompt_hash": None,
+        "curation_meta": None,
+    }
+
+
 def _make_needs_review_msg(reason: str = "partial_batch") -> dict:
     return {
         "stream_id": 1,
@@ -90,12 +110,10 @@ def _make_needs_review_msg(reason: str = "partial_batch") -> dict:
     }
 
 
-def _mock_consumer(pg=None, milvus=None, prompt_hash="abcd1234abcd1234") -> CurationConsumer:
+def _mock_consumer(pg=None, prompt_hash="abcd1234abcd1234") -> CurationConsumer:
     if pg is None:
         pg = AsyncMock()
-    if milvus is None:
-        milvus = AsyncMock()
-    return CurationConsumer(pg, milvus, prompt_hash, session_id="test-session-001")
+    return CurationConsumer(pg, prompt_hash, session_id="test-session-001")
 
 
 # ─── pure-Python helper tests ─────────────────────────────────────────────────
@@ -177,21 +195,11 @@ class TestCurationConsumerMocked:
         assert kwargs["pipeline_version"] == PIPELINE_VERSION
         assert isinstance(kwargs["clip_id"], UUID)
 
-    async def test_scouted_calls_milvus_upsert(self):
-        milvus = AsyncMock()
-        consumer = _mock_consumer(milvus=milvus)
-        await consumer.handle("curation.clip.scouted", _make_scouted_msg())
-        milvus.upsert.assert_awaited_once()
-        call_args = milvus.upsert.call_args
-        assert call_args.args[1] == ZERO_VECTOR
-
-    async def test_scouted_skips_milvus_on_pg_failure(self):
+    async def test_scouted_pg_failure_increments_errors(self):
         pg = AsyncMock()
         pg.write_clip_with_dna.side_effect = RuntimeError("PG down")
-        milvus = AsyncMock()
-        consumer = _mock_consumer(pg=pg, milvus=milvus)
+        consumer = _mock_consumer(pg=pg)
         await consumer.handle("curation.clip.scouted", _make_scouted_msg())
-        milvus.upsert.assert_not_awaited()
         assert consumer.errors == 1
 
     async def test_scouted_json_invalid_inserts_review_queue(self):
@@ -223,12 +231,6 @@ class TestCurationConsumerMocked:
         assert kwargs["state"] == "pending"
         assert kwargs["reason"] == "partial_batch"
 
-    async def test_needs_review_does_not_call_milvus(self):
-        milvus = AsyncMock()
-        consumer = _mock_consumer(milvus=milvus)
-        await consumer.handle("curation.clip.needs_review", _make_needs_review_msg())
-        milvus.upsert.assert_not_awaited()
-
     async def test_processed_counter_increments(self):
         consumer = _mock_consumer()
         await consumer.handle("curation.clip.scouted", _make_scouted_msg())
@@ -245,13 +247,56 @@ class TestCurationConsumerMocked:
         await consumer.handle("curation.clip.scouted", _make_scouted_msg())
         assert consumer.errors == 0
 
+    # ── ingest-format (P3-2) tests ────────────────────────────────────────────
+
+    async def test_scouted_ingest_calls_write_clip_with_dna(self):
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg())
+        pg.write_clip_with_dna.assert_awaited_once()
+
+    async def test_scouted_ingest_uses_message_session_id(self):
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg(session_id="my-session"))
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["session_id"] == "my-session"
+
+    async def test_scouted_ingest_uses_precomputed_dna(self):
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg())
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["dna_json"] == _VALID_DNA
+        assert kwargs["dna_version"] == "0.1"
+
+    async def test_scouted_ingest_calls_insert_session(self):
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg(session_id="s1"))
+        pg.insert_session.assert_awaited_once()
+        kwargs = pg.insert_session.call_args.kwargs
+        assert kwargs["session_id"] == "s1"
+
+    async def test_scouted_ingest_pg_failure_increments_errors(self):
+        pg = AsyncMock()
+        pg.write_clip_with_dna.side_effect = RuntimeError("PG down")
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg())
+        assert consumer.errors == 1
+
+    async def test_scouted_ingest_counted_in_processed(self):
+        consumer = _mock_consumer()
+        await consumer.handle("curation.clip.scouted", _make_ingest_msg())
+        assert consumer.processed == 1
+
 
 # ─── real-service integration tests ───────────────────────────────────────────
 
 
 @pytest.mark.integration
 class TestCurationConsumerIntegration:
-    """Requires compose.base.yml running (Postgres + Milvus).
+    """Requires compose.base.yml running (Postgres).
 
     Start stack:  docker compose -f infra/compose.base.yml --env-file .env up -d
     """
@@ -261,15 +306,6 @@ class TestCurationConsumerIntegration:
         from src.storage.pg import PGRepository, dsn_from_env
 
         repo = await PGRepository.create(dsn_from_env())
-        yield repo
-        await repo.close()
-
-    @pytest.fixture
-    async def milvus(self):
-        from src.storage.milvus import MilvusRepository
-
-        uri = os.environ.get("MILVUS_URI", "http://localhost:19530")
-        repo = await MilvusRepository.create(uri)
         yield repo
         await repo.close()
 
@@ -287,9 +323,9 @@ class TestCurationConsumerIntegration:
         return sid
 
     @pytest.fixture
-    def consumer(self, pg, milvus, session_id) -> CurationConsumer:
+    def consumer(self, pg, session_id) -> CurationConsumer:
         prompt_hash = _compute_prompt_hash(_PROMPT_PATH)
-        return CurationConsumer(pg, milvus, prompt_hash, session_id)
+        return CurationConsumer(pg, prompt_hash, session_id)
 
     async def test_scouted_creates_scenario_dna_row(self, consumer, pg):
         before = await pg.query_dna_by_json('$.scene_summary == "A clear highway stretch."')
@@ -297,12 +333,11 @@ class TestCurationConsumerIntegration:
         after = await pg.query_dna_by_json('$.scene_summary == "A clear highway stretch."')
         assert len(after) == len(before) + 1
 
-    async def test_scouted_increases_milvus_count(self, consumer, milvus):
-        await milvus.flush()  # seal any unflushed entities from prior tests
-        before = await milvus.count()
+    async def test_scouted_creates_clip_row(self, consumer, pg):
+        """PG `clips` is the system of record — count must grow on every scouted message."""
+        before = await pg._pool.fetchval("SELECT count(*) FROM clips")
         await consumer.handle("curation.clip.scouted", _make_scouted_msg())
-        await milvus.flush()
-        after = await milvus.count()
+        after = await pg._pool.fetchval("SELECT count(*) FROM clips")
         assert after == before + 1
 
     async def test_scouted_json_invalid_creates_review_queue_row(self, consumer, pg):
@@ -320,10 +355,3 @@ class TestCurationConsumerIntegration:
         )
         assert rows, "No pending row found"
         assert rows[0]["reason"] == "partial_batch"
-
-    async def test_needs_review_no_milvus_write(self, consumer, milvus):
-        before = await milvus.count()
-        await consumer.handle("curation.clip.needs_review", _make_needs_review_msg())
-        await milvus.flush()
-        after = await milvus.count()
-        assert after == before

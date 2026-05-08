@@ -274,7 +274,7 @@ class VLMKafkaSignalPublisher:
 
         # P3-1: generate clip_id and capture 8 frames before releasing ctx.last_inputs
         clip_id = _uuid_module.uuid4()
-        minio_frames_key = None
+        frames_blob_uri = None
         if (
             last_inputs is not None
             and (end_time - start_time) >= 3.0
@@ -288,11 +288,11 @@ class VLMKafkaSignalPublisher:
                 T = batch_tensor.shape[0]
                 indices = np.linspace(0, T - 1, 8).astype(int)
                 sampled = batch_tensor[indices].cpu()
-                minio_frames_key = f"frames/{self._session_id}/{clip_id}"
+                frames_blob_uri = f"frames/{self._session_id}/{clip_id}"
                 self._upload_executor.submit(
                     _upload_frames_sync,
                     self._minio_client,
-                    minio_frames_key,
+                    frames_blob_uri,
                     sampled,
                     self._frames_bucket,
                 )
@@ -385,7 +385,7 @@ class VLMKafkaSignalPublisher:
                 "json_valid": json_valid,
             },
             "clip_id": str(clip_id),
-            **({"minio_frames_key": minio_frames_key} if minio_frames_key else {}),
+            **({"frames_blob_uri": frames_blob_uri} if frames_blob_uri else {}),
         }
 
         self._collected_results.append(message)

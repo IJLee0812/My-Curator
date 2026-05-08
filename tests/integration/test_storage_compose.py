@@ -83,13 +83,13 @@ def test_compose_pins_every_image_tag():
 
 
 @pytest.mark.integration
-def test_milvus_pinned_to_gpu_one():
+def test_milvus_pinned_to_gpu_zero():
     data = yaml.safe_load(COMPOSE_PATH.read_text())
     devices = data["services"]["milvus"]["deploy"]["resources"]["reservations"]["devices"]
     nvidia = [d for d in devices if d.get("driver") == "nvidia"]
     assert nvidia, "milvus must reserve at least one nvidia device"
-    assert nvidia[0]["device_ids"] == ["1"], (
-        "GPU 0 is reserved for the DeepStream pipeline — Milvus must pin to GPU 1"
+    assert nvidia[0]["device_ids"] == ["0"], (
+        "GPU 1 is reserved for the DeepStream pipeline — Milvus must pin to GPU 0"
     )
 
 

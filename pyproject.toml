@@ -60,6 +60,7 @@ ignore = [
 "plugin/gstnvvllmvlm.py" = ["E402", "B007"]
 "src/vllm_ds_app_kafka_publish.py" = ["E402", "F401"]
 "scripts/*" = ["E402", "B007"]
+"services/curation_api/*.py" = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"

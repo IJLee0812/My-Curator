@@ -272,24 +272,25 @@ class TestDNARoundTripSmoke:
 
         asyncio.run(_assert_pg_row())
 
-    def test_milvus_entity_count_increments(self):
-        """Milvus clip_video_embed entity count increases by at least 1 after pipeline ingest."""
+    def test_pg_clips_count_increments(self):
+        """Postgres `clips` row count increases after CurationConsumer ingests scouted messages.
+
+        PG `clips` is the system of record for ingested clips (Milvus is now
+        written exclusively by EmbedderWorker / /v1/ingest, not the consumer).
+        """
         session_id = self._session_id()
 
-        async def _count_before() -> int:
-            from pymilvus import MilvusClient
+        async def _count() -> int:
+            import asyncpg
 
-            client = MilvusClient(uri=os.environ.get("MILVUS_URI", "http://localhost:19530"))
-            result = client.query(
-                collection_name="clip_video_embed",
-                filter="",
-                output_fields=["count(*)"],
-            )
-            return result[0]["count(*)"] if result else 0
+            conn = await asyncpg.connect(self._pg_dsn())
+            try:
+                return await conn.fetchval("SELECT count(*) FROM clips")
+            finally:
+                await conn.close()
 
-        count_before = asyncio.run(_count_before())
+        count_before = asyncio.run(_count())
 
-        # Run DS pipeline then consumer
         pipeline_result = _run_pipeline(
             str(SAMPLE_MP4),
             "-c",
@@ -299,18 +300,133 @@ class TestDNARoundTripSmoke:
         assert pipeline_result.returncode == 0, pipeline_result.stderr
         self._run_consumer(session_id)
 
-        async def _count_after() -> int:
-            from pymilvus import MilvusClient
+        count_after = asyncio.run(_count())
+        assert count_after > count_before, (
+            f"PG clips count did not increase: before={count_before} after={count_after}"
+        )
 
-            client = MilvusClient(uri=os.environ.get("MILVUS_URI", "http://localhost:19530"))
-            result = client.query(
+
+@requires_workspace
+@requires_gpu
+@requires_gstreamer
+@requires_compose
+@pytest.mark.e2e
+class TestEmbedderWorkerE2E:
+    """P3-2: verify embedder-worker (compose daemon) replaces the zero-vector stub
+    so DS pipeline clips become searchable via curation-api.
+
+    Requires the full compose stack (base + curate + pipeline) up, including
+    the ``embedder-worker`` service from ``infra/compose.curate.yml``.  Without
+    that daemon running, DS pipeline clips remain zero-vectored and these
+    tests fail intentionally.
+
+    Class-scoped fixture runs the DS pipeline once and shares the resulting
+    set of newly-embedded clip_ids with the per-test assertions.
+    """
+
+    PIPELINE_TIMEOUT_SEC = 600
+    EMBED_WAIT_SEC = 180
+
+    @pytest.fixture(scope="class")
+    def new_clip_ids(self) -> set[str]:
+        """Run DS pipeline + consumer once; poll Milvus until embedder-worker
+        produces ≥1 new non-zero vector.  Returns the set of newly-embedded clip_ids.
+        """
+        import time
+
+        import numpy as np
+        from pymilvus import MilvusClient
+
+        milvus_uri = os.environ.get("MILVUS_URI", "http://localhost:19530")
+        client = MilvusClient(uri=milvus_uri)
+
+        def _nonzero_clip_ids() -> set[str]:
+            rows = client.query(
                 collection_name="clip_video_embed",
                 filter="",
-                output_fields=["count(*)"],
+                output_fields=["clip_id", "embedding"],
+                limit=10000,
             )
-            return result[0]["count(*)"] if result else 0
+            return {
+                row["clip_id"]
+                for row in rows
+                if row.get("embedding") and float(np.linalg.norm(row["embedding"])) > 1e-3
+            }
 
-        count_after = asyncio.run(_count_after())
-        assert count_after > count_before, (
-            f"Milvus entity count did not increase: before={count_before} after={count_after}"
+        before = _nonzero_clip_ids()
+
+        pipeline_result = _run_pipeline(
+            str(SAMPLE_MP4),
+            "-c",
+            str(CONFIG_DRIVING),
+            timeout=self.PIPELINE_TIMEOUT_SEC,
+        )
+        assert pipeline_result.returncode == 0, pipeline_result.stderr
+
+        consumer_session = f"e2e-emb-{uuid.uuid4().hex[:8]}"
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "src.bus.kafka",
+                "--session-id",
+                consumer_session,
+                "--dataset",
+                "e2e_emb",
+                "--subset",
+                "test",
+                "--dataset-version",
+                "0",
+                "--broker",
+                _KAFKA_BROKER,
+                "--timeout",
+                "60000",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=70,
+            cwd=str(WORKSPACE),
+        )
+
+        deadline = time.time() + self.EMBED_WAIT_SEC
+        new_ids: set[str] = set()
+        while time.time() < deadline:
+            new_ids = _nonzero_clip_ids() - before
+            if new_ids:
+                break
+            time.sleep(3)
+
+        if not new_ids:
+            pytest.fail(
+                f"No new non-zero embeddings within {self.EMBED_WAIT_SEC}s — "
+                "embedder-worker may not be running as a compose service."
+            )
+        return new_ids
+
+    def test_embedder_worker_replaces_zero_vector(self, new_clip_ids: set[str]) -> None:
+        """Embedder-worker overwrote ≥1 zero-vector stub with a real Cosmos-Embed1 vector."""
+        assert len(new_clip_ids) >= 1, (
+            f"Expected ≥1 new non-zero embedding from embedder-worker, got {len(new_clip_ids)}"
+        )
+
+    def test_ds_pipeline_clip_searchable(self, new_clip_ids: set[str]) -> None:
+        """A newly-embedded DS pipeline clip is retrievable via /v1/search/video self-query.
+
+        The query embedding is derived from the clip's own MinIO frames, so the
+        clip itself must rank in the top-N (cosine self-similarity ≈ 1.0).
+        """
+        import httpx
+
+        target_id = next(iter(new_clip_ids))
+        api_url = os.environ.get("CURATION_API_URL", "http://localhost:8001")
+        with httpx.Client(base_url=api_url, timeout=30.0) as http:
+            resp = http.post(
+                "/v1/search/video",
+                json={"clip_id": target_id, "limit": 5},
+            )
+            assert resp.status_code == 200, resp.text
+            result_ids = [r["clip_id"] for r in resp.json()["results"]]
+
+        assert target_id in result_ids, (
+            f"Clip {target_id} not found in /v1/search/video self-query results: {result_ids}"
         )

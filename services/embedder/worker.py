@@ -1,6 +1,6 @@
 """Embedder worker — Kafka consumer that embeds video clips and upserts to Milvus (P3-1).
 
-Subscribe to ``curation.clip.scouted``, read clip_id + minio_frames_key from
+Subscribe to ``curation.clip.scouted``, read clip_id + frames_blob_uri from
 each message, download 8 JPEG frames from MinIO, run Cosmos-Embed1-336p, and
 upsert the 768-dim vector into Milvus ``clip_video_embed``.
 
@@ -52,11 +52,11 @@ class EmbedderWorker:
     async def handle(self, data: dict) -> None:
         """Process a single ``curation.clip.scouted`` message."""
         clip_id_str = data.get("clip_id")
-        minio_frames_key = data.get("minio_frames_key")
+        frames_blob_uri = data.get("frames_blob_uri")
         duration = data.get("segment", {}).get("duration", 0.0)
 
-        if not clip_id_str or not minio_frames_key:
-            log.debug("No clip_id/minio_frames_key — skipping (legacy message or partial segment)")
+        if not clip_id_str or not frames_blob_uri:
+            log.debug("No clip_id/frames_blob_uri — skipping (legacy message or partial segment)")
             self.skipped += 1
             return
 
@@ -73,7 +73,7 @@ class EmbedderWorker:
         try:
             from services.embedder.frame_loader import load_frames
 
-            tensor = await load_frames(self._minio, self._frames_bucket, minio_frames_key)
+            tensor = await load_frames(self._minio, self._frames_bucket, frames_blob_uri)
             embedding = self._model.embed(tensor)
             await self._milvus.upsert(UUID(clip_id_str), embedding)
             self.embedded += 1
@@ -85,7 +85,7 @@ class EmbedderWorker:
     async def bulk_embed(self, parquet_path: str) -> int:
         """Batch-embed all rows in a parquet file and upsert to Milvus.
 
-        Parquet schema: ``clip_id`` (str UUID), ``minio_frames_key`` (str),
+        Parquet schema: ``clip_id`` (str UUID), ``frames_blob_uri`` (str),
         ``duration`` (float).
 
         Returns:
@@ -102,9 +102,7 @@ class EmbedderWorker:
 
         for row in records:
             try:
-                tensor = await load_frames(
-                    self._minio, self._frames_bucket, row["minio_frames_key"]
-                )
+                tensor = await load_frames(self._minio, self._frames_bucket, row["frames_blob_uri"])
                 vec = self._model.embed(tensor)
                 batch.append({"clip_id": UUID(row["clip_id"]), "embedding": vec})
                 if len(batch) >= 32:
@@ -188,7 +186,9 @@ async def _run(args: argparse.Namespace) -> None:
 
     worker = EmbedderWorker(model, minio, milvus, frames_bucket=args.frames_bucket)
 
-    timeout_ms: int | None = None if args.timeout == 0 else args.timeout
+    # kafka-python's KafkaConsumer rejects None for consumer_timeout_ms
+    # (default is float('inf')); translate --timeout 0 → run-forever sentinel.
+    timeout_ms: float | int = float("inf") if args.timeout == 0 else args.timeout
     kafka = KafkaConsumer(
         args.topic,
         bootstrap_servers=args.broker,

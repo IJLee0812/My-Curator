@@ -6,8 +6,35 @@ so this module can be collected by pytest on a bare venv without those packages.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 NUM_FRAMES = 8
 FRAME_SIZE = 336  # Cosmos-Embed1-336p spatial resolution
+
+# DS pipeline publishes the Kafka curation.clip.scouted message immediately and
+# uploads the 8 frames asynchronously via a background executor.  The embedder
+# worker therefore can race the upload and observe NoSuchKey for the first
+# fetch.  Retry with exponential back-off so the message survives the race.
+_RETRY_DELAYS_S = (0.5, 1.0, 2.0, 4.0, 8.0, 16.0)
+
+log = logging.getLogger(__name__)
+
+
+async def _download_with_retry(minio, bucket: str, key: str) -> bytes:
+    last_exc: Exception | None = None
+    for attempt, delay in enumerate((0.0, *_RETRY_DELAYS_S)):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            return await minio.download_bytes(bucket, key)
+        except Exception as exc:  # botocore NoSuchKey or transient S3 errors
+            last_exc = exc
+            if "NoSuchKey" not in str(type(exc).__name__) and "NoSuchKey" not in str(exc):
+                raise
+            log.debug("frame %s not yet uploaded (attempt %d); retrying", key, attempt + 1)
+    assert last_exc is not None
+    raise last_exc
 
 
 async def load_frames(
@@ -40,7 +67,7 @@ async def load_frames(
     frames = []
     for i in range(num_frames):
         key = f"{key_prefix}/frame_{i}.jpg"
-        data = await minio.download_bytes(bucket, key)
+        data = await _download_with_retry(minio, bucket, key)
         img = Image.open(BytesIO(data)).convert("RGB")
         if img.size != (frame_size, frame_size):
             img = img.resize((frame_size, frame_size), Image.BILINEAR)

@@ -1,0 +1,52 @@
+# DeepStream 9.0 + nvvllmvlm + Cosmos-Reason2-8B pipeline service.
+#
+# Run AFTER compose.base.yml + compose.curate.yml are healthy (Kafka on :9092
+# must be up first — DS app connects via network_mode: host → localhost:9092).
+#
+# Bring up:   docker compose -f infra/compose.pipeline.yml --env-file .env up -d
+# Tear down:  docker compose -f infra/compose.pipeline.yml --env-file .env down
+#
+# Full E2E stack:
+#   docker compose -f infra/compose.base.yml \
+#                  -f infra/compose.curate.yml \
+#                  --env-file .env up -d
+#   docker compose -f infra/compose.pipeline.yml --env-file .env up -d
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────
+  # DeepStream 9.0 — GPU pipeline (network_mode: host → localhost:9092 Kafka)
+  # ──────────────────────────────────────────────────────────────────────
+  deepstream:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: my-curator-vlm:latest
+    container_name: my-curator-ds9-vlm-dev
+    stdin_open: true
+    tty: true
+    privileged: true
+    ipc: host
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - HF_TOKEN=${HF_TOKEN}
+      - DISPLAY=${DISPLAY}
+      - CUDA_VISIBLE_DEVICES=1
+      - PG_USER=${PG_USER}
+      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_HOST=localhost
+      - PG_PORT=5432
+      - PG_DB=curation
+      - MILVUS_URI=http://localhost:19530
+    volumes:
+      - ..:/workspace
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]

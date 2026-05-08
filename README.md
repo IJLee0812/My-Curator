@@ -148,7 +148,6 @@ In My-Curator, this becomes the **Scout's symbolic grounding**: YOLOE inventory 
 ```
 My-Curator/
 ├── main.py                               # entrypoint
-├── docker-compose.yml                    # baseline: my-curator-ds9-vlm-dev + Kafka + Zookeeper
 ├── plugin/
 │   ├── gstnvvllmvlm.py                   # GStreamer VLM element (nvvllmvlm)
 │   ├── vlm_utils.py                      # pure utils (host-testable)
@@ -174,8 +173,9 @@ My-Curator/
 ├── prompts/
 │   └── scout_cosmos_reason2.v1.md        # hash artifact — mirrors config_driving_scene.yaml system_prompt
 ├── infra/
-│   ├── compose.base.yml                  # Postgres + Milvus + MinIO + etcd
-│   ├── compose.curate.yml                # curation service overlay
+│   ├── compose.base.yml                  # storage stack: Postgres + Milvus + MinIO + etcd
+│   ├── compose.curate.yml                # curation overlay: Kafka + Zookeeper + curation-api
+│   ├── compose.pipeline.yml              # DS pipeline: my-curator-ds9-vlm-dev (no Kafka — uses compose.curate.yml's)
 │   └── init-sql/
 │       ├── 001_schema.sql                # base schema (sessions, clips, scenario_dna, review_queue)
 │       └── 002_curation_meta.sql         # P2-6: curation_meta JSONB column on scenario_dna
@@ -203,10 +203,15 @@ The test suite has **575 tests** across `unit`, `integration`, `schema`, and `e2
 .venv/bin/pytest tests/unit tests/integration -q
 
 # storage integration tests require the compose stack
-docker compose -f infra/compose.base.yml --env-file .env up -d
+docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env up -d
 .venv/bin/pytest tests/integration -m integration -q
 
-# e2e — inside DS Docker container with compose stack  (7 tests)
+# e2e — full stack: storage + curation-api + DS pipeline
+docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env up -d
+docker compose -f infra/compose.pipeline.yml --env-file .env up -d
+# curation-api e2e (host, API-level)
+.venv/bin/pytest tests/e2e/test_curation_api.py -m e2e -v
+# DS pipeline e2e (inside DS container)
 docker exec my-curator-ds9-vlm-dev \
   bash -c "cd /workspace && python3 -m pytest tests/e2e -v"
 ```
