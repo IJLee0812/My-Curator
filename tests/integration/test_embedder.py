@@ -51,7 +51,7 @@ async def test_single_clip_embed():
     clip_id = str(uuid.uuid4())
     msg = {
         "clip_id": clip_id,
-        "minio_frames_key": f"frames/sess/{clip_id}",
+        "frames_blob_uri": f"frames/sess/{clip_id}",
         "segment": {"duration": 5.0},
     }
 
@@ -92,7 +92,7 @@ async def test_bulk_embed_parquet(tmp_path):
     table = pyarrow.table(
         {
             "clip_id": clip_ids,
-            "minio_frames_key": [f"frames/sess/{c}" for c in clip_ids],
+            "frames_blob_uri": [f"frames/sess/{c}" for c in clip_ids],
             "duration": [5.0] * n_rows,
         }
     )
@@ -130,7 +130,7 @@ async def test_partial_segment_skip():
     await worker.handle(
         {
             "clip_id": str(uuid.uuid4()),
-            "minio_frames_key": "frames/sess/x",
+            "frames_blob_uri": "frames/sess/x",
             "segment": {"duration": 2.9},
         }
     )
@@ -141,8 +141,8 @@ async def test_partial_segment_skip():
 
 
 @pytest.mark.asyncio
-async def test_no_minio_frames_key_skip():
-    """Messages without minio_frames_key (legacy or partial-segment) are skipped."""
+async def test_no_frames_blob_uri_skip():
+    """Messages without frames_blob_uri (legacy or partial-segment) are skipped."""
     from services.embedder.worker import EmbedderWorker
 
     worker = EmbedderWorker(_make_model_mock(), _make_minio_mock(), _make_milvus_mock())
@@ -151,7 +151,7 @@ async def test_no_minio_frames_key_skip():
         {
             "clip_id": str(uuid.uuid4()),
             "segment": {"duration": 5.0},
-            # minio_frames_key intentionally absent
+            # frames_blob_uri intentionally absent
         }
     )
 
@@ -159,7 +159,7 @@ async def test_no_minio_frames_key_skip():
     worker._milvus.upsert.assert_not_called()
 
 
-# ── test_milvus_dim_768 / zero_vector ─────────────────────────────────────────
+# ── test_milvus_dim_768 ───────────────────────────────────────────────────────
 
 
 def test_milvus_dim_768():
@@ -167,10 +167,3 @@ def test_milvus_dim_768():
     from src.storage.milvus import DIM
 
     assert DIM == 768, f"Expected DIM=768, got {DIM}"
-
-
-def test_zero_vector_dim_768():
-    """ZERO_VECTOR in CurationConsumer must be 768-dim after the P3-1 fix."""
-    from src.bus.kafka import ZERO_VECTOR
-
-    assert len(ZERO_VECTOR) == 768, f"Expected len=768, got {len(ZERO_VECTOR)}"

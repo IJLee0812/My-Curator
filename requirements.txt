@@ -25,6 +25,11 @@ asyncpg==0.31.0
 pymilvus==2.6.12
 boto3==1.42.96
 
+# curation-api (P3-2) — FastAPI search service.
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+httpx>=0.28.0
+
 # In-container test runner (host-side dev installs use pyproject extras).
 pytest==9.0.2
 pytest-asyncio==1.3.0

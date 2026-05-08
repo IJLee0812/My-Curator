@@ -114,6 +114,7 @@ class MilvusRepository:
             search_params=_SEARCH_PARAMS,
             limit=top_k,
             output_fields=["clip_id"],
+            consistency_level="Strong",
         )
         return [
             {"clip_id": UUID(hit["entity"]["clip_id"]), "score": hit["distance"]} for hit in raw[0]

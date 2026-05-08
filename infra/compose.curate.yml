@@ -7,21 +7,23 @@
 # Bring up:     docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env up -d
 # Tear down:    docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env down -v
 #
-# Note: docker-compose.yml (DS pipeline) also contains a Kafka broker on port 9092.
-# Do not run both stacks simultaneously — port 9092 will conflict.
+# DS pipeline: infra/compose.pipeline.yml — uses network_mode: host → connects to
+# this Kafka via localhost:9092.  Do NOT bring up compose.pipeline.yml before
+# my-curator-kafka is healthy.
 
 services:
 
   # ──────────────────────────────────────────────────────────────────────
   # Zookeeper — Kafka metadata store
   # ──────────────────────────────────────────────────────────────────────
-  curator-zookeeper:
+  my-curator-zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
-    container_name: curator-zookeeper
+    container_name: my-curator-zookeeper
     restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=*"
     ports:
       - "2181:2181"
     healthcheck:
@@ -39,19 +41,23 @@ services:
   #   curation.clip.scouted       — grounded clips → DNA pipeline
   #   curation.clip.needs_review  — partial / zero-grounding → manual review
   # ──────────────────────────────────────────────────────────────────────
-  curator-kafka:
+  my-curator-kafka:
     image: confluentinc/cp-kafka:7.6.0
-    container_name: curator-kafka
+    container_name: my-curator-kafka
     restart: unless-stopped
     depends_on:
-      curator-zookeeper:
+      my-curator-zookeeper:
         condition: service_healthy
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: curator-zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ZOOKEEPER_CONNECT: my-curator-zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,DOCKER://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://my-curator-kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -61,6 +67,134 @@ services:
       timeout: 10s
       retries: 6
       start_period: 20s
+    networks:
+      - curation-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # curation-api — FastAPI hybrid search service (P3-2)
+  # Port: 8001.  GPU 0 via device_ids: ["0"] + CUDA_VISIBLE_DEVICES=0.
+  # /health returns 200 only after Cosmos-Embed1 text tower is warmed up.
+  # ──────────────────────────────────────────────────────────────────────
+  curation-api:
+    build:
+      context: ..
+      dockerfile: services/curation_api/Dockerfile
+    container_name: curation-api
+    restart: unless-stopped
+    depends_on:
+      milvus:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      MILVUS_URI: "http://my-curator-milvus:19530"
+      MINIO_ENDPOINT: "http://my-curator-minio:9000"
+      MINIO_USER: "${MINIO_USER}"
+      MINIO_PASSWORD: "${MINIO_PASSWORD}"
+      PG_USER: "${PG_USER}"
+      PG_PASSWORD: "${PG_PASSWORD}"
+      PG_HOST: "my-curator-postgres"
+      PG_PORT: "5432"
+      PG_DB: "curation"
+      KAFKA_BOOTSTRAP_SERVERS: "my-curator-kafka:29092"
+    volumes:
+      - "${REPO_ROOT:-..}/models:/app/models:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    networks:
+      - curation-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # embedder-worker — Kafka → Cosmos-Embed1 video tower → Milvus upsert (P3-1, P3-2)
+  # Subscribes to curation.clip.scouted; downloads 8 JPEG frames from MinIO
+  # for clips with frames_blob_uri set (DS pipeline format only — /v1/ingest
+  # messages are skipped because they have no frames key).  Replaces the
+  # zero-vector stub written by CurationConsumer with the real 768-dim
+  # video embedding so DS pipeline clips become searchable via /v1/search.
+  # GPU 0 (shared with curation-api: same Cosmos-Embed1-336p weights, two towers).
+  # ──────────────────────────────────────────────────────────────────────
+  embedder-worker:
+    build:
+      context: ..
+      dockerfile: services/curation_api/Dockerfile
+    container_name: my-curator-embedder
+    restart: unless-stopped
+    depends_on:
+      my-curator-kafka:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      KAFKA_BROKER: "my-curator-kafka:29092"
+      MILVUS_URI: "http://my-curator-milvus:19530"
+      MINIO_ENDPOINT: "http://my-curator-minio:9000"
+      MINIO_ACCESS_KEY: "${MINIO_USER}"
+      MINIO_SECRET_KEY: "${MINIO_PASSWORD}"
+    volumes:
+      - "${REPO_ROOT:-..}/models:/app/models:ro"
+    command:
+      - "python3"
+      - "-m"
+      - "services.embedder.worker"
+      - "--timeout"
+      - "0"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    networks:
+      - curation-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # curation-consumer — Kafka → Postgres + Milvus bridge (P2-4, P3-2)
+  # Handles both DS pipeline format and /v1/ingest format messages.
+  # Runs indefinitely (--timeout 0); restarts automatically.
+  # ──────────────────────────────────────────────────────────────────────
+  curation-consumer:
+    build:
+      context: ..
+      dockerfile: services/curation_api/Dockerfile
+    container_name: my-curator-consumer
+    restart: unless-stopped
+    depends_on:
+      my-curator-kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    environment:
+      SESSION_ID: "curation-daemon"
+      CURATOR_DATASET: "curation"
+      CURATOR_SUBSET: "api"
+      CURATOR_DATASET_VERSION: "0"
+      PG_USER: "${PG_USER}"
+      PG_PASSWORD: "${PG_PASSWORD}"
+      PG_HOST: "my-curator-postgres"
+      PG_PORT: "5432"
+      PG_DB: "curation"
+      KAFKA_BROKER: "my-curator-kafka:29092"
+    command: ["python3", "-m", "src.bus.kafka", "--timeout", "0"]
     networks:
       - curation-net
 

@@ -125,7 +125,7 @@ services:
       - curation-net
 
   # ──────────────────────────────────────────────────────────────────────
-  # Milvus — GPU standalone (pinned to GPU 1 — GPU 0 reserved for DS pipeline)
+  # Milvus — GPU standalone (pinned to GPU 0)
   # ──────────────────────────────────────────────────────────────────────
   milvus:
     image: milvusdb/milvus:v2.6.15-gpu
@@ -161,7 +161,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["1"]
+              device_ids: ["0"]
               capabilities: [gpu]
     networks:
       - curation-net

@@ -104,12 +104,14 @@ class PGRepository:
         frame_count: int | None = None,
         is_gold: bool = False,
         is_synthetic: bool = False,
+        frames_blob_uri: str | None = None,
     ) -> None:
         await self._pool.execute(
             """
             INSERT INTO clips
-                (clip_id, session_id, blob_uri, start_s, end_s, frame_count, is_gold, is_synthetic)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (clip_id, session_id, blob_uri, start_s, end_s,
+                 frame_count, is_gold, is_synthetic, frames_blob_uri)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (clip_id) DO NOTHING
             """,
             clip_id,
@@ -120,6 +122,7 @@ class PGRepository:
             frame_count,
             is_gold,
             is_synthetic,
+            frames_blob_uri,
         )
 
     async def upsert_dna(
@@ -175,6 +178,7 @@ class PGRepository:
         is_synthetic: bool = False,
         judge_prompt_hash: str | None = None,
         curation_meta: dict[str, Any] | None = None,
+        frames_blob_uri: str | None = None,
     ) -> None:
         """Insert clip + scenario_dna atomically in one transaction."""
         async with self._pool.acquire() as conn, conn.transaction():
@@ -182,8 +186,8 @@ class PGRepository:
                 """
                 INSERT INTO clips
                     (clip_id, session_id, blob_uri, start_s, end_s,
-                     frame_count, is_gold, is_synthetic)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                     frame_count, is_gold, is_synthetic, frames_blob_uri)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (clip_id) DO NOTHING
                 """,
                 clip_id,
@@ -194,6 +198,7 @@ class PGRepository:
                 frame_count,
                 is_gold,
                 is_synthetic,
+                frames_blob_uri,
             )
             await conn.execute(
                 """
@@ -256,3 +261,105 @@ class PGRepository:
             jsonpath,
         )
         return [{"clip_id": r["clip_id"], "dna_json": dict(r["dna_json"])} for r in rows]
+
+    async def filter_dna_by_ids(
+        self,
+        clip_ids: list[UUID],
+        filters: dict[str, str | list[str]],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Filter scenario_dna rows by clip_id list + optional DNA field conditions.
+
+        Always uses clip_id = ANY($1) — never issues a full table scan.
+        Scalar DNA fields use GIN jsonpath; array fields use JSONB operators.
+
+        Args:
+            clip_ids: Candidate set from Milvus ANN search.
+            filters: Mapping of DNA field name → value or list of values.
+                     Recognised fields: weather, lighting, sensor_fidelity,
+                     road_type, lane_event, intersection_type, actor_class,
+                     actor_state, risk_level, ego_maneuver.
+            limit: Maximum number of rows to return (safety cap only;
+                   caller re-ranks by Milvus score before applying user limit).
+
+        Returns:
+            List of {"clip_id": UUID, "dna_json": dict}.
+        """
+        _SCALAR_PATH: dict[str, tuple[str, str]] = {
+            "weather": ("odd", "weather"),
+            "lighting": ("odd", "lighting"),
+            "road_type": ("topology", "road_type"),
+            "lane_event": ("topology", "lane_event"),
+            "intersection_type": ("topology", "intersection_type"),
+            "risk_level": ("planner_logic", "risk_level"),
+            "ego_maneuver": ("planner_logic", "ego_maneuver"),
+        }
+
+        conditions: list[str] = ["clip_id = ANY($1)"]
+        params: list[Any] = [clip_ids]
+        idx = 2
+
+        for field, val in filters.items():
+            values: list[str] = [val] if isinstance(val, str) else list(val)
+            if field in _SCALAR_PATH:
+                parent, key = _SCALAR_PATH[field]
+                conditions.append(f"dna_json -> '{parent}' ->> '{key}' = ANY(${idx})")
+                params.append(values)
+                idx += 1
+            elif field == "sensor_fidelity":
+                conditions.append(f"dna_json -> 'odd' -> 'sensor_fidelity' ?| ${idx}")
+                params.append(values)
+                idx += 1
+            elif field == "actor_class":
+                conditions.append(
+                    f"EXISTS ("
+                    f"SELECT 1 FROM jsonb_array_elements(dna_json -> 'actor_dynamics') AS elem"
+                    f" WHERE elem ->> 'actor_class' = ANY(${idx}))"
+                )
+                params.append(values)
+                idx += 1
+            elif field == "actor_state":
+                conditions.append(
+                    f"EXISTS ("
+                    f"SELECT 1 FROM jsonb_array_elements(dna_json -> 'actor_dynamics') AS elem"
+                    f" WHERE elem ->> 'state' = ANY(${idx}))"
+                )
+                params.append(values)
+                idx += 1
+
+        where = " AND ".join(conditions)
+        params.append(limit)
+        sql = f"SELECT clip_id, dna_json FROM scenario_dna WHERE {where} LIMIT ${idx}"
+
+        rows = await self._pool.fetch(sql, *params)
+        return [{"clip_id": r["clip_id"], "dna_json": dict(r["dna_json"])} for r in rows]
+
+    async def get_clip_with_blob_uri(self, clip_id: UUID) -> dict[str, Any] | None:
+        """Return clip metadata joined with its scenario_dna row.
+
+        Returns:
+            Dict with keys: clip_id, session_id, blob_uri, frames_blob_uri,
+            start_s, end_s, dna_version, dna_json.  None if the clip does not exist.
+        """
+        row = await self._pool.fetchrow(
+            """
+            SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
+                   c.start_s, c.end_s, sd.dna_version, sd.dna_json
+            FROM clips c
+            LEFT JOIN scenario_dna sd ON c.clip_id = sd.clip_id
+            WHERE c.clip_id = $1
+            """,
+            clip_id,
+        )
+        if row is None:
+            return None
+        return {
+            "clip_id": row["clip_id"],
+            "session_id": row["session_id"],
+            "blob_uri": row["blob_uri"],
+            "frames_blob_uri": row["frames_blob_uri"],
+            "start_s": row["start_s"],
+            "end_s": row["end_s"],
+            "dna_version": row["dna_version"],
+            "dna_json": dict(row["dna_json"]) if row["dna_json"] else None,
+        }
