@@ -181,6 +181,7 @@ class CurationConsumer:
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
         frames_blob_uri = data.get("frames_blob_uri")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
+        dna_json["clip_id"] = str(clip_id)
 
         # PG write — system of record; abort on failure.
         # Milvus is written by EmbedderWorker (DS path) consuming the same Kafka
@@ -277,6 +278,7 @@ class CurationConsumer:
         blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
         frames_blob_uri = data.get("frames_blob_uri")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
+        dna_json["clip_id"] = str(clip_id)
 
         try:
             await self._pg.write_clip_with_dna(

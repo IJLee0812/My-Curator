@@ -142,7 +142,7 @@ inference:
     observation takes precedence. Respond with the JSON schema strictly.
 
 pipeline:
-  queue_maxsize: 8
+  queue_maxsize: 50
   max_wait_timeout: 300
 
 video:

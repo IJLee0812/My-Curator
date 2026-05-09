@@ -785,7 +785,7 @@ class NvVllmVLM(GstBase.BaseTransform):
                     ctx.stream_id, seg, prompt_config, inventory=inventory_snapshot
                 )
                 try:
-                    self._infer_queue.put_nowait(request)
+                    self._infer_queue.put(request, block=True, timeout=30)
                     ctx.segments_submitted += 1
                     ctx.total_frames_in_segments += len(seg.frames)
                     print(
@@ -794,7 +794,7 @@ class NvVllmVLM(GstBase.BaseTransform):
                     )
                 except Exception as e:
                     ctx.segments_dropped += 1
-                    print(f"{GST_PLUGIN_NAME}{stream_label}: Dropped - {e}")
+                    print(f"{GST_PLUGIN_NAME}{stream_label}: Dropped (queue full after 30s) - {e}")
 
             try:
                 ctx.open_segments.remove(seg)
@@ -1355,7 +1355,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                                 stream_id, seg, prompt_config, inventory=inventory_snapshot
                             )  # noqa: BLK100
                             try:
-                                self._infer_queue.put_nowait(request)
+                                self._infer_queue.put(
+                                    request, block=True, timeout=self.max_wait_timeout
+                                )
                                 ctx.segments_submitted += 1
                                 ctx.total_frames_in_segments += len(seg.frames)
                             except Exception:

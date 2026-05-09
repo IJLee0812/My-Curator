@@ -27,6 +27,7 @@ from src.storage.pg import PGRepository
 REPO_ROOT = pathlib.Path(__file__).parents[2]
 INIT_SQL = (REPO_ROOT / "infra" / "init-sql" / "001_schema.sql").read_text()
 INIT_SQL_002 = (REPO_ROOT / "infra" / "init-sql" / "002_curation_meta.sql").read_text()
+INIT_SQL_003 = (REPO_ROOT / "infra" / "init-sql" / "003_frames_blob_uri.sql").read_text()
 
 DOCKER_AVAILABLE = bool(shutil.which("docker"))
 
@@ -89,6 +90,7 @@ async def repo(pg_dsn: str):
     conn = await asyncpg.connect(pg_dsn)
     await conn.execute(INIT_SQL)
     await conn.execute(INIT_SQL_002)
+    await conn.execute(INIT_SQL_003)
     await conn.close()
     r = await PGRepository.create(pg_dsn, min_size=1, max_size=2)
     yield r
