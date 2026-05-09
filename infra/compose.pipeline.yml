@@ -40,6 +40,10 @@ services:
       - PG_PORT=5432
       - PG_DB=curation
       - MILVUS_URI=http://localhost:19530
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      - MINIO_FRAMES_BUCKET=${MINIO_FRAMES_BUCKET:-frames}
     volumes:
       - ..:/workspace
       - /tmp/.X11-unix:/tmp/.X11-unix

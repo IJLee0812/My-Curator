@@ -1,0 +1,161 @@
+{
+  "version": "0.1",
+  "description": "14-clip gold set for Recall@5 benchmark (P3-3). 2 clips per source video, weather x lighting diverse. All clips have 768-dim Milvus vectors.",
+  "corpus_size": 23,
+  "clips": [
+    {
+      "clip_id": "f4fbd547-3fcb-4933-b239-c9ec96d48454",
+      "video": "clear_day_1.mp4",
+      "start_s": 0.066666666,
+      "end_s": 5.066666666,
+      "weather": "clear",
+      "lighting": "day",
+      "road_type": "urban",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/7a2ae0f4-f0d1-4f63-89b5-f3b877d57650"
+    },
+    {
+      "clip_id": "9df78e86-da0f-4a34-89ef-fd9139e2d103",
+      "video": "clear_day_1.mp4",
+      "start_s": 20.066666666,
+      "end_s": 25.066666666,
+      "weather": "clear",
+      "lighting": "tunnel",
+      "road_type": "parking",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/9df78e86-da0f-4a34-89ef-fd9139e2d103"
+    },
+    {
+      "clip_id": "59d160c8-da1d-4148-8f4a-aa929d867461",
+      "video": "clear_night_1.mp4",
+      "start_s": 0.0,
+      "end_s": 5.0,
+      "weather": "clear",
+      "lighting": "night",
+      "road_type": "primary",
+      "confidence": 0.98,
+      "frames_blob_uri": "frames/gold-set/ff39de99-46de-4187-8870-3e58d47c9e16"
+    },
+    {
+      "clip_id": "00ec5c3c-c235-49ef-b799-a7828cd23a2a",
+      "video": "clear_night_1.mp4",
+      "start_s": 5.0,
+      "end_s": 10.0,
+      "weather": "clear",
+      "lighting": "night",
+      "road_type": "primary",
+      "confidence": 0.92,
+      "frames_blob_uri": "frames/gold-set/00ec5c3c-c235-49ef-b799-a7828cd23a2a"
+    },
+    {
+      "clip_id": "d0722965-6fe2-480e-82b5-d35f5d09a9d0",
+      "video": "rainy_day_1.mp4",
+      "start_s": 0.0,
+      "end_s": 5.0,
+      "weather": "rain",
+      "lighting": "dusk",
+      "road_type": "primary",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/c88f2644-e71c-4ce5-bc16-0a5fa0f81fc8"
+    },
+    {
+      "clip_id": "007c2b77-5554-470b-bdd2-cd667506071b",
+      "video": "rainy_day_1.mp4",
+      "start_s": 10.0,
+      "end_s": 15.0,
+      "weather": "light_rain",
+      "lighting": "dusk",
+      "road_type": "primary",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/007c2b77-5554-470b-bdd2-cd667506071b"
+    },
+    {
+      "clip_id": "3d1f7239-c061-4f97-8f85-9dc069d252da",
+      "video": "rainy_day_2.mp4",
+      "start_s": 5.0,
+      "end_s": 10.0,
+      "weather": "rain",
+      "lighting": "day",
+      "road_type": "primary",
+      "confidence": 0.92,
+      "frames_blob_uri": "frames/gold-set/021d2032-7272-4524-b2ec-43586f4a2ddd"
+    },
+    {
+      "clip_id": "1f12e7a2-3a1f-4504-807c-81e3684af279",
+      "video": "rainy_day_2.mp4",
+      "start_s": 20.0,
+      "end_s": 25.0,
+      "weather": "light_rain",
+      "lighting": "dusk",
+      "road_type": "primary",
+      "confidence": 0.93,
+      "frames_blob_uri": "frames/gold-set/1f12e7a2-3a1f-4504-807c-81e3684af279"
+    },
+    {
+      "clip_id": "bff4b946-8546-4261-8d8b-0d4a1eda99be",
+      "video": "snow_night_1.mp4",
+      "start_s": 45.066666666,
+      "end_s": 50.066666666,
+      "weather": "snow",
+      "lighting": "night",
+      "road_type": "primary",
+      "confidence": 0.99,
+      "frames_blob_uri": "frames/gold-set/bff4b946-8546-4261-8d8b-0d4a1eda99be"
+    },
+    {
+      "clip_id": "edc1eb67-9ff9-49b1-9238-54407fad38c9",
+      "video": "snow_night_1.mp4",
+      "start_s": 40.066666666,
+      "end_s": 45.066666666,
+      "weather": "heavy_snow",
+      "lighting": "night",
+      "road_type": "primary",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/edc1eb67-9ff9-49b1-9238-54407fad38c9"
+    },
+    {
+      "clip_id": "a414a014-8e83-489e-9671-3ad52de8967d",
+      "video": "snowy_day_1.mp4",
+      "start_s": 10.0,
+      "end_s": 15.0,
+      "weather": "snow",
+      "lighting": "day",
+      "road_type": "residential",
+      "confidence": 0.95,
+      "frames_blob_uri": "frames/gold-set/a414a014-8e83-489e-9671-3ad52de8967d"
+    },
+    {
+      "clip_id": "3aeb3b06-1029-4661-bfbc-690fcafe5d23",
+      "video": "snowy_day_1.mp4",
+      "start_s": 0.0,
+      "end_s": 5.0,
+      "weather": "snow",
+      "lighting": "day",
+      "road_type": "primary",
+      "confidence": 0.88,
+      "frames_blob_uri": "frames/gold-set/02501401-260c-4aa9-9a75-8086ce72549e"
+    },
+    {
+      "clip_id": "619b3a11-351b-4c94-9bb5-ddfdbbc6dc1a",
+      "video": "snowy_day_2.mp4",
+      "start_s": 5.0,
+      "end_s": 10.0,
+      "weather": "snow",
+      "lighting": "day",
+      "road_type": "motorway",
+      "confidence": 0.98,
+      "frames_blob_uri": "frames/gold-set/619b3a11-351b-4c94-9bb5-ddfdbbc6dc1a"
+    },
+    {
+      "clip_id": "871c3160-cf8a-49c8-8b02-95522ee2e9ec",
+      "video": "snowy_day_2.mp4",
+      "start_s": 10.0,
+      "end_s": 15.0,
+      "weather": "snow",
+      "lighting": "dusk",
+      "road_type": "motorway",
+      "confidence": 0.92,
+      "frames_blob_uri": "frames/gold-set/871c3160-cf8a-49c8-8b02-95522ee2e9ec"
+    }
+  ]
+}
