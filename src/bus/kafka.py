@@ -147,12 +147,20 @@ class CurationConsumer:
         pg,
         scout_prompt_hash: str,
         session_id: str,
+        dataset: str = "curation",
+        subset: str = "pipeline",
+        dataset_version: str = "0",
+        source_kind: str = "real",
         topic_scouted: str = "curation.clip.scouted",
         topic_needs_review: str = "curation.clip.needs_review",
     ) -> None:
         self._pg = pg
         self._scout_prompt_hash = scout_prompt_hash
         self._session_id = session_id
+        self._dataset = dataset
+        self._subset = subset
+        self._dataset_version = dataset_version
+        self._source_kind = source_kind
         self._topic_scouted = topic_scouted
         self._topic_needs_review = topic_needs_review
         self.processed = 0
@@ -178,10 +186,30 @@ class CurationConsumer:
         stream_id = data["stream_id"]
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
-        blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        # P3-4: use source_video_path (VIDEO_DATA_ROOT-relative) when the publisher
+        # provides it; fall back to stream:// for legacy messages without path info.
+        _svp = data.get("source_video_path")
+        blob_uri = f"file://{_svp}" if _svp else f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
         frames_blob_uri = data.get("frames_blob_uri")
+        # P3-4: link the segment back to its original source clip identifier
+        # when the publisher provides one.  Stays NULL otherwise (column is nullable).
+        source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
         dna_json["clip_id"] = str(clip_id)
+
+        # Ensure session row exists — the startup upsert may have been wiped by a
+        # DB reset while this consumer was running.  ON CONFLICT DO NOTHING is a no-op.
+        try:
+            await self._pg.insert_session(
+                session_id=self._session_id,
+                dataset=self._dataset,
+                subset=self._subset,
+                dataset_version=self._dataset_version,
+                recorded_at=datetime.now(timezone.utc),
+                source_kind=self._source_kind,
+            )
+        except Exception:
+            log.warning("insert_session guard failed for %s (non-fatal)", self._session_id)
 
         # PG write — system of record; abort on failure.
         # Milvus is written by EmbedderWorker (DS path) consuming the same Kafka
@@ -199,6 +227,7 @@ class CurationConsumer:
                 pipeline_version=PIPELINE_VERSION,
                 curation_meta=curation_meta,
                 frames_blob_uri=frames_blob_uri,
+                source_clip_id=source_clip_id,
             )
         except Exception:
             log.exception("PG write failed for scouted clip %s", clip_id)
@@ -232,6 +261,7 @@ class CurationConsumer:
         scout_prompt_hash: str = data.get("scout_prompt_hash") or self._scout_prompt_hash
         pipeline_version: str = data.get("pipeline_version") or PIPELINE_VERSION
         curation_meta: dict = data.get("curation_meta") or {}
+        source_clip_id = data.get("source_clip_id")
 
         # Ensure session row exists (ON CONFLICT DO NOTHING)
         try:
@@ -258,6 +288,7 @@ class CurationConsumer:
                 scout_prompt_hash=scout_prompt_hash,
                 pipeline_version=pipeline_version,
                 curation_meta=curation_meta,
+                source_clip_id=source_clip_id,
             )
         except Exception:
             log.exception("PG write failed for ingest clip %s", clip_id)
@@ -275,8 +306,10 @@ class CurationConsumer:
         stream_id = data["stream_id"]
         start_s: float = data["segment"]["start_time"]
         end_s: float = data["segment"]["end_time"]
-        blob_uri = f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        _svp = data.get("source_video_path")
+        blob_uri = f"file://{_svp}" if _svp else f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
         frames_blob_uri = data.get("frames_blob_uri")
+        source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
         dna_json["clip_id"] = str(clip_id)
 
@@ -293,6 +326,7 @@ class CurationConsumer:
                 pipeline_version=PIPELINE_VERSION,
                 curation_meta=curation_meta,
                 frames_blob_uri=frames_blob_uri,
+                source_clip_id=source_clip_id,
             )
         except Exception:
             log.exception("PG write failed for needs_review clip %s", clip_id)
@@ -345,6 +379,10 @@ async def _run(args: argparse.Namespace, scout_prompt_hash: str) -> None:
         pg,
         scout_prompt_hash=scout_prompt_hash,
         session_id=args.session_id,
+        dataset=args.dataset,
+        subset=args.subset,
+        dataset_version=args.dataset_version,
+        source_kind=args.source_kind,
         topic_scouted=args.topic_scouted,
         topic_needs_review=args.topic_needs_review,
     )

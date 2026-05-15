@@ -26,7 +26,9 @@ import yaml
 
 REPO_ROOT = pathlib.Path(__file__).parents[2]
 COMPOSE_PATH = REPO_ROOT / "infra" / "compose.base.yml"
+COMPOSE_CURATE_PATH = REPO_ROOT / "infra" / "compose.curate.yml"
 INIT_SQL_PATH = REPO_ROOT / "infra" / "init-sql" / "001_schema.sql"
+INIT_SQL_004_PATH = REPO_ROOT / "infra" / "init-sql" / "004_source_clip_id.sql"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 
 EXPECTED_BUCKETS = {"raw", "clips", "frames", "artifacts", "milvus"}
@@ -207,3 +209,31 @@ def test_postgres_schema_initialized():
 def test_milvus_healthz():
     with urllib.request.urlopen("http://127.0.0.1:9091/healthz", timeout=5) as resp:
         assert resp.status == 200
+
+
+# ── P3-4: compose.curate.yml ui service + init-sql 004 ──────────────────────
+
+
+@pytest.mark.integration
+def test_init_sql_004_adds_source_clip_id_column():
+    """004_source_clip_id.sql introduces clips.source_clip_id (P3-4)."""
+    sql = INIT_SQL_004_PATH.read_text()
+    assert "ADD COLUMN IF NOT EXISTS source_clip_id" in sql
+    assert "idx_clips_source_clip_id" in sql
+
+
+@pytest.mark.integration
+def test_compose_curate_declares_ui_service():
+    """compose.curate.yml exposes the Next.js UI on host port 3000 (P3-4)."""
+    data = yaml.safe_load(COMPOSE_CURATE_PATH.read_text())
+    assert "ui" in data["services"], "compose.curate.yml is missing the 'ui' service"
+    ui = data["services"]["ui"]
+    assert "build" in ui, "ui service must define a build context"
+    ports = [str(p) for p in ui.get("ports", [])]
+    assert any("3000:3000" in p for p in ports), f"ui port mapping missing: {ports}"
+    depends = ui.get("depends_on", {})
+    # depends_on may be a list or a dict in compose v2 — accept both shapes
+    if isinstance(depends, dict):
+        assert "curation-api" in depends
+    else:
+        assert "curation-api" in depends

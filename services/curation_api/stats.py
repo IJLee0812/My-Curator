@@ -1,0 +1,49 @@
+"""GET /v1/stats — aggregate curation counts for the Dashboard (P3-4).
+
+Surfaces the totals the React UI Dashboard renders without a mock data
+fallback: total clip count, vector count from Milvus, review-queue
+breakdown, and the derived `dna_pass_rate`.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from src.storage.milvus import MilvusRepository
+from src.storage.pg import PGRepository
+
+from .deps import get_milvus, get_pg
+
+router = APIRouter()
+
+
+class ReviewCounts(BaseModel):
+    pending: int
+    approved: int
+    rejected: int
+    rejected_schema_invalid: int
+
+
+class StatsResponse(BaseModel):
+    total_clips: int
+    scenario_dna_count: int
+    vector_count: int
+    review: ReviewCounts
+    dna_pass_rate: float
+
+
+@router.get("/v1/stats", response_model=StatsResponse)
+async def get_stats(
+    pg: PGRepository = Depends(get_pg),
+    milvus: MilvusRepository = Depends(get_milvus),
+) -> StatsResponse:
+    pg_stats = await pg.get_stats()
+    vector_count = await milvus.count()
+    return StatsResponse(
+        total_clips=pg_stats["total_clips"],
+        scenario_dna_count=pg_stats["scenario_dna_count"],
+        vector_count=int(vector_count or 0),
+        review=ReviewCounts(**pg_stats["review"]),
+        dna_pass_rate=pg_stats["dna_pass_rate"],
+    )

@@ -100,8 +100,14 @@ services:
       PG_PORT: "5432"
       PG_DB: "curation"
       KAFKA_BOOTSTRAP_SERVERS: "my-curator-kafka:29092"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}"
+      # Set VIDEO_DATA_ROOT in .env (gitignored) to the real NAS/dataset root.
+      # Falls back to /tmp when unset so compose doesn't error out on machines
+      # without the NAS mount (thumbnail / stream endpoints return 404 in that case).
+      VIDEO_DATA_ROOT: "${VIDEO_DATA_ROOT:-/tmp}"
     volumes:
       - "${REPO_ROOT:-..}/models:/app/models:ro"
+      - "${VIDEO_DATA_ROOT:-/tmp}:${VIDEO_DATA_ROOT:-/tmp}:ro"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
       interval: 30s
@@ -162,6 +168,32 @@ services:
             - driver: nvidia
               device_ids: ["0"]
               capabilities: [gpu]
+    networks:
+      - curation-net
+
+  # ──────────────────────────────────────────────────────────────────────
+  # ui — Next.js 16 curation console (P3-4)
+  # Port 3000 (host).  Browser-side fetches hit curation-api via
+  # NEXT_PUBLIC_API_BASE (localhost:8001 from the user's machine);
+  # Server Components fetch via INTERNAL_API_BASE on the docker network.
+  # ──────────────────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ../services/ui
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-http://localhost:8001}"
+    container_name: my-curator-ui
+    restart: unless-stopped
+    depends_on:
+      curation-api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-http://localhost:8001}"
+      INTERNAL_API_BASE: "http://curation-api:8001"
+      NODE_ENV: "production"
     networks:
       - curation-net
 

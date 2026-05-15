@@ -105,13 +105,15 @@ class PGRepository:
         is_gold: bool = False,
         is_synthetic: bool = False,
         frames_blob_uri: str | None = None,
+        source_clip_id: str | None = None,
     ) -> None:
         await self._pool.execute(
             """
             INSERT INTO clips
                 (clip_id, session_id, blob_uri, start_s, end_s,
-                 frame_count, is_gold, is_synthetic, frames_blob_uri)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 frame_count, is_gold, is_synthetic, frames_blob_uri,
+                 source_clip_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (clip_id) DO NOTHING
             """,
             clip_id,
@@ -123,6 +125,7 @@ class PGRepository:
             is_gold,
             is_synthetic,
             frames_blob_uri,
+            source_clip_id,
         )
 
     async def upsert_dna(
@@ -179,6 +182,7 @@ class PGRepository:
         judge_prompt_hash: str | None = None,
         curation_meta: dict[str, Any] | None = None,
         frames_blob_uri: str | None = None,
+        source_clip_id: str | None = None,
     ) -> None:
         """Insert clip + scenario_dna atomically in one transaction."""
         async with self._pool.acquire() as conn, conn.transaction():
@@ -186,8 +190,9 @@ class PGRepository:
                 """
                 INSERT INTO clips
                     (clip_id, session_id, blob_uri, start_s, end_s,
-                     frame_count, is_gold, is_synthetic, frames_blob_uri)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                     frame_count, is_gold, is_synthetic, frames_blob_uri,
+                     source_clip_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (clip_id) DO NOTHING
                 """,
                 clip_id,
@@ -199,6 +204,7 @@ class PGRepository:
                 is_gold,
                 is_synthetic,
                 frames_blob_uri,
+                source_clip_id,
             )
             await conn.execute(
                 """
@@ -295,7 +301,7 @@ class PGRepository:
             "ego_maneuver": ("planner_logic", "ego_maneuver"),
         }
 
-        conditions: list[str] = ["clip_id = ANY($1)"]
+        conditions: list[str] = ["sd.clip_id = ANY($1)"]
         params: list[Any] = [clip_ids]
         idx = 2
 
@@ -329,24 +335,51 @@ class PGRepository:
 
         where = " AND ".join(conditions)
         params.append(limit)
-        sql = f"SELECT clip_id, dna_json FROM scenario_dna WHERE {where} LIMIT ${idx}"
+        # P3-4: JOIN clips so search results carry the metadata UI needs in
+        # a single round-trip (start_s/end_s, blob_uri, is_gold, source_clip_id).
+        sql = (
+            "SELECT sd.clip_id, sd.dna_json, "
+            "c.start_s, c.end_s, c.blob_uri, c.is_gold, c.source_clip_id "
+            "FROM scenario_dna sd "
+            "JOIN clips c ON c.clip_id = sd.clip_id "
+            f"WHERE {where} "
+            f"LIMIT ${idx}"
+        )
 
         rows = await self._pool.fetch(sql, *params)
-        return [{"clip_id": r["clip_id"], "dna_json": dict(r["dna_json"])} for r in rows]
+        return [
+            {
+                "clip_id": r["clip_id"],
+                "dna_json": dict(r["dna_json"]),
+                "start_s": r["start_s"],
+                "end_s": r["end_s"],
+                "blob_uri": r["blob_uri"],
+                "is_gold": r["is_gold"],
+                "source_clip_id": r["source_clip_id"],
+            }
+            for r in rows
+        ]
 
     async def get_clip_with_blob_uri(self, clip_id: UUID) -> dict[str, Any] | None:
-        """Return clip metadata joined with its scenario_dna row.
+        """Return clip metadata joined with its scenario_dna and sessions rows.
 
         Returns:
             Dict with keys: clip_id, session_id, blob_uri, frames_blob_uri,
-            start_s, end_s, dna_version, dna_json.  None if the clip does not exist.
+            start_s, end_s, is_gold, source_clip_id, dna_version, dna_json,
+            dataset, subset, dataset_version.
+            dataset/subset/dataset_version are None when the session row is
+            missing (should not happen in practice).
+            None if the clip does not exist.
         """
         row = await self._pool.fetchrow(
             """
             SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
-                   c.start_s, c.end_s, sd.dna_version, sd.dna_json
+                   c.start_s, c.end_s, c.is_gold, c.source_clip_id,
+                   sd.dna_version, sd.dna_json,
+                   s.dataset, s.subset, s.dataset_version
             FROM clips c
             LEFT JOIN scenario_dna sd ON c.clip_id = sd.clip_id
+            LEFT JOIN sessions s ON s.session_id = c.session_id
             WHERE c.clip_id = $1
             """,
             clip_id,
@@ -360,6 +393,89 @@ class PGRepository:
             "frames_blob_uri": row["frames_blob_uri"],
             "start_s": row["start_s"],
             "end_s": row["end_s"],
+            "is_gold": row["is_gold"],
+            "source_clip_id": row["source_clip_id"],
             "dna_version": row["dna_version"],
             "dna_json": dict(row["dna_json"]) if row["dna_json"] else None,
+            "dataset": row["dataset"],
+            "subset": row["subset"],
+            "dataset_version": row["dataset_version"],
+        }
+
+    async def list_clips(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return the most recently inserted clips joined with their DNA row.
+
+        Drives the Dashboard "recent clips" widget (P3-4).  Ordered by
+        ``clips.created_at DESC``.  DNA columns are nullable so a clip whose
+        DNA is still being processed still appears in the list.
+
+        Args:
+            limit: maximum number of rows to return (1..100).
+
+        Returns:
+            List of dicts with the same shape as ``filter_dna_by_ids`` rows.
+        """
+        capped = max(1, min(int(limit), 100))
+        rows = await self._pool.fetch(
+            """
+            SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
+                   c.start_s, c.end_s, c.is_gold, c.source_clip_id,
+                   sd.dna_version, sd.dna_json
+            FROM clips c
+            LEFT JOIN scenario_dna sd ON c.clip_id = sd.clip_id
+            ORDER BY c.created_at DESC
+            LIMIT $1
+            """,
+            capped,
+        )
+        return [
+            {
+                "clip_id": r["clip_id"],
+                "session_id": r["session_id"],
+                "blob_uri": r["blob_uri"],
+                "frames_blob_uri": r["frames_blob_uri"],
+                "start_s": r["start_s"],
+                "end_s": r["end_s"],
+                "is_gold": r["is_gold"],
+                "source_clip_id": r["source_clip_id"],
+                "dna_version": r["dna_version"],
+                "dna_json": dict(r["dna_json"]) if r["dna_json"] else None,
+            }
+            for r in rows
+        ]
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Return aggregate curation counts for the Dashboard (P3-4).
+
+        Returns:
+            ``{"total_clips": int, "scenario_dna_count": int,
+                "review": {"pending": int, "approved": int, "rejected": int,
+                           "rejected_schema_invalid": int},
+                "dna_pass_rate": float}``.
+
+            ``dna_pass_rate`` is ``approved / (approved + rejected + schema_invalid)``
+            with a ``1.0`` floor when no decisions have been recorded yet.
+        """
+        total_clips = await self._pool.fetchval("SELECT count(*) FROM clips")
+        scenario_dna_count = await self._pool.fetchval("SELECT count(*) FROM scenario_dna")
+        rows = await self._pool.fetch(
+            "SELECT state, count(*) AS n FROM review_queue GROUP BY state"
+        )
+        review = {
+            "pending": 0,
+            "approved": 0,
+            "rejected": 0,
+            "rejected_schema_invalid": 0,
+        }
+        for r in rows:
+            state = r["state"]
+            if state in review:
+                review[state] = int(r["n"])
+        decided = review["approved"] + review["rejected"] + review["rejected_schema_invalid"]
+        dna_pass_rate = float(review["approved"]) / decided if decided else 1.0
+        return {
+            "total_clips": int(total_clips or 0),
+            "scenario_dna_count": int(scenario_dna_count or 0),
+            "review": review,
+            "dna_pass_rate": dna_pass_rate,
         }

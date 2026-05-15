@@ -54,6 +54,7 @@ class TestMainArgParser:
         parser.add_argument("--detect", action="store_true")
         parser.add_argument("--detect-config", default=None)
         parser.add_argument("--detect-output", default=None)
+        parser.add_argument("--source-clip-id", default=None)
         return parser.parse_args(argv)
 
     def test_default_topic(self):
@@ -111,6 +112,15 @@ class TestMainArgParser:
     def test_kafka_bootstrap_custom(self):
         args = self._parse(["video.mp4", "--kafka-bootstrap", "broker:9093"])
         assert args.kafka_bootstrap == "broker:9093"
+
+    def test_source_clip_id_default_none(self):
+        args = self._parse(["video.mp4"])
+        assert args.source_clip_id is None
+
+    def test_source_clip_id_stored(self):
+        args = self._parse(["video.mp4", "--source-clip-id", "66751"])
+        assert args.source_clip_id == "66751"
+
 
 
 # ---------------------------------------------------------------------------
