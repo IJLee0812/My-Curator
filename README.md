@@ -282,7 +282,7 @@ docker compose -f infra/compose.curate.yml --env-file .env up -d
 # curation-api at http://localhost:8001
 ```
 
-### 4. (Optional) Start the DS pipeline
+### 4. Start the DS pipeline
 
 ```bash
 docker compose -f infra/compose.pipeline.yml --env-file .env run --rm \
