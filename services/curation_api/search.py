@@ -1,7 +1,11 @@
-"""POST /v1/search — hybrid Milvus ANN + Postgres JSONB filter search (P3-2).
+"""POST /v1/search — hybrid Milvus ANN + Postgres JSONB filter search (P3-2 / P3-4).
 
 Query order: Milvus top-k ANN first → clip_id = ANY($1) + GIN on dna_json in PG.
 Never issues a full PG scan without the Milvus candidate set.
+
+P3-4 extension: ``ClipResult`` carries the clip metadata the UI needs to
+render result cards (start_s, end_s, blob_uri, is_gold, source_clip_id) so
+the page does not have to issue an extra GET per result.
 """
 
 from __future__ import annotations
@@ -46,6 +50,11 @@ class ClipResult(BaseModel):
     clip_id: str
     score: float
     dna_json: dict[str, Any] | None = None
+    start_s: float | None = None
+    end_s: float | None = None
+    blob_uri: str | None = None
+    is_gold: bool | None = None
+    source_clip_id: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -79,7 +88,12 @@ async def search(
         ClipResult(
             clip_id=str(r["clip_id"]),
             score=score_map.get(r["clip_id"], 0.0),
-            dna_json=r["dna_json"],
+            dna_json=r.get("dna_json"),
+            start_s=r.get("start_s"),
+            end_s=r.get("end_s"),
+            blob_uri=r.get("blob_uri"),
+            is_gold=r.get("is_gold"),
+            source_clip_id=r.get("source_clip_id"),
         )
         for r in ranked
     ]

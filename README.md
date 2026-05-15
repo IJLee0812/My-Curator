@@ -2,7 +2,7 @@
 
 > An **Autonomous Driving front-camera data curation & validation platform**, built on top of [DeepStream-VLM](https://github.com/IJLee0812/DeepStream-VLM) (NVIDIA DeepStream 9.0 + `nvvllmvlm` + Cosmos-Reason2-8B FP8 + **YOLO26** closed-vocab detector). Upstream YOLOE code paths are inherited but not used in My-Curator.
 
-> **Status**: **Phase 1 complete** — Scenario DNA v0.1 schema frozen; storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA) operational. **Phase 2 complete** — Scout N=3 temperature sampling, Best-of-N aggregator, Kafka event bus, DNAValidator (3-stage CoT JSON extraction + jsonschema enforcement), `curation_meta` separation, and Phase-2 E2E smoke test all operational. **Phase 3 next** — embedding worker (P3-1, Cosmos-Embed1) and curation-api (P3-2).
+> **Status**: **P1–P2 complete** — DNA schema, storage tri-stack (MinIO + PostgreSQL + Milvus GPU_CAGRA), Scout N=3, Best-of-N aggregator, Kafka event bus, DNAValidator all operational. **P3-1 complete** — Cosmos-Embed1-336p embedding worker (768-dim vectors). **P3-2 complete** — FastAPI curation-api (hybrid vector+JSONB search, `/v1/clips`, `/v1/search`, `/v1/search/video`). **P3-3 complete** — Recall@5 benchmark harness; gold set (14-clip); Recall@5 = 0.929. **P3-4 complete** — React UI (Next.js 16.2.6 + Tailwind 4.3): Dashboard, Clip Detail with NAS `file://` byte-range streaming, VideoPlayer segment enforcement, Similar-clip panel (video-tower nearest neighbours + DNA fallback), Search page. Review-queue approve/reject HTTP persistence deferred to P3-5.
 
 ---
 
@@ -164,52 +164,77 @@ My-Curator/
 │   │   └── versioning.py                 # PROMPT_VERSION_MAP — prompt hash → dna_version
 │   ├── bus/
 │   │   └── kafka.py                      # CurationConsumer — Kafka → Postgres + Milvus bridge
-│   └── storage/
-│       ├── pg.py                         # PGRepository — asyncpg Postgres DAL
-│       ├── milvus.py                     # MilvusRepository — Milvus GPU_CAGRA DAL
-│       └── minio.py                      # MinIORepository — S3-compatible object store DAL
+│   ├── storage/
+│   │   ├── pg.py                         # PGRepository — asyncpg Postgres DAL
+│   │   ├── milvus.py                     # MilvusRepository — Milvus GPU_CAGRA DAL
+│   │   └── minio.py                      # MinIORepository — S3-compatible object store DAL
+│   └── streaming/
+│       ├── base.py                       # serve_segment() — FileResponse + Accept-Ranges for file:// URIs
+│       ├── minio.py                      # presigned-URL redirect for minio:// URIs
+│       └── timestamp.py                  # get_precise_times() — .timestamp sidecar → precise_start_s/end_s
+├── services/
+│   ├── curation_api/                     # FastAPI curation-api (port 8001)
+│   │   ├── main.py                       # app factory + lifespan (PG + Milvus + MinIO pools)
+│   │   ├── clips.py                      # GET /v1/clips, /v1/clips/{id}, /v1/clips/{id}/stream
+│   │   ├── search.py                     # POST /v1/search (hybrid), POST /v1/search/video
+│   │   ├── stats.py                      # GET /v1/stats — live corpus metrics
+│   │   └── Dockerfile
+│   └── ui/                               # Next.js 16.2.6 + React 19 + Tailwind 4.3 curation console (port 3000)
+│       ├── app/
+│       │   ├── page.tsx                  # Dashboard — live stats + recent clips
+│       │   ├── search/page.tsx           # Search — hybrid text+filter query
+│       │   ├── review/page.tsx           # Review Queue — pending clips (approve/reject P3-5)
+│       │   └── clips/[id]/
+│       │       ├── page.tsx              # Clip Detail — DNA accordion + video player + similar clips
+│       │       ├── VideoPlayer.tsx       # NAS file:// streaming, startS/endS JS enforcement
+│       │       ├── SimilarClipsPanel.tsx # video-tower NN + DNA-text fallback
+│       │       └── ApproveRejectButtons.tsx
+│       ├── components/                   # ClipThumbnail, DNAAccordion, RiskBadge, Sidebar
+│       ├── lib/
+│       │   ├── api.ts                    # typed fetch wrappers (NEXT_PUBLIC_API_BASE / INTERNAL_API_BASE)
+│       │   └── mock-data.ts              # ScenarioDNA types + RECALL_AT_5 constant
+│       └── Dockerfile                    # multi-stage: node:20-alpine → next build → standalone
 ├── schemas/
 │   └── scenario_dna_v0_1.schema.json     # Scenario DNA v0.1 JSON Schema (frozen; additionalProperties: false)
 ├── prompts/
 │   └── scout_cosmos_reason2.v1.md        # hash artifact — mirrors config_driving_scene.yaml system_prompt
 ├── infra/
-│   ├── compose.base.yml                  # storage stack: Postgres + Milvus + MinIO + etcd
-│   ├── compose.curate.yml                # curation overlay: Kafka + Zookeeper + curation-api
-│   ├── compose.pipeline.yml              # DS pipeline: my-curator-ds9-vlm-dev (no Kafka — uses compose.curate.yml's)
+│   ├── compose.base.yml                  # storage stack: Postgres + Milvus + MinIO + etcd  ← start first
+│   ├── compose.curate.yml                # curation overlay: Kafka + curation-api + embedder + UI
+│   ├── compose.pipeline.yml              # DS pipeline: my-curator-ds9-vlm-dev
+│   ├── cleanup_curator_db.py             # wipe PG + Milvus + MinIO for a fresh run
 │   └── init-sql/
 │       ├── 001_schema.sql                # base schema (sessions, clips, scenario_dna, review_queue)
-│       └── 002_curation_meta.sql         # P2-6: curation_meta JSONB column on scenario_dna
-├── configs/                              # nvinfer .txt + YAML configs (config_driving_scene.yaml = inference driver)
+│       ├── 002_curation_meta.sql         # P2-6: curation_meta JSONB column
+│       ├── 003_frames_blob_uri.sql       # P3-1: frames_blob_uri column on clips
+│       └── 004_source_clip_id.sql        # P3-4: source_clip_id column on clips
+├── configs/                              # nvinfer .txt + YAML configs
 ├── scripts/                              # YOLO26 / YOLOE download + ONNX export
 ├── lib/                                  # DS 9.0 custom YOLO parsers (.so)
-├── docs/                                 # planning + context docs
-│   ├── implementation_plan.md            # self-contained PR-level plan
-│   └── implementation_plan_KOR.md        # Korean mirror
 ├── .github/                              # issue/PR templates + auto-assign + CODEOWNERS
 └── tests/
-    ├── unit/                             # 533 tests — host-runnable (no GPU/Docker)
-    ├── integration/                      # 35 tests — real Postgres via testcontainers + AsyncMock DALs
-    └── e2e/                              #   7 tests — DS Docker container + GPU + compose stack
+    ├── unit/                             # host-runnable (no GPU/Docker)
+    ├── integration/                      # real Postgres via testcontainers + AsyncMock DALs
+    └── e2e/                              # DS Docker container + GPU + compose stack
 ```
 
 ---
 
 ## Tests
 
-The test suite has **575 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
+The test suite has **596 tests** across `unit`, `integration`, `schema`, and `e2e` markers.
 
 ```bash
-# host — unit + integration, no GPU/Docker needed  (568 tests)
+# host — unit + integration, no GPU/Docker needed
 .venv/bin/pytest tests/unit tests/integration -q
 
 # storage integration tests require the compose stack
-docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env up -d
+docker compose -f infra/compose.base.yml --env-file .env up -d
+docker compose -f infra/compose.curate.yml --env-file .env up -d
 .venv/bin/pytest tests/integration -m integration -q
 
 # e2e — full stack: storage + curation-api + DS pipeline
-docker compose -f infra/compose.base.yml -f infra/compose.curate.yml --env-file .env up -d
 docker compose -f infra/compose.pipeline.yml --env-file .env up -d
-# curation-api e2e (host, API-level)
 .venv/bin/pytest tests/e2e/test_curation_api.py -m e2e -v
 # DS pipeline e2e (inside DS container)
 docker exec my-curator-ds9-vlm-dev \
@@ -219,6 +244,51 @@ docker exec my-curator-ds9-vlm-dev \
 pytest markers: `unit`, `integration`, `schema`, `e2e`, `performance`, `simulation`, `prompt_regression`, `gpu`, `slow`.
 
 Lint: `ruff check . && ruff format --check .` (config in `pyproject.toml`).
+
+---
+
+## Running the full curation stack (P3+)
+
+> **Important**: `compose.base.yml` must be started first so that `curation-net` exists before the overlay stacks try to join it. The UI build also bakes `NEXT_PUBLIC_API_BASE` into the JS bundle — set it in `.env` before `compose build` if curation-api is not on `localhost`.
+
+### 1. Configure `.env`
+
+```bash
+cp .env.example .env
+# Required fields:
+#   DATA_ROOT        — local SSD path for Postgres/Milvus/MinIO volumes
+#   PG_USER / PG_PASSWORD / MINIO_USER / MINIO_PASSWORD
+#   VIDEO_DATA_ROOT  — absolute path to the source video dataset (mounted read-only)
+#   CURATOR_SESSION_ID — frame key prefix for the current ingest run
+```
+
+### 2. Start the storage stack (creates `curation-net`)
+
+```bash
+docker compose -f infra/compose.base.yml --env-file .env up -d
+```
+
+> **Fresh DB only**: `docker-entrypoint-initdb.d` (i.e. `infra/init-sql/001–004`) runs only when the Postgres data directory is empty. If you have an existing volume and need a clean slate:
+> ```bash
+> .venv/bin/python3.10 infra/cleanup_curator_db.py   # wipe PG + Milvus + MinIO
+> # then recreate the postgres volume and restart compose.base.yml
+> ```
+
+### 3. Start the curation overlay (Kafka + curation-api + embedder + UI)
+
+```bash
+docker compose -f infra/compose.curate.yml --env-file .env up -d
+# UI is available at http://localhost:3000
+# curation-api at http://localhost:8001
+```
+
+### 4. (Optional) Start the DS pipeline
+
+```bash
+docker compose -f infra/compose.pipeline.yml --env-file .env run --rm \
+  -e CUDA_VISIBLE_DEVICES=1 my-curator-ds9-vlm-dev \
+  python3 src/vllm_ds_app_kafka_publish.py <sources> [--source-clip-id <id>]
+```
 
 ---
 
@@ -236,13 +306,16 @@ Lint: `ruff check . && ruff format --check .` (config in `pyproject.toml`).
 |---|---|---|
 | DeepStream | 9.0 | GStreamer GPU pipeline |
 | Cosmos-Reason2-8B | FP8 | Scout VLM (captioner) |
+| Cosmos-Embed1-336p | — | Video embedding (768-dim) |
 | vLLM | **0.14.0** (pinned) | VLM inference engine |
 | YOLO26 | m/s/l | Closed-vocab detector |
 | YOLOE-26 seg | m/s/l | Open-vocab detector + segmentor |
 | TensorRT | 10.14 | `nvinfer` backend |
 | CUDA | 13.1 | Toolchain |
+| FastAPI | — | curation-api (port 8001) — hybrid search, clip CRUD, streaming |
+| Next.js | 16.2.6 + React 19 | Curation console UI (port 3000) |
 | Kafka | 7.6 | Result publishing |
-| Milvus (GPU_CAGRA) | 2.6.15 | Vector search — `clip_video_embed` collection (1024-dim, IP metric) |
+| Milvus (GPU_CAGRA) | 2.6.15 | Vector search — `clip_video_embed` collection (768-dim, IP metric) |
 | PostgreSQL (JSONB+GIN) | 17 | DNA store — `scenario_dna` table with GIN index |
 | MinIO | latest | Object store — `raw/`, `clips/`, `frames/`, `artifacts/` buckets |
 | *Qwen2.5-14B-AWQ* | — | *Phase 2 — Judge LLM* |

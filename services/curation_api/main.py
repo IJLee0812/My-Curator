@@ -1,4 +1,4 @@
-"""FastAPI application entry point for curation-api (P3-2).
+"""FastAPI application entry point for curation-api (P3-2 / P3-4).
 
 Startup sequence (lifespan):
   1. Connect PGRepository (asyncpg pool)
@@ -9,6 +9,9 @@ Startup sequence (lifespan):
   6. Mark app.state.ready = True  ← /health returns 200 only after this
 
 Shutdown: drain PG pool and close Milvus client.
+
+CORS (P3-4): allow the local Next.js UI origins only.  Production domains
+will be added once the UI ships behind a real hostname.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.storage.milvus import MilvusRepository
@@ -29,6 +33,7 @@ from .collections import router as collections_router
 from .embedder import CosmosEmbed1Encoder
 from .ingest import router as ingest_router
 from .search import router as search_router
+from .stats import router as stats_router
 from .video_search import router as video_search_router
 
 
@@ -58,11 +63,30 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="curation-api", version="0.1.0", lifespan=lifespan)
 
+# P3-4: allow the Next.js UI to call the API from a developer's browser.
+# Internal-only deployment, so the origin set is intentionally narrow —
+# wildcard "*" is never used.
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "CORS_ORIGINS", "http://localhost:3000,http://localhost:3001"
+    ).split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 app.include_router(search_router)
 app.include_router(ingest_router)
 app.include_router(clips_router)
 app.include_router(collections_router)
 app.include_router(video_search_router)
+app.include_router(stats_router)
 
 
 @app.get("/health")

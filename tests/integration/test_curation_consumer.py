@@ -61,8 +61,8 @@ _CURATION_META = {
 }
 
 
-def _make_scouted_msg(json_valid: bool = True) -> dict:
-    return {
+def _make_scouted_msg(json_valid: bool = True, source_clip_id: str | None = None) -> dict:
+    msg: dict = {
         "stream_id": 0,
         "timestamp": 1714000000.0,
         "segment": {"start_time": 0.0, "end_time": 5.0, "duration": 5.0},
@@ -70,6 +70,9 @@ def _make_scouted_msg(json_valid: bool = True) -> dict:
         "curation": _CURATION_META,
         "metadata": {"source": "vllm-ds-plugin", "version": "1.0", "json_valid": json_valid},
     }
+    if source_clip_id is not None:
+        msg["source_clip_id"] = source_clip_id
+    return msg
 
 
 def _make_ingest_msg(session_id: str = "ingest-session-001") -> dict:
@@ -289,6 +292,47 @@ class TestCurationConsumerMocked:
         consumer = _mock_consumer()
         await consumer.handle("curation.clip.scouted", _make_ingest_msg())
         assert consumer.processed == 1
+
+    # ── P3-4: source_clip_id thread-through ───────────────────────────────────
+
+    async def test_scouted_threads_source_clip_id(self):
+        """source_clip_id from the Kafka message reaches write_clip_with_dna (P3-4)."""
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle(
+            "curation.clip.scouted",
+            _make_scouted_msg(source_clip_id="00042"),
+        )
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["source_clip_id"] == "00042"
+
+    async def test_scouted_no_source_clip_id_passes_none(self):
+        """When the message omits source_clip_id, the consumer passes None (P3-4)."""
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", _make_scouted_msg())
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["source_clip_id"] is None
+
+    async def test_scouted_ingest_threads_source_clip_id(self):
+        """The /v1/ingest path also threads source_clip_id when present (P3-4)."""
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        msg = _make_ingest_msg()
+        msg["source_clip_id"] = "00099"
+        await consumer.handle("curation.clip.scouted", msg)
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["source_clip_id"] == "00099"
+
+    async def test_needs_review_threads_source_clip_id(self):
+        """The needs-review handler threads source_clip_id too (P3-4)."""
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        msg = _make_needs_review_msg()
+        msg["source_clip_id"] = "00007"
+        await consumer.handle("curation.clip.needs_review", msg)
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["source_clip_id"] == "00007"
 
 
 # ─── real-service integration tests ───────────────────────────────────────────

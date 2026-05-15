@@ -44,9 +44,13 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_FRAMES_BUCKET=${MINIO_FRAMES_BUCKET:-frames}
+      - VIDEO_DATA_ROOT=${VIDEO_DATA_ROOT}
+      - CURATOR_SESSION_ID=${CURATOR_SESSION_ID}
+      - PYTHONPATH=/workspace/plugin
     volumes:
       - ..:/workspace
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${VIDEO_DATA_ROOT:-/tmp}:${VIDEO_DATA_ROOT:-/tmp}:ro
     deploy:
       resources:
         reservations:

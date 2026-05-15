@@ -117,6 +117,7 @@ class VLMKafkaSignalPublisher:
         detect_hints: bool = False,
         aggregator=None,
         scout_config=None,
+        source_map: dict[int, tuple[str | None, str | None]] | None = None,
     ):
         """
         Initialize Kafka publisher.
@@ -128,6 +129,10 @@ class VLMKafkaSignalPublisher:
             detect_hints: If True, include detect_hints flag in message metadata
             aggregator: BestOfNAggregator instance (P2-4; None = legacy path)
             scout_config: ScoutConfig instance (P2-4; None = legacy path)
+            source_map: Mapping of stream_id → (source_clip_id, source_video_path).
+                Auto-derived from input URIs at app init time (P3-4+). Both
+                values are included in every published message so the consumer
+                can persist source_clip_id and construct a file:// blob_uri.
         """
         self.topic = topic
         self.dry_run = dry_run
@@ -136,6 +141,7 @@ class VLMKafkaSignalPublisher:
         self.messages_sent = 0
         self.messages_failed = 0
         self._collected_results: list = []
+        self._source_map: dict[int, tuple[str | None, str | None]] = source_map or {}
 
         # P3-1: frame capture — MinIO boto3 client + background upload executor
         self._upload_executor = concurrent.futures.ThreadPoolExecutor(
@@ -198,6 +204,16 @@ class VLMKafkaSignalPublisher:
                 print("✓ Dry-run mode enabled (console output only)")
             self.producer = None
 
+    def _source_fields(self, stream_id: int) -> dict:
+        """Return source_clip_id / source_video_path fields for a Kafka message."""
+        clip_id, video_path = self._source_map.get(stream_id, (None, None))
+        fields: dict = {}
+        if clip_id:
+            fields["source_clip_id"] = clip_id
+        if video_path:
+            fields["source_video_path"] = video_path
+        return fields
+
     def on_vlm_result(self, element, stream_id, start_time, end_time, result_text):
         """Signal handler for vlm-result signal (called from _infer_thread)."""
 
@@ -232,6 +248,7 @@ class VLMKafkaSignalPublisher:
                     "json_valid": json_valid,
                 },
                 "clip_id": str(clip_id),
+                **self._source_fields(stream_id),
             }
             self._collected_results.append(message)
             self.publish(message, stream_id)
@@ -386,6 +403,7 @@ class VLMKafkaSignalPublisher:
             },
             "clip_id": str(clip_id),
             **({"frames_blob_uri": frames_blob_uri} if frames_blob_uri else {}),
+            **self._source_fields(stream_id),
         }
 
         self._collected_results.append(message)
@@ -475,6 +493,7 @@ class VLMKafkaApp:
         nvinfer_config=None,
         osd_output_path=None,
         seg_mode=False,
+        source_clip_id_override=None,
     ):
         """
         Initialize application.
@@ -489,6 +508,8 @@ class VLMKafkaApp:
             osd_output_path: Path to MP4 output with OSD overlay (bbox + masks)
             seg_mode: True when nvinfer_config is a segmentation network
                 (network-type=3); enables ``display-mask`` on nvdsosd
+            source_clip_id_override: Override source_clip_id for single-source
+                invocations; ignored when multiple sources are provided
         """
         self.input_uris = input_uris
         self.num_sources = len(input_uris)
@@ -500,6 +521,30 @@ class VLMKafkaApp:
         self.osd_output_path = osd_output_path
         self.seg_mode = seg_mode
         self._class_mapping = load_class_mapping(os.environ.get("VLM_DETECT_LABELFILE"))
+
+        # Auto-derive source_map: stream_id → (source_clip_id, source_video_path).
+        # source_clip_id = filename stem (e.g. "66751" from "66751.mp4").
+        # source_video_path = VIDEO_DATA_ROOT-relative path stored as file:// blob_uri.
+        # When --source-clip-id is provided and exactly one source is given, the
+        # override replaces the auto-derived stem for that single stream.
+        _video_root = os.environ.get("VIDEO_DATA_ROOT", "")
+        _source_map: dict[int, tuple[str | None, str | None]] = {}
+        _single_source = len(input_uris) == 1
+        for _i, _uri in enumerate(input_uris):
+            if _uri.startswith("file://"):
+                _abs = _uri[len("file://"):]
+                _clip_id = os.path.splitext(os.path.basename(_abs))[0]
+                if source_clip_id_override and _single_source:
+                    _clip_id = source_clip_id_override
+                _rel: str | None = None
+                if _video_root:
+                    try:
+                        import pathlib as _pl
+                        _rel = str(_pl.Path(_abs).relative_to(_video_root))
+                    except ValueError:
+                        pass
+                _source_map[_i] = (_clip_id, _rel)
+        self._source_map = _source_map
 
         # P2-4: load ScoutConfig + BestOfNAggregator for curation wiring
         _scout_config = None
@@ -530,6 +575,7 @@ class VLMKafkaApp:
             detect_hints=bool(nvinfer_config),
             aggregator=_aggregator,
             scout_config=_scout_config,
+            source_map=self._source_map,
         )
 
     def bus_call(self, bus, message, loop):
@@ -1008,7 +1054,12 @@ Examples:
         "Requires --detect. Detection-only configs render bboxes; seg configs "
         "(network-type=3) additionally render instance masks.",
     )
-
+    parser.add_argument(
+        "--source-clip-id",
+        default=None,
+        help="Override source_clip_id stored in PG (single-source only; "
+        "ignored when multiple sources are provided). Defaults to filename stem.",
+    )
     args = parser.parse_args()
 
     # Initialize config singleton before GStreamer/pipeline starts
@@ -1084,16 +1135,27 @@ Examples:
     # Initialize GStreamer
     Gst.init(None)
 
-    # Convert bare file paths to file:// URIs; validate files exist
+    # Convert bare file paths / session dirs to file:// URIs; validate files exist.
+    # A directory source is treated as a session dir: all */video/*.mp4 under it
+    # are expanded so callers can pass the session root without listing files.
     input_uris = []
+    import pathlib
     for src in args.sources:
-        uri = to_uri(src)
-        if uri.startswith("file://"):
-            file_path = uri[len("file://") :]
-            if not os.path.exists(file_path):
-                print(f"Error: File not found: {file_path}")
+        if not src.startswith("rtsp://") and os.path.isdir(src):
+            found = sorted(pathlib.Path(src).glob("*/video/*.mp4"))
+            if not found:
+                print(f"Error: No */video/*.mp4 files found under session dir: {src}")
                 sys.exit(1)
-        input_uris.append(uri)
+            for mp4 in found:
+                input_uris.append(f"file://{mp4.resolve()}")
+        else:
+            uri = to_uri(src)
+            if uri.startswith("file://"):
+                file_path = uri[len("file://"):]
+                if not os.path.exists(file_path):
+                    print(f"Error: File not found: {file_path}")
+                    sys.exit(1)
+            input_uris.append(uri)
 
     # Kafka configuration
     kafka_config = {"bootstrap_servers": args.kafka_bootstrap}
@@ -1113,6 +1175,7 @@ Examples:
         nvinfer_config=nvinfer_config,
         osd_output_path=args.detect_output,
         seg_mode=seg_mode,
+        source_clip_id_override=args.source_clip_id,
     )
     app.run()
 

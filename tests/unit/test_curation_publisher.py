@@ -89,7 +89,7 @@ def _make_element(stream_id: int = 0, last_inventory=None, last_inputs=None, llm
     return element
 
 
-def _make_publisher(aggregator=None, scout_config=None):
+def _make_publisher(aggregator=None, scout_config=None, source_map=None):
     from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
 
     return VLMKafkaSignalPublisher(
@@ -98,6 +98,7 @@ def _make_publisher(aggregator=None, scout_config=None):
         dry_run=True,
         aggregator=aggregator,
         scout_config=scout_config,
+        source_map=source_map,
     )
 
 
@@ -431,3 +432,66 @@ class TestResourceRelease:
     def test_last_inventory_cleared_after_scout(self):
         ctx = self._run_curation(inventory={"car": 2})
         assert ctx.last_inventory == {}
+
+
+# ---------------------------------------------------------------------------
+# P3-4: source_map per-stream source field propagation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestSourceMapPropagation:
+    def test_no_source_map_omits_source_fields(self):
+        """Legacy path emits no source_clip_id / source_video_path when source_map absent."""
+        pub = _make_publisher()
+        _invoke(pub)
+        msg = pub._collected_results[0]
+        assert "source_clip_id" not in msg
+        assert "source_video_path" not in msg
+
+    def test_source_map_includes_source_clip_id(self):
+        """source_clip_id appears when stream_id is in source_map."""
+        pub = _make_publisher(source_map={0: ("00042", None)})
+        _invoke(pub)
+        msg = pub._collected_results[0]
+        assert msg["source_clip_id"] == "00042"
+
+    def test_source_map_includes_source_video_path(self):
+        """source_video_path appears when stream_id is in source_map with a path."""
+        pub = _make_publisher(source_map={0: ("00042", "session/00042/video/00042.mp4")})
+        _invoke(pub)
+        msg = pub._collected_results[0]
+        assert msg["source_video_path"] == "session/00042/video/00042.mp4"
+
+    def test_source_map_missing_stream_id_omits_fields(self):
+        """Fields are absent when stream_id 0 is not in source_map (mapped for stream 1 only)."""
+        pub = _make_publisher(source_map={1: ("00099", "/some/path.mp4")})
+        _invoke(pub, stream_id=0)
+        msg = pub._collected_results[0]
+        assert "source_clip_id" not in msg
+        assert "source_video_path" not in msg
+
+    def test_curation_path_includes_source_clip_id(self):
+        """Curation path also propagates source_clip_id from source_map."""
+        pub = _make_publisher(
+            aggregator=BestOfNAggregator(),
+            scout_config=_scout_config(),
+            source_map={0: ("00077", None)},
+        )
+        mock_scout = MagicMock()
+        mock_scout.sample.return_value = [_make_report(text=_VALID_DNA_COT_OUTPUT)]
+        pub._scout = mock_scout
+        _invoke(pub, element=_make_element(last_inventory={"car": 1}))
+        msg = pub._collected_results[0]
+        assert msg["source_clip_id"] == "00077"
+
+    def test_curation_path_omits_source_fields_when_no_map(self):
+        """Curation path omits source fields when source_map absent."""
+        pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
+        mock_scout = MagicMock()
+        mock_scout.sample.return_value = [_make_report(text=_VALID_DNA_COT_OUTPUT)]
+        pub._scout = mock_scout
+        _invoke(pub, element=_make_element(last_inventory={"car": 1}))
+        msg = pub._collected_results[0]
+        assert "source_clip_id" not in msg
+        assert "source_video_path" not in msg

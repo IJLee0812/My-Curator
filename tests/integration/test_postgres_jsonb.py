@@ -28,6 +28,7 @@ REPO_ROOT = pathlib.Path(__file__).parents[2]
 INIT_SQL = (REPO_ROOT / "infra" / "init-sql" / "001_schema.sql").read_text()
 INIT_SQL_002 = (REPO_ROOT / "infra" / "init-sql" / "002_curation_meta.sql").read_text()
 INIT_SQL_003 = (REPO_ROOT / "infra" / "init-sql" / "003_frames_blob_uri.sql").read_text()
+INIT_SQL_004 = (REPO_ROOT / "infra" / "init-sql" / "004_source_clip_id.sql").read_text()
 
 DOCKER_AVAILABLE = bool(shutil.which("docker"))
 
@@ -91,6 +92,10 @@ async def repo(pg_dsn: str):
     await conn.execute(INIT_SQL)
     await conn.execute(INIT_SQL_002)
     await conn.execute(INIT_SQL_003)
+    await conn.execute(INIT_SQL_004)
+    # Wipe rows that survived previous tests so list_clips / get_stats
+    # see a clean slate per function-scoped fixture.
+    await conn.execute("TRUNCATE review_queue, scenario_dna, clips, sessions CASCADE")
     await conn.close()
     r = await PGRepository.create(pg_dsn, min_size=1, max_size=2)
     yield r
@@ -252,3 +257,155 @@ async def test_dna_jsonb_roundtrip_preserves_types(repo: PGRepository):
     assert isinstance(result["confidence"]["overall"], float)
     assert isinstance(result["actor_dynamics"], list)
     assert result["planner_logic"]["causal_trigger_actor_index"] is None
+
+
+# ── P3-4: source_clip_id, JOIN, list_clips, get_stats ──────────────────────
+
+
+async def test_source_clip_id_persisted_on_insert_clip(repo: PGRepository):
+    """insert_clip stores source_clip_id when supplied (P3-4)."""
+    await repo.insert_clip(
+        clip_id=CLIP_A,
+        session_id=SESSION_ID,
+        blob_uri="s3://clips/test/clip_a.mp4",
+        start_s=0.0,
+        end_s=5.0,
+        source_clip_id="00042",
+    )
+    row = await repo.get_clip_with_blob_uri(CLIP_A)
+    assert row is not None
+    assert row["source_clip_id"] == "00042"
+
+
+async def test_source_clip_id_nullable_default(repo: PGRepository):
+    """source_clip_id defaults to NULL when not supplied (P3-4)."""
+    await repo.insert_clip(
+        clip_id=CLIP_A,
+        session_id=SESSION_ID,
+        blob_uri="s3://clips/test/clip_a.mp4",
+        start_s=0.0,
+        end_s=5.0,
+    )
+    row = await repo.get_clip_with_blob_uri(CLIP_A)
+    assert row is not None
+    assert row["source_clip_id"] is None
+
+
+async def test_filter_dna_by_ids_returns_clip_metadata(repo: PGRepository):
+    """filter_dna_by_ids JOINs clips and returns start_s/end_s/blob_uri/is_gold/source_clip_id (P3-4)."""
+    dna_b = {**_BASE_DNA, "clip_id": str(CLIP_B)}
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_B,
+        blob_uri="s3://clips/test/clip_b.mp4",
+        start_s=10.0,
+        end_s=20.0,
+        dna_version="0.1.0",
+        dna_json=dna_b,
+        scout_prompt_hash="cafebabe",
+        pipeline_version="0.1.0",
+        is_gold=True,
+        source_clip_id="00077",
+    )
+    rows = await repo.filter_dna_by_ids([CLIP_B], {}, limit=10)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["clip_id"] == CLIP_B
+    assert r["start_s"] == 10.0
+    assert r["end_s"] == 20.0
+    assert r["blob_uri"] == "s3://clips/test/clip_b.mp4"
+    assert r["is_gold"] is True
+    assert r["source_clip_id"] == "00077"
+    assert r["dna_json"]["odd"]["weather"] == "clear"
+
+
+async def test_list_clips_orders_by_created_at_desc(repo: PGRepository):
+    """list_clips returns rows ordered by clips.created_at DESC (P3-4)."""
+    dna_a = {**_BASE_DNA, "clip_id": str(CLIP_A)}
+    dna_b = {**_BASE_DNA, "clip_id": str(CLIP_B)}
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_A,
+        blob_uri="s3://clips/test/clip_a.mp4",
+        start_s=0.0,
+        end_s=5.0,
+        dna_version="0.1.0",
+        dna_json=dna_a,
+        scout_prompt_hash="deadbeef",
+        pipeline_version="0.1.0",
+    )
+    # second insert wins the DESC ordering
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_B,
+        blob_uri="s3://clips/test/clip_b.mp4",
+        start_s=5.0,
+        end_s=10.0,
+        dna_version="0.1.0",
+        dna_json=dna_b,
+        scout_prompt_hash="deadbeef",
+        pipeline_version="0.1.0",
+    )
+    rows = await repo.list_clips(limit=10)
+    assert len(rows) == 2
+    assert rows[0]["clip_id"] == CLIP_B
+    assert rows[1]["clip_id"] == CLIP_A
+
+
+async def test_list_clips_respects_limit(repo: PGRepository):
+    """list_clips honours the limit argument and caps it at 100 (P3-4)."""
+    rows = await repo.list_clips(limit=200)
+    # Capped silently rather than raising — tests the clamp upper bound.
+    assert isinstance(rows, list)
+    rows_zero = await repo.list_clips(limit=1)
+    assert isinstance(rows_zero, list)
+
+
+async def test_get_stats_empty_returns_one_pass_rate(repo: PGRepository):
+    """get_stats returns 1.0 dna_pass_rate when no review decisions exist (P3-4)."""
+    stats = await repo.get_stats()
+    assert stats["total_clips"] == 0
+    assert stats["scenario_dna_count"] == 0
+    assert stats["review"] == {
+        "pending": 0,
+        "approved": 0,
+        "rejected": 0,
+        "rejected_schema_invalid": 0,
+    }
+    assert stats["dna_pass_rate"] == 1.0
+
+
+async def test_get_stats_counts_review_states(repo: PGRepository):
+    """get_stats aggregates review_queue rows by state and computes dna_pass_rate (P3-4)."""
+    dna_a = {**_BASE_DNA, "clip_id": str(CLIP_A)}
+    dna_b = {**_BASE_DNA, "clip_id": str(CLIP_B)}
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_A,
+        blob_uri="s3://clips/test/clip_a.mp4",
+        start_s=0.0,
+        end_s=5.0,
+        dna_version="0.1.0",
+        dna_json=dna_a,
+        scout_prompt_hash="deadbeef",
+        pipeline_version="0.1.0",
+    )
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_B,
+        blob_uri="s3://clips/test/clip_b.mp4",
+        start_s=5.0,
+        end_s=10.0,
+        dna_version="0.1.0",
+        dna_json=dna_b,
+        scout_prompt_hash="deadbeef",
+        pipeline_version="0.1.0",
+    )
+    await repo.insert_review_queue(clip_id=CLIP_A, state="approved", reviewer="u1")
+    await repo.insert_review_queue(clip_id=CLIP_B, state="rejected", reason="bad")
+    stats = await repo.get_stats()
+    assert stats["total_clips"] == 2
+    assert stats["scenario_dna_count"] == 2
+    assert stats["review"]["approved"] == 1
+    assert stats["review"]["rejected"] == 1
+    assert stats["dna_pass_rate"] == pytest.approx(0.5)
