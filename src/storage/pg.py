@@ -271,17 +271,18 @@ class PGRepository:
         """Return review_queue rows joined with clip + DNA data.
 
         status filter:
-          None / "all" → all states
-          "pending"    → state = 'pending'
-          "approved"   → state = 'approved'
-          "rejected"   → state IN ('rejected', 'rejected_schema_invalid')
+          None / "all"     → all states
+          "pending"        → state = 'pending'
+          "approved"       → state = 'approved'
+          "rejected"       → state = 'rejected'
+          "schema_invalid" → state = 'rejected_schema_invalid'
         """
         capped = max(1, min(int(limit), 200))
         if status in (None, "all"):
             where = ""
             params: list[Any] = [capped]
-        elif status == "rejected":
-            where = "WHERE rq.state IN ('rejected', 'rejected_schema_invalid')"
+        elif status == "schema_invalid":
+            where = "WHERE rq.state = 'rejected_schema_invalid'"
             params = [capped]
         else:
             where = "WHERE rq.state = $1"
