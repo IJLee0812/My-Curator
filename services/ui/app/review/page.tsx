@@ -1,62 +1,83 @@
 "use client";
 
-// P3-4 status: this page intentionally still consumes MOCK_REVIEW_QUEUE.
-// The Review Queue HTTP endpoints (GET /v1/review, POST /v1/review/{id}/{approve,reject})
-// are P3-5 scope; once they land this file will swap MOCK_REVIEW_QUEUE for a
-// `getReviewQueue()` call in `lib/api.ts` and persist actions through real
-// POSTs.  Approve/Reject currently toggles local state only.
-
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle,
   CheckCircle2,
   ClipboardCheck,
   Clock,
   ExternalLink,
   Filter,
+  Loader2,
   XCircle,
 } from "lucide-react";
-import { MOCK_CLIPS, MOCK_REVIEW_QUEUE, ReviewState } from "@/lib/mock-data";
+import { getReviewQueue, reviewClip } from "@/lib/api";
+import type { ReviewQueueItem } from "@/lib/api";
 import { OddbBadges, RiskBadge } from "@/components/dna-badges";
 
-const STATE_CONFIG: Record<ReviewState, { label: string; icon: React.ElementType; color: string; dot: string }> = {
-  pending:                { label: "Pending",        icon: Clock,          color: "text-amber-400",  dot: "bg-amber-400" },
-  approved:               { label: "Approved",       icon: CheckCircle2,   color: "text-green-400",  dot: "bg-green-400" },
-  rejected:               { label: "Rejected",       icon: XCircle,        color: "text-red-400",    dot: "bg-red-400" },
-  rejected_schema_invalid:{ label: "Schema Invalid", icon: AlertCircle,    color: "text-slate-400",  dot: "bg-slate-400" },
+type Tab = "pending" | "approved" | "rejected";
+
+const TAB_CONFIG: Record<Tab, { label: string; color: string; dot: string }> = {
+  pending:  { label: "Pending",  color: "text-amber-400", dot: "bg-amber-400" },
+  approved: { label: "Approved", color: "text-green-400", dot: "bg-green-400" },
+  rejected: { label: "Rejected", color: "text-red-400",   dot: "bg-red-400" },
 };
 
-const TABS: { key: ReviewState | "all"; label: string }[] = [
-  { key: "all",                    label: "All" },
-  { key: "pending",                label: "Pending" },
-  { key: "approved",               label: "Approved" },
-  { key: "rejected",               label: "Rejected" },
-  { key: "rejected_schema_invalid",label: "Schema Invalid" },
-];
+function isRejected(state: string) {
+  return state === "rejected" || state === "rejected_schema_invalid";
+}
+
+function tabMatches(state: string, tab: Tab) {
+  return tab === "rejected" ? isRejected(state) : state === tab;
+}
 
 export default function ReviewQueuePage() {
-  const [tab, setTab] = useState<ReviewState | "all">("all");
-  const [localStates, setLocalStates] = useState<Record<number, ReviewState>>({});
+  const [tab, setTab] = useState<Tab>("pending");
+  const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [acting, setActing] = useState<Set<string>>(new Set());
 
-  const getState = (item: (typeof MOCK_REVIEW_QUEUE)[0]): ReviewState =>
-    localStates[item.queue_id] ?? item.state;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getReviewQueue(undefined, 200);
+      setItems(res.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load review queue");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const filtered = MOCK_REVIEW_QUEUE.filter((item) =>
-    tab === "all" ? true : getState(item) === tab
-  );
+  useEffect(() => { load(); }, [load]);
 
-  const counts = Object.fromEntries(
-    (["all", "pending", "approved", "rejected", "rejected_schema_invalid"] as const).map((k) => [
-      k,
-      k === "all"
-        ? MOCK_REVIEW_QUEUE.length
-        : MOCK_REVIEW_QUEUE.filter((i) => getState(i) === k).length,
-    ])
-  );
+  const act = async (clipId: string, action: "approve" | "reject") => {
+    setActing((s) => new Set(s).add(clipId));
+    try {
+      const res = await reviewClip(clipId, action);
+      setItems((prev) =>
+        prev.map((i) => (i.clip_id === clipId ? { ...i, state: res.state } : i))
+      );
+    } catch (e) {
+      console.error("review action failed", e);
+    } finally {
+      setActing((s) => {
+        const n = new Set(s);
+        n.delete(clipId);
+        return n;
+      });
+    }
+  };
 
-  const approve = (queueId: number) => setLocalStates((p) => ({ ...p, [queueId]: "approved" }));
-  const reject  = (queueId: number) => setLocalStates((p) => ({ ...p, [queueId]: "rejected" }));
+  const counts: Record<Tab, number> = {
+    pending:  items.filter((i) => i.state === "pending").length,
+    approved: items.filter((i) => i.state === "approved").length,
+    rejected: items.filter((i) => isRejected(i.state)).length,
+  };
+
+  const visible = items.filter((i) => tabMatches(i.state, tab));
 
   return (
     <div className="p-6 space-y-5">
@@ -68,7 +89,7 @@ export default function ReviewQueuePage() {
             Review Queue
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Verify-by-Exception curation workflow · {MOCK_REVIEW_QUEUE.length} items
+            Verify-by-Exception curation workflow · {items.length} items
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -81,7 +102,7 @@ export default function ReviewQueuePage() {
 
       {/* tabs */}
       <div className="flex gap-1 border-b border-[#1e3a5f]">
-        {TABS.map(({ key, label }) => (
+        {(["pending", "approved", "rejected"] as Tab[]).map((key) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -91,7 +112,7 @@ export default function ReviewQueuePage() {
                 : "border-transparent text-slate-500 hover:text-slate-300"
             }`}
           >
-            {label}
+            {TAB_CONFIG[key].label}
             <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
               tab === key ? "bg-cyan-500/20 text-cyan-400" : "bg-[#1e3a5f] text-slate-500"
             }`}>
@@ -101,133 +122,142 @@ export default function ReviewQueuePage() {
         ))}
       </div>
 
-      {/* queue items */}
-      <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <div className="card p-12 text-center text-slate-600">
-            <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p className="text-sm">No items in this category</p>
-          </div>
-        ) : (
-          filtered.map((item) => {
-            const clip = MOCK_CLIPS.find((c) => c.clip_id === item.clip_id);
-            const state = getState(item);
-            const cfg = STATE_CONFIG[state];
-            const Icon = cfg.icon;
-            const isPending = state === "pending";
+      {/* body */}
+      {loading ? (
+        <div className="card p-12 text-center text-slate-500">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+          <p className="text-sm">Loading review queue…</p>
+        </div>
+      ) : error ? (
+        <div className="card p-6 text-center text-red-400 border-red-500/40">{error}</div>
+      ) : (
+        <div className="space-y-2">
+          {visible.length === 0 ? (
+            <div className="card p-12 text-center text-slate-600">
+              <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No items in this category</p>
+            </div>
+          ) : (
+            visible.map((item) => {
+              const cfg = TAB_CONFIG[isRejected(item.state) ? "rejected" : (item.state as Tab)] ?? TAB_CONFIG.pending;
+              const isPending = item.state === "pending";
+              const isActing = acting.has(item.clip_id);
+              const risk = item.dna_json?.planner_logic?.risk_level ?? "nominal";
 
-            return (
-              <div key={item.queue_id} className="card p-4 flex gap-4 items-start">
-                {/* queue id + state */}
-                <div className="shrink-0 flex flex-col items-center gap-2 w-20">
-                  <div className="text-xs font-mono text-slate-600">#{item.queue_id}</div>
-                  <div className={`flex flex-col items-center gap-1 text-xs ${cfg.color}`}>
-                    <div className={`w-2 h-2 rounded-full ${cfg.dot} ${state === "pending" ? "animate-pulse" : ""}`} />
-                    <span className="text-center leading-tight">{cfg.label}</span>
-                  </div>
-                </div>
-
-                {/* clip info */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-xs font-mono text-slate-300 truncate">{item.clip_id}</div>
-                      {clip && (
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {clip.video} · {clip.start_s.toFixed(1)}–{clip.end_s.toFixed(1)}s
-                        </div>
+              return (
+                <div key={item.queue_id} className="card p-4 flex gap-4 items-start">
+                  {/* queue id + state */}
+                  <div className="shrink-0 flex flex-col items-center gap-2 w-20">
+                    <div className="text-xs font-mono text-slate-600">#{item.queue_id}</div>
+                    <div className={`flex flex-col items-center gap-1 text-xs ${cfg.color}`}>
+                      <div className={`w-2 h-2 rounded-full ${cfg.dot} ${isPending ? "animate-pulse" : ""}`} />
+                      <span className="text-center leading-tight">{cfg.label}</span>
+                      {item.state === "rejected_schema_invalid" && (
+                        <span className="text-[10px] text-slate-500 text-center leading-tight">schema</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {clip && <RiskBadge level={clip.dna.planner_logic.risk_level} />}
-                      <Link
-                        href={`/clips/${item.clip_id}`}
-                        className="text-slate-500 hover:text-cyan-400 transition-colors"
-                        title="View detail"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Link>
+                  </div>
+
+                  {/* clip info */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-mono text-slate-300 truncate">{item.clip_id}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {item.start_s.toFixed(1)}–{item.end_s.toFixed(1)}s
+                          {item.is_gold && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-[10px]">
+                              gold
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <RiskBadge level={risk} />
+                        <Link
+                          href={`/clips/${item.clip_id}`}
+                          className="text-slate-500 hover:text-cyan-400 transition-colors"
+                          title="View detail"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+
+                    <OddbBadges odd={item.dna_json?.odd} />
+
+                    {item.reason && (
+                      <div className="text-xs bg-[#0a1120] border border-[#1e3a5f] rounded px-2 py-1.5 text-slate-400">
+                        <span className="text-slate-600">reason: </span>{item.reason}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 text-xs text-slate-600">
+                      <span>
+                        Created:{" "}
+                        {new Date(item.created_at).toLocaleString("ko-KR", {
+                          timeZone: "Asia/Seoul",
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </span>
+                      {item.reviewed_at && (
+                        <span>
+                          · Reviewed:{" "}
+                          {new Date(item.reviewed_at).toLocaleString("ko-KR", {
+                            timeZone: "Asia/Seoul",
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {clip && <OddbBadges odd={clip.dna.odd} />}
-
-                  {/* reason */}
-                  {item.reason && (
-                    <div className="text-xs bg-[#0a1120] border border-[#1e3a5f] rounded px-2 py-1.5 text-slate-400">
-                      <span className="text-slate-600">reason: </span>{item.reason}
+                  {/* actions */}
+                  {isPending ? (
+                    <div className="shrink-0 flex flex-col gap-2">
+                      <button
+                        disabled={isActing}
+                        onClick={() => act(item.clip_id, "approve")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors disabled:opacity-40"
+                      >
+                        {isActing ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        Approve
+                      </button>
+                      <button
+                        disabled={isActing}
+                        onClick={() => act(item.clip_id, "reject")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors disabled:opacity-40"
+                      >
+                        {isActing ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <XCircle className="w-3.5 h-3.5" />
+                        )}
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={`shrink-0 flex items-center gap-1.5 text-xs ${cfg.color} px-3 py-1.5`}>
+                      {item.state === "approved" ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      <span className="font-medium">{cfg.label}</span>
                     </div>
                   )}
-
-                  {/* meta row */}
-                  <div className="flex items-center gap-3 text-xs text-slate-600">
-                    <span>Created: {new Date(item.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" })}</span>
-                    {item.reviewer && <span>· Reviewer: {item.reviewer}</span>}
-                    {item.reviewed_at && (
-                      <span>
-                        · Reviewed: {new Date(item.reviewed_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" })}
-                      </span>
-                    )}
-                  </div>
                 </div>
-
-                {/* actions */}
-                {isPending && (
-                  <div className="shrink-0 flex flex-col gap-2">
-                    <button
-                      onClick={() => approve(item.queue_id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-500/30 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      onClick={() => reject(item.queue_id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors"
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
-                )}
-                {!isPending && (
-                  <div className={`shrink-0 flex items-center gap-1.5 text-xs ${cfg.color} px-3 py-1.5`}>
-                    <Icon className="w-4 h-4" />
-                    <span className="font-medium">{cfg.label}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* legend */}
-      <div className="card p-4">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-          Workflow — Verify-by-Exception (P3-5)
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {(Object.entries(STATE_CONFIG) as [ReviewState, typeof STATE_CONFIG[ReviewState]][]).map(([state, cfg]) => {
-            const Icon = cfg.icon;
-            return (
-              <div key={state} className="bg-[#0a1120] rounded-lg p-3 border border-[#1e3a5f]">
-                <div className={`flex items-center gap-2 mb-1 ${cfg.color}`}>
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">{cfg.label}</span>
-                </div>
-                <div className="text-[11px] text-slate-600">
-                  {state === "pending" && "Awaiting human review"}
-                  {state === "approved" && "DNA accepted, clip curated"}
-                  {state === "rejected" && "DNA/clip quality insufficient"}
-                  {state === "rejected_schema_invalid" && "Failed schema validation"}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
-        <p className="text-xs text-slate-600 mt-3">
-          Approve/Reject actions are demo-only — real P3-5 will persist to <span className="font-mono">review_queue</span> via <span className="font-mono">POST /v1/review</span>
-        </p>
-      </div>
+      )}
     </div>
   );
 }

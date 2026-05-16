@@ -10,7 +10,54 @@
  * is safe to import from both Server and Client Components.
  */
 
-import type { RiskLevel, ScenarioDNA } from "./mock-data";
+// ── Scenario DNA types ───────────────────────────────────────────────────────
+
+export type RiskLevel = "nominal" | "elevated" | "critical";
+export type ReviewState = "pending" | "approved" | "rejected" | "rejected_schema_invalid";
+
+export interface ActorDynamic {
+  actor_class: string;
+  state: string;
+  distance_bucket: "near" | "mid" | "far";
+  confidence: number;
+  grounded_by_yolo26: boolean;
+}
+
+export interface ScenarioDNA {
+  dna_version: string;
+  clip_id: string;
+  timestamp_range: { start_s: number; end_s: number };
+  odd: {
+    weather: string;
+    lighting: string;
+    sensor_fidelity: string[];
+  };
+  topology: {
+    road_type: string;
+    lane_event: string;
+    intersection_type: string;
+  };
+  actor_dynamics: ActorDynamic[];
+  planner_logic: {
+    ego_maneuver: string;
+    risk_level: RiskLevel;
+    causal_trigger_actor_index: number | null;
+  };
+  confidence: {
+    overall: number;
+    scout_agreement: number;
+    hallucination_flags: string[];
+  };
+  provenance: {
+    scout_models: string[];
+    scout_prompt_hash: string;
+    judge_model: null;
+    judge_prompt_hash: null;
+    pipeline_version: string;
+    is_synthetic: boolean;
+    reference_standards: string[];
+  };
+}
 
 const BROWSER_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
 const INTERNAL_BASE = process.env.INTERNAL_API_BASE ?? BROWSER_BASE;
@@ -49,6 +96,22 @@ async function postJSON<T>(path: string, payload: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function patchJSON<T>(path: string, payload: unknown): Promise<T> {
+  const res = await fetch(`${apiBase()}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const err = new Error(`PATCH ${path} ${res.status} ${body}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return (await res.json()) as T;
+}
+
 // ── Response shapes ─────────────────────────────────────────────────────────
 
 export interface ClipResult {
@@ -81,6 +144,7 @@ export interface ClipDetail {
   dna_version: string | null;
   dna_json: ScenarioDNA | null;
   presigned_url: string | null;
+  review_status: string;
 }
 
 export interface ClipSummary {
@@ -130,6 +194,26 @@ export interface StatsResponse {
 
 export interface HealthResponse {
   status: "ok" | "loading";
+}
+
+export interface ReviewQueueItem {
+  queue_id: number;
+  clip_id: string;
+  state: string;
+  reviewed_at: string | null;
+  reason: string | null;
+  created_at: string;
+  blob_uri: string;
+  frames_blob_uri: string | null;
+  start_s: number;
+  end_s: number;
+  is_gold: boolean;
+  dna_json: ScenarioDNA | null;
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewQueueItem[];
+  total: number;
 }
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
@@ -193,6 +277,22 @@ export async function searchByVideo(
   }
 }
 
+export async function reviewClip(
+  clipId: string,
+  action: "approve" | "reject",
+): Promise<{ clip_id: string; state: string }> {
+  return patchJSON<{ clip_id: string; state: string }>(`/v1/clips/${clipId}/review`, { action });
+}
+
+export async function getReviewQueue(
+  status?: string,
+  limit = 50,
+): Promise<ReviewQueueResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  return getJSON<ReviewQueueResponse>(`/v1/review?${params}`);
+}
+
 // ── Filter helpers ──────────────────────────────────────────────────────────
 
 /** Keys understood by the backend `SearchFilters` schema. */
@@ -215,5 +315,3 @@ export function filtersFromSets(sets: Record<FilterKey, Set<string>>): Record<st
   return out;
 }
 
-// Re-exports kept for callers that already import the shared types.
-export type { RiskLevel, ScenarioDNA };

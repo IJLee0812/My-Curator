@@ -84,6 +84,7 @@ export default async function ClipDetailPage({ params }: PageProps) {
           <ApproveRejectButtons
             clipId={clip.clip_id}
             dnaVersion={clip.dna_version}
+            initialStatus={clip.review_status}
           />
         </div>
 

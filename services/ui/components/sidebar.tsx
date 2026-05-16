@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 
 import { getHealth } from "@/lib/api";
-import { RECALL_AT_5 } from "@/lib/mock-data";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -107,7 +106,7 @@ export default function Sidebar() {
           <span className={`text-xs ${textClass}`}>{detail}</span>
         </div>
         <div className="text-[10px] text-slate-600 font-mono">
-          DNA v0.1 · Recall@5 {RECALL_AT_5.toFixed(3)}
+          DNA v0.1
         </div>
       </div>
     </aside>

@@ -182,7 +182,7 @@ services:
       context: ../services/ui
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-http://localhost:8001}"
+        NEXT_PUBLIC_API_BASE: ""
     container_name: my-curator-ui
     restart: unless-stopped
     depends_on:
@@ -191,7 +191,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_BASE: "${NEXT_PUBLIC_API_BASE:-http://localhost:8001}"
+      NEXT_PUBLIC_API_BASE: ""
       INTERNAL_API_BASE: "http://curation-api:8001"
       NODE_ENV: "production"
     networks:

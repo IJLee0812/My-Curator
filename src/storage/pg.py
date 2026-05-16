@@ -241,12 +241,85 @@ class PGRepository:
             """
             INSERT INTO review_queue (clip_id, state, reason, reviewer)
             VALUES ($1, $2, $3, $4)
+            ON CONFLICT (clip_id) DO NOTHING
             """,
             clip_id,
             state,
             reason,
             reviewer,
         )
+
+    async def set_review_status(self, clip_id: UUID, state: str) -> None:
+        """Upsert review state for a clip (overwrite-allowed, P3-5)."""
+        await self._pool.execute(
+            """
+            INSERT INTO review_queue (clip_id, state, reviewed_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (clip_id) DO UPDATE SET
+                state       = EXCLUDED.state,
+                reviewed_at = NOW()
+            """,
+            clip_id,
+            state,
+        )
+
+    async def get_review_queue(
+        self,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return review_queue rows joined with clip + DNA data.
+
+        status filter:
+          None / "all" → all states
+          "pending"    → state = 'pending'
+          "approved"   → state = 'approved'
+          "rejected"   → state IN ('rejected', 'rejected_schema_invalid')
+        """
+        capped = max(1, min(int(limit), 200))
+        if status in (None, "all"):
+            where = ""
+            params: list[Any] = [capped]
+        elif status == "rejected":
+            where = "WHERE rq.state IN ('rejected', 'rejected_schema_invalid')"
+            params = [capped]
+        else:
+            where = "WHERE rq.state = $1"
+            params = [status, capped]
+
+        limit_param = f"${len(params)}"
+        rows = await self._pool.fetch(
+            f"""
+            SELECT rq.queue_id, rq.clip_id, rq.state, rq.reviewed_at,
+                   rq.reason, rq.created_at,
+                   c.blob_uri, c.frames_blob_uri, c.start_s, c.end_s, c.is_gold,
+                   sd.dna_json
+            FROM review_queue rq
+            JOIN clips c ON c.clip_id = rq.clip_id
+            LEFT JOIN scenario_dna sd ON sd.clip_id = rq.clip_id
+            {where}
+            ORDER BY rq.created_at DESC
+            LIMIT {limit_param}
+            """,
+            *params,
+        )
+        return [
+            {
+                "queue_id": r["queue_id"],
+                "clip_id": r["clip_id"],
+                "state": r["state"],
+                "reviewed_at": r["reviewed_at"],
+                "reason": r["reason"],
+                "created_at": r["created_at"],
+                "blob_uri": r["blob_uri"],
+                "frames_blob_uri": r["frames_blob_uri"],
+                "start_s": r["start_s"],
+                "end_s": r["end_s"],
+                "is_gold": r["is_gold"],
+                "dna_json": dict(r["dna_json"]) if r["dna_json"] else None,
+            }
+            for r in rows
+        ]
 
     # ── reads ──────────────────────────────────────────────────────────────
 
@@ -376,10 +449,17 @@ class PGRepository:
             SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
                    c.start_s, c.end_s, c.is_gold, c.source_clip_id,
                    sd.dna_version, sd.dna_json,
-                   s.dataset, s.subset, s.dataset_version
+                   s.dataset, s.subset, s.dataset_version,
+                   rq.state AS review_status
             FROM clips c
             LEFT JOIN scenario_dna sd ON c.clip_id = sd.clip_id
             LEFT JOIN sessions s ON s.session_id = c.session_id
+            LEFT JOIN LATERAL (
+                SELECT state FROM review_queue
+                WHERE clip_id = c.clip_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) rq ON true
             WHERE c.clip_id = $1
             """,
             clip_id,
@@ -400,6 +480,7 @@ class PGRepository:
             "dataset": row["dataset"],
             "subset": row["subset"],
             "dataset_version": row["dataset_version"],
+            "review_status": row["review_status"],
         }
 
     async def list_clips(self, limit: int = 20) -> list[dict[str, Any]]:

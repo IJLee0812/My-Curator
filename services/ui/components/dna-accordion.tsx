@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import type { ScenarioDNA } from "@/lib/mock-data";
+import type { ScenarioDNA } from "@/lib/api";
 import {
   ActorBadges,
   ConfidenceBar,

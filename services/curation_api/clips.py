@@ -41,6 +41,7 @@ class ClipDetail(BaseModel):
     dna_version: str | None
     dna_json: dict[str, Any] | None
     presigned_url: str | None
+    review_status: str
 
 
 class ClipSummary(BaseModel):
@@ -104,6 +105,7 @@ async def get_clip(
         dna_version=row.get("dna_version"),
         dna_json=row.get("dna_json"),
         presigned_url=url,
+        review_status=row.get("review_status") or "pending",
     )
 
 

@@ -234,7 +234,6 @@ class CurationConsumer:
             self.errors += 1
             return
 
-        # Extra review_queue row for schema-invalid clips
         if not data.get("metadata", {}).get("json_valid", True):
             try:
                 await self._pg.insert_review_queue(
@@ -244,6 +243,11 @@ class CurationConsumer:
                 )
             except Exception:
                 log.warning("review_queue INSERT failed for schema-invalid clip %s", clip_id)
+        else:
+            try:
+                await self._pg.insert_review_queue(clip_id=clip_id, state="pending")
+            except Exception:
+                log.warning("review_queue INSERT failed for scouted clip %s", clip_id)
 
         log.debug(
             "Scouted clip %s written (stream %s, %.2f–%.2f s)", clip_id, stream_id, start_s, end_s
@@ -297,6 +301,11 @@ class CurationConsumer:
 
         # Milvus embedding is written by the /v1/ingest handler before publishing
         # this message; writing here would race-overwrite it with a stale vector.
+        try:
+            await self._pg.insert_review_queue(clip_id=clip_id, state="pending")
+        except Exception:
+            log.warning("review_queue INSERT failed for ingest clip %s", clip_id)
+
         log.debug(
             "Ingest clip %s written (session %s, %.2f–%.2f s)", clip_id, session_id, start_s, end_s
         )

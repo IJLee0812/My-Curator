@@ -29,6 +29,7 @@ INIT_SQL = (REPO_ROOT / "infra" / "init-sql" / "001_schema.sql").read_text()
 INIT_SQL_002 = (REPO_ROOT / "infra" / "init-sql" / "002_curation_meta.sql").read_text()
 INIT_SQL_003 = (REPO_ROOT / "infra" / "init-sql" / "003_frames_blob_uri.sql").read_text()
 INIT_SQL_004 = (REPO_ROOT / "infra" / "init-sql" / "004_source_clip_id.sql").read_text()
+INIT_SQL_005 = (REPO_ROOT / "infra" / "init-sql" / "005_review_audit.sql").read_text()
 
 DOCKER_AVAILABLE = bool(shutil.which("docker"))
 
@@ -93,6 +94,7 @@ async def repo(pg_dsn: str):
     await conn.execute(INIT_SQL_002)
     await conn.execute(INIT_SQL_003)
     await conn.execute(INIT_SQL_004)
+    await conn.execute(INIT_SQL_005)
     # Wipe rows that survived previous tests so list_clips / get_stats
     # see a clean slate per function-scoped fixture.
     await conn.execute("TRUNCATE review_queue, scenario_dna, clips, sessions CASCADE")
@@ -409,3 +411,28 @@ async def test_get_stats_counts_review_states(repo: PGRepository):
     assert stats["review"]["approved"] == 1
     assert stats["review"]["rejected"] == 1
     assert stats["dna_pass_rate"] == pytest.approx(0.5)
+
+
+async def test_get_clip_with_no_review_queue_row_returns_null_status(repo: PGRepository):
+    """DAL returns review_status=None for clips with no review_queue row.
+
+    The HTTP layer (clips.py:108) applies `or "pending"` so the API always
+    returns a string, but the underlying DAL contract is explicit: NULL when
+    no row exists in review_queue.
+    """
+    await repo.write_clip_with_dna(
+        session_id=SESSION_ID,
+        clip_id=CLIP_A,
+        blob_uri="s3://clips/test/clip_a.mp4",
+        start_s=0.0,
+        end_s=5.0,
+        dna_version="0.1.0",
+        dna_json=_BASE_DNA,
+        scout_prompt_hash="deadbeef",
+        pipeline_version="0.1.0",
+    )
+    # Intentionally no insert_review_queue call — simulates a legacy clip
+    # that predates the P3-5 review_queue backfill.
+    result = await repo.get_clip_with_blob_uri(CLIP_A)
+    assert result is not None
+    assert result["review_status"] is None
