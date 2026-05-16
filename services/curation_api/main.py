@@ -32,6 +32,7 @@ from .clips import router as clips_router
 from .collections import router as collections_router
 from .embedder import CosmosEmbed1Encoder
 from .ingest import router as ingest_router
+from .review import router as review_router
 from .search import router as search_router
 from .stats import router as stats_router
 from .video_search import router as video_search_router
@@ -77,7 +78,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -87,6 +88,7 @@ app.include_router(clips_router)
 app.include_router(collections_router)
 app.include_router(video_search_router)
 app.include_router(stats_router)
+app.include_router(review_router)
 
 
 @app.get("/health")

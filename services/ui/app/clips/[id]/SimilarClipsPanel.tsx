@@ -11,7 +11,7 @@ import {
   searchByVideo,
   searchClips,
 } from "@/lib/api";
-import type { ScenarioDNA } from "@/lib/mock-data";
+import type { ScenarioDNA } from "@/lib/api";
 
 const LIMIT = 4;
 

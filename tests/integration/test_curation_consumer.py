@@ -213,11 +213,12 @@ class TestCurationConsumerMocked:
         kwargs = pg.insert_review_queue.call_args.kwargs
         assert kwargs["state"] == "rejected_schema_invalid"
 
-    async def test_scouted_json_valid_no_review_queue(self):
+    async def test_scouted_json_valid_inserts_pending(self):
         pg = AsyncMock()
         consumer = _mock_consumer(pg=pg)
         await consumer.handle("curation.clip.scouted", _make_scouted_msg(json_valid=True))
-        pg.insert_review_queue.assert_not_awaited()
+        pg.insert_review_queue.assert_awaited_once()
+        assert pg.insert_review_queue.call_args.kwargs["state"] == "pending"
 
     async def test_needs_review_calls_write_clip_with_dna(self):
         pg = AsyncMock()

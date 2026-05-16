@@ -1,4 +1,4 @@
-import { ScenarioDNA, RiskLevel } from "@/lib/mock-data";
+import type { ScenarioDNA, RiskLevel } from "@/lib/api";
 
 const WEATHER_ICONS: Record<string, string> = {
   clear: "☀️", overcast: "☁️", light_rain: "🌦️", heavy_rain: "🌧️",

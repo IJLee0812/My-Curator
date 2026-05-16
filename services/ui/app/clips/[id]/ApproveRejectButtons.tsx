@@ -1,67 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { reviewClip } from "@/lib/api";
 
-type ReviewState = "approve" | "reject" | "flag" | null;
+type ActiveState = "approved" | "rejected" | null;
 
-function ActionButton({
-  label,
-  variant,
-  onClick,
-  active,
-}: {
-  label: string;
-  variant: "approve" | "reject" | "flag";
-  onClick: () => void;
-  active: boolean;
-}) {
-  const styles = {
-    approve: active
-      ? "bg-green-500 text-gray-950 border-green-500"
-      : "border-green-500/30 text-green-400 hover:bg-green-500/10",
-    reject: active
-      ? "bg-red-500 text-gray-950 border-red-500"
-      : "border-red-500/30 text-red-400 hover:bg-red-500/10",
-    flag: active
-      ? "bg-amber-500 text-gray-950 border-amber-500"
-      : "border-amber-500/30 text-amber-400 hover:bg-amber-500/10",
-  };
-  const icons = {
-    approve: <CheckCircle2 className="w-4 h-4" />,
-    reject: <XCircle className="w-4 h-4" />,
-    flag: <AlertCircle className="w-4 h-4" />,
-  };
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${styles[variant]}`}
-    >
-      {icons[variant]}
-      {label}
-    </button>
-  );
+function mapInitial(s: string): ActiveState {
+  if (s === "approved") return "approved";
+  if (s === "rejected" || s === "rejected_schema_invalid") return "rejected";
+  return null;
 }
 
-/**
- * Local-state-only Approve / Reject / Flag controls (P3-4).
- *
- * Real persistence (POST /v1/review/{id}/approve, etc.) ships with P3-5.
- * Until then this component just toggles a UI flag so curators can preview
- * the interaction.
- */
 export default function ApproveRejectButtons({
   clipId,
   dnaVersion,
+  initialStatus,
 }: {
   clipId: string;
   dnaVersion: string | null;
+  initialStatus: string;
 }) {
-  const [state, setState] = useState<ReviewState>(null);
+  const [status, setStatus] = useState<ActiveState>(mapInitial(initialStatus));
+  const [loading, setLoading] = useState<"approve" | "reject" | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const toggle = (next: NonNullable<ReviewState>) =>
-    setState((prev) => (prev === next ? null : next));
+  const act = async (action: "approve" | "reject") => {
+    if (loading) return;
+    setLoading(action);
+    try {
+      const res = await reviewClip(clipId, action);
+      setStatus(res.state === "approved" ? "approved" : "rejected");
+    } catch (e) {
+      console.error("review action failed", e);
+    } finally {
+      setLoading(null);
+    }
+  };
 
   const copyId = async () => {
     try {
@@ -86,35 +61,46 @@ export default function ApproveRejectButtons({
         </button>
       </div>
       <div className="flex gap-2 flex-wrap">
-        <ActionButton
-          label="Approve"
-          variant="approve"
-          active={state === "approve"}
-          onClick={() => toggle("approve")}
-        />
-        <ActionButton
-          label="Reject"
-          variant="reject"
-          active={state === "reject"}
-          onClick={() => toggle("reject")}
-        />
-        <ActionButton
-          label="Flag"
-          variant="flag"
-          active={state === "flag"}
-          onClick={() => toggle("flag")}
-        />
+        <button
+          disabled={!!loading}
+          onClick={() => act("approve")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
+            status === "approved"
+              ? "bg-green-500 text-gray-950 border-green-500"
+              : "border-green-500/30 text-green-400 hover:bg-green-500/10"
+          }`}
+        >
+          {loading === "approve" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4" />
+          )}
+          Approve
+        </button>
+        <button
+          disabled={!!loading}
+          onClick={() => act("reject")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
+            status === "rejected"
+              ? "bg-red-500 text-gray-950 border-red-500"
+              : "border-red-500/30 text-red-400 hover:bg-red-500/10"
+          }`}
+        >
+          {loading === "reject" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <XCircle className="w-4 h-4" />
+          )}
+          Reject
+        </button>
       </div>
-      {state && (
+      {status && (
         <div className="text-xs text-slate-400 bg-[#0a1120] rounded-lg p-2 border border-[#1e3a5f]">
-          {state === "approve" && "✓ Clip approved — local preview only (P3-5 will persist)."}
-          {state === "reject" && "✗ Clip rejected — local preview only (P3-5 will persist)."}
-          {state === "flag" && "⚑ Flagged for further review — local preview only (P3-5 will persist)."}
+          {status === "approved" && "✓ Clip approved — persisted to review_queue."}
+          {status === "rejected" && "✗ Clip rejected — persisted to review_queue."}
         </div>
       )}
-      <div className="text-xs text-slate-600">
-        DNA v{dnaVersion ?? "—"} · Endpoints land in P3-5
-      </div>
+      <div className="text-xs text-slate-600">DNA v{dnaVersion ?? "—"}</div>
     </div>
   );
 }

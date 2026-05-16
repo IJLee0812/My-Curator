@@ -8,7 +8,6 @@ import {
   Database,
   Film,
   Search,
-  TrendingUp,
 } from "lucide-react";
 
 import {
@@ -20,7 +19,6 @@ import {
 import type { ClipSummary, CollectionInfo, StatsResponse } from "@/lib/api";
 import { OddbBadges, RiskBadge } from "@/components/dna-badges";
 import { ClipThumbnail } from "@/components/clip-thumbnail";
-import { RECALL_AT_5 } from "@/lib/mock-data";
 
 function StatCard({
   label,
@@ -159,7 +157,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           label="Total Clips"
           value={totalClips}
@@ -179,13 +177,6 @@ export default async function DashboardPage() {
           sub="approved / decided"
           icon={CheckCircle2}
           accent="bg-green-500/15 text-green-400"
-        />
-        <StatCard
-          label="Recall@5"
-          value={`${(RECALL_AT_5 * 100).toFixed(1)}%`}
-          sub="hybrid search · gold set"
-          icon={TrendingUp}
-          accent="bg-cyan-500/15 text-cyan-400"
         />
       </div>
 
