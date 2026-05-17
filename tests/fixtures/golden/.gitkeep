@@ -1,0 +1,3 @@
+# Golden fixtures captured during R-0..R-7 refactor.
+# - publisher_last_inputs.json   (GT-1 real-DS capture; pending — see plan §4 R-0)
+# - seeded_text.txt              (GT-S2 seeded snapshot; pending)

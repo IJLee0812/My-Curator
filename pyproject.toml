@@ -1,10 +1,18 @@
 [project]
 name = "deepstream-vlm"
-version = "0.1.0"
+version = "0.4.0"
 description = "DeepStream 9.0 + Cosmos-Reason2-8B FP8 VLM pipeline with YOLO26 / YOLOE detection hints"
 requires-python = ">=3.10"
 # Runtime deps managed by Dockerfile + requirements.txt (not here,
 # because vllm/torch require CUDA which is unavailable on host).
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["my_curator*"]
+namespaces = false
 
 [project.optional-dependencies]
 test = [
