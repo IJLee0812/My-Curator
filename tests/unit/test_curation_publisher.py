@@ -177,7 +177,7 @@ class TestScoutLazyInit:
     def test_scout_created_on_first_call(self):
         pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
         best = _make_report()
-        with patch("src.scouts.cosmos_reason.CosmosReasonScout") as MockScout:
+        with patch("my_curator.adapters.scout.cosmos_reason.CosmosReasonScout") as MockScout:
             mock_instance = MagicMock()
             mock_instance.sample.return_value = [best]
             MockScout.return_value = mock_instance
@@ -187,7 +187,7 @@ class TestScoutLazyInit:
     def test_scout_not_recreated_on_subsequent_calls(self):
         pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
         best = _make_report()
-        with patch("src.scouts.cosmos_reason.CosmosReasonScout") as MockScout:
+        with patch("my_curator.adapters.scout.cosmos_reason.CosmosReasonScout") as MockScout:
             mock_instance = MagicMock()
             mock_instance.sample.return_value = [best]
             MockScout.return_value = mock_instance
