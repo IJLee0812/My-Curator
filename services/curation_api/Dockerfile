@@ -31,12 +31,19 @@ RUN pip3 install --no-cache-dir \
     "einops>=0.7.0" \
     "jsonschema>=4.0.0"
 
-COPY services/ ./services/
-COPY src/ ./src/
+# R-6 single-COPY: only the my_curator/ package + schemas + prompts.
+# pyproject.toml comes along so ``pip install -e .`` finds the package
+# discovery rules ([tool.setuptools.packages.find] include = ["my_curator*"]).
+# Old src/ + services/ source trees are intentionally NOT copied — the
+# shims at those paths are not needed inside this container after R-6.
+COPY pyproject.toml ./
+COPY my_curator/ ./my_curator/
 COPY schemas/ ./schemas/
 COPY prompts/ ./prompts/
 
+RUN pip3 install --no-cache-dir -e .
+
 EXPOSE 8001
 
-CMD ["python3", "-m", "uvicorn", "services.curation_api.main:app", \
+CMD ["python3", "-m", "uvicorn", "my_curator.interfaces.http.curation_api.app:app", \
      "--host", "0.0.0.0", "--port", "8001"]

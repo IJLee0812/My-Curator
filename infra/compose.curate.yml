@@ -158,7 +158,7 @@ services:
     command:
       - "python3"
       - "-m"
-      - "services.embedder.worker"
+      - "my_curator.cli.run_embedder"
       - "--timeout"
       - "0"
     deploy:
@@ -226,7 +226,7 @@ services:
       PG_PORT: "5432"
       PG_DB: "curation"
       KAFKA_BROKER: "my-curator-kafka:29092"
-    command: ["python3", "-m", "src.bus.kafka", "--timeout", "0"]
+    command: ["python3", "-m", "my_curator.cli.run_curation_consumer", "--timeout", "0"]
     networks:
       - curation-net
 

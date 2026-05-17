@@ -74,6 +74,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "my_curator/adapters/gst/nvvllmvlm.py" = ["E402", "B007"]
+"my_curator/interfaces/http/curation_api/*.py" = ["B008"]
+"my_curator/interfaces/http/curation_api/routers/*.py" = ["B008"]
 "plugin/gstnvvllmvlm.py" = ["E402", "B007"]
 "src/vllm_ds_app_kafka_publish.py" = ["E402", "F401"]
 "scripts/*" = ["E402", "B007"]
