@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Search,
   ClipboardCheck,
+  HelpCircle,
   Layers,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/search", label: "Search & Curate", icon: Search },
   { href: "/review", label: "Review Queue", icon: ClipboardCheck },
+  { href: "/help", label: "Help", icon: HelpCircle },
 ];
 
 const POLL_MS = 30_000;

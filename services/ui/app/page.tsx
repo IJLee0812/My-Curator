@@ -17,8 +17,7 @@ import {
   listClips,
 } from "@/lib/api";
 import type { ClipSummary, CollectionInfo, StatsResponse } from "@/lib/api";
-import { OddbBadges, RiskBadge } from "@/components/dna-badges";
-import { ClipThumbnail } from "@/components/clip-thumbnail";
+import RecentClipsSection from "./RecentClipsSection";
 
 function StatCard({
   label,
@@ -188,11 +187,11 @@ export default async function DashboardPage() {
             <ClipboardCheck className="w-4 h-4 text-cyan-400" /> Review Queue
           </h2>
           {([
-            { label: "Approved", count: review.approved, bar: "bg-green-500", color: "text-green-400" },
-            { label: "Rejected", count: review.rejected, bar: "bg-red-500", color: "text-red-400" },
-            { label: "Pending", count: review.pending, bar: "bg-amber-500", color: "text-amber-400" },
-            { label: "Schema Invalid", count: review.rejected_schema_invalid, bar: "bg-slate-500", color: "text-slate-400" },
-          ] as const).map(({ label, count, bar, color }) => {
+            { label: "Approved", count: review.approved, hex: "#22c55e", color: "text-green-400" },
+            { label: "Rejected", count: review.rejected, hex: "#ef4444", color: "text-red-400" },
+            { label: "Pending", count: review.pending, hex: "#f59e0b", color: "text-amber-400" },
+            { label: "Schema Invalid", count: review.rejected_schema_invalid, hex: "#64748b", color: "text-slate-400" },
+          ] as const).map(({ label, count, hex, color }) => {
             const total =
               review.approved + review.rejected + review.pending + review.rejected_schema_invalid;
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -202,8 +201,8 @@ export default async function DashboardPage() {
                   <span className={color}>{label}</span>
                   <span className="text-slate-500">{count} ({pct}%)</span>
                 </div>
-                <div className="h-1.5 bg-[#1e3a5f] rounded-full">
-                  <div className={`h-full ${bar}/60 rounded-full`} style={{ width: `${pct}%` }} />
+                <div className="h-2 bg-[#1e3a5f] rounded-full">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.75 }} />
                 </div>
               </div>
             );
@@ -223,20 +222,16 @@ export default async function DashboardPage() {
               (c) => c.dna_json?.planner_logic?.risk_level === level,
             ).length;
             const pct = clips.length > 0 ? Math.round((count / clips.length) * 100) : 0;
-            const bar =
-              level === "critical"
-                ? "bg-red-500"
-                : level === "elevated"
-                  ? "bg-amber-500"
-                  : "bg-green-500";
+            const hex =
+              level === "critical" ? "#ef4444" : level === "elevated" ? "#f59e0b" : "#22c55e";
             return (
               <div key={level} className="mb-3">
                 <div className="flex justify-between text-xs mb-1">
                   <span className="capitalize text-slate-400">{level}</span>
                   <span className="text-slate-500">{count} ({pct}%)</span>
                 </div>
-                <div className="h-1.5 bg-[#1e3a5f] rounded-full">
-                  <div className={`h-full ${bar}/70 rounded-full`} style={{ width: `${pct}%` }} />
+                <div className="h-2 bg-[#1e3a5f] rounded-full">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.8 }} />
                 </div>
               </div>
             );
@@ -287,7 +282,7 @@ export default async function DashboardPage() {
               { label: "Vectors", value: String(collection.vector_count) },
               { label: "Dimension", value: String(collection.dim) },
               { label: "Index", value: collection.index_type },
-              { label: "Metric", value: collection.metric_type },
+              { label: "Metric", value: collection.metric_type === "IP" ? "Inner Product (Cosine Similarity)" : collection.metric_type },
             ].map(({ label, value }) => (
               <div key={label} className="bg-[#0a1120] rounded-lg p-3 border border-[#1e3a5f]">
                 <div className="text-xs text-slate-500 mb-1">{label}</div>
@@ -299,67 +294,7 @@ export default async function DashboardPage() {
       )}
 
       {/* recent clips */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-            <Film className="w-4 h-4 text-cyan-400" /> Recent Clips
-          </h2>
-          <Link
-            href="/search"
-            className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-          >
-            Browse all <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
-        {clips.length === 0 ? (
-          <div className="card p-6 text-center text-xs text-slate-500">
-            No clips yet — once the DS pipeline ingests segments they will appear here.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {clips.map((clip) => {
-              const risk = clip.dna_json?.planner_logic?.risk_level ?? "nominal";
-              const odd = clip.dna_json?.odd;
-              const sourceTag = clip.source_clip_id
-                ? `source: ${clip.source_clip_id}`
-                : clip.session_id;
-              return (
-                <Link
-                  key={clip.clip_id}
-                  href={`/clips/${clip.clip_id}`}
-                  className="card card-hover p-4 block"
-                >
-                  <div className="w-full h-28 bg-[#0a1120] rounded-lg mb-3 flex items-center justify-center border border-[#1e3a5f] relative overflow-hidden">
-                    <ClipThumbnail clipId={clip.clip_id} />
-                    <div className="absolute top-2 right-2">
-                      <RiskBadge level={risk} />
-                    </div>
-                    {clip.is_gold && (
-                      <div className="absolute top-2 left-2">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                          gold
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-mono text-slate-500 truncate">
-                        {clip.clip_id.slice(0, 18)}…
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-500 shrink-0 ml-1">
-                        {clip.start_s.toFixed(1)}–{clip.end_s.toFixed(1)}s
-                      </span>
-                    </div>
-                    <OddbBadges odd={odd} />
-                    <div className="text-xs text-slate-500 truncate">{sourceTag}</div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <RecentClipsSection initialClips={clips} />
     </div>
   );
 }

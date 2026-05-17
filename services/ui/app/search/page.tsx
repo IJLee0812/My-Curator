@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   Search,
   SlidersHorizontal,
@@ -27,17 +29,22 @@ import {
 
 const WEATHER_OPTIONS = [
   "clear", "overcast", "light_rain", "heavy_rain",
-  "snow", "heavy_snow", "fog", "mist",
+  "snow", "heavy_snow", "fog", "mist", "sleet",
 ];
 const LIGHTING_OPTIONS = ["day", "dawn", "dusk", "night", "tunnel", "overcast_day"];
 const ROAD_OPTIONS = [
-  "motorway", "primary", "secondary", "residential", "rural", "parking", "service",
+  "motorway", "trunk", "primary", "secondary", "residential",
+  "rural", "parking", "service", "walkway", "cycling",
 ];
 const RISK_OPTIONS = ["nominal", "elevated", "critical"] as const;
 const MANEUVER_OPTIONS = [
-  "cruise", "brake_soft", "brake_hard", "emergency_brake",
-  "yield", "lane_change_left", "lane_change_right", "swerve", "stop",
+  "cruise", "accelerate", "brake_soft", "brake_hard", "emergency_brake",
+  "nudge_left", "nudge_right", "lane_change_left", "lane_change_right",
+  "yield", "stop", "reverse", "swerve",
 ];
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 function FilterGroup({
   label,
@@ -102,10 +109,16 @@ export default function SearchPage() {
   const [maneuver, setManeuver] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(true);
 
-  const [results, setResults] = useState<ClipResult[]>([]);
+  const [allResults, setAllResults] = useState<ClipResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  const [perPage, setPerPage] = useState<PageSize>(20);
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(allResults.length / perPage));
+  const pageResults = allResults.slice((page - 1) * perPage, page * perPage);
 
   const toggle =
     (setter: React.Dispatch<React.SetStateAction<Set<string>>>) => (val: string) =>
@@ -126,9 +139,10 @@ export default function SearchPage() {
     setRisk(new Set());
     setManeuver(new Set());
     setQuery("");
-    setResults([]);
+    setAllResults([]);
     setSubmitted(false);
     setError(null);
+    setPage(1);
   };
 
   const activeFilterCount =
@@ -138,6 +152,7 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     setSubmitted(true);
+    setPage(1);
     try {
       const filters = filtersFromSets({
         weather,
@@ -146,14 +161,14 @@ export default function SearchPage() {
         risk_level: risk,
         ego_maneuver: maneuver,
       });
-      const data = await searchClips(query, filters, 20);
-      setResults(data.results);
+      const data = await searchClips(query, filters, 500);
+      setAllResults(data.results);
     } catch (e) {
       console.error(e);
       setError(
         e instanceof Error ? e.message : "Search request failed — see console for details.",
       );
-      setResults([]);
+      setAllResults([]);
     } finally {
       setLoading(false);
     }
@@ -169,6 +184,11 @@ export default function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weather, lighting, road, risk, maneuver]);
 
+  // Reset to first page when perPage changes.
+  useEffect(() => {
+    setPage(1);
+  }, [perPage]);
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch();
@@ -178,7 +198,7 @@ export default function SearchPage() {
     <div className="flex h-screen overflow-hidden">
       {/* filter sidebar */}
       {showFilters && (
-        <aside className="w-56 shrink-0 border-r border-[#1e3a5f] overflow-y-auto p-4 bg-[#0a1120]">
+        <aside className="w-44 sm:w-48 lg:w-56 shrink-0 border-r border-[#1e3a5f] overflow-y-auto p-4 bg-[#0a1120]">
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" /> DNA Filters
@@ -247,21 +267,43 @@ export default function SearchPage() {
               Search
             </button>
           </div>
-          <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
-            <span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 text-sm text-slate-500">
+            <span className="shrink-0">
               {submitted
-                ? `${results.length} result${results.length !== 1 ? "s" : ""}`
+                ? allResults.length > 0
+                  ? `${allResults.length} result${allResults.length !== 1 ? "s" : ""} · page ${page} / ${totalPages}`
+                  : "0 results"
                 : "Enter a query and press Search"}
             </span>
             {activeFilterCount > 0 && (
               <>
                 <span>·</span>
-                <span className="text-cyan-400">
+                <span className="text-cyan-400 shrink-0">
                   {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active
                 </span>
               </>
             )}
-            <span className="ml-auto text-slate-600">Hybrid: Milvus ANN → PG JSONB filter</span>
+            <span className="hidden lg:inline ml-auto text-slate-600">Hybrid: Milvus ANN → PG JSONB filter</span>
+            {/* per-page selector */}
+            <div className="flex items-center gap-2 ml-auto lg:ml-4 shrink-0">
+              <span className="text-slate-600 hidden sm:inline">per page</span>
+              <div className="flex gap-1.5">
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPerPage(n)}
+                    className={`px-3 py-1 rounded text-sm border transition-colors ${
+                      perPage === n
+                        ? "border-cyan-500/60 text-cyan-400 bg-cyan-500/10"
+                        : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </form>
 
@@ -277,7 +319,7 @@ export default function SearchPage() {
               <Loader2 className="w-8 h-8 animate-spin mb-2" />
               <p className="text-sm">Querying curation-api…</p>
             </div>
-          ) : results.length === 0 ? (
+          ) : pageResults.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-600">
               <Search className="w-12 h-12 mb-3 opacity-30" />
               <p className="text-sm">
@@ -295,68 +337,117 @@ export default function SearchPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {results.map((clip, idx) => {
-                const dna = clip.dna_json;
-                const risk = dna?.planner_logic?.risk_level ?? "nominal";
-                return (
-                  <Link
-                    key={clip.clip_id}
-                    href={`/clips/${clip.clip_id}`}
-                    className="card card-hover p-4 flex gap-4 items-start"
-                  >
-                    {/* rank + thumbnail */}
-                    <div className="shrink-0 flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 rounded bg-[#0a1120] flex items-center justify-center text-xs text-slate-500 font-mono border border-[#1e3a5f]">
-                        {idx + 1}
-                      </div>
-                      <div className="w-20 h-14 bg-[#0a1120] rounded border border-[#1e3a5f] flex items-center justify-center relative overflow-hidden">
-                        <ClipThumbnail clipId={clip.clip_id} iconSize="sm" />
-                        {clip.is_gold && (
-                          <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-yellow-500/80 flex items-center justify-center">
-                            <span className="text-[8px] text-gray-950 font-bold">G</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-600 text-center leading-tight">
-                        {clip.start_s !== null && clip.end_s !== null
-                          ? `${clip.start_s.toFixed(1)}–${clip.end_s.toFixed(1)}s`
-                          : "—"}
-                      </div>
-                      <div className="text-[10px] font-mono text-cyan-400 text-center leading-tight">
-                        {clip.score.toFixed(3)}
-                      </div>
-                    </div>
-
-                    {/* DNA summary */}
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-xs font-mono text-slate-400 truncate">
-                            {clip.clip_id}
-                          </div>
-                          <div className="text-xs text-slate-600 mt-0.5">
-                            {clip.source_clip_id
-                              ? `source: ${clip.source_clip_id}`
-                              : (clip.blob_uri ?? "")}
-                          </div>
+            <>
+              <div className="space-y-2">
+                {pageResults.map((clip, idx) => {
+                  const globalIdx = (page - 1) * perPage + idx;
+                  const dna = clip.dna_json;
+                  const risk = dna?.planner_logic?.risk_level ?? "nominal";
+                  return (
+                    <Link
+                      key={clip.clip_id}
+                      href={`/clips/${clip.clip_id}`}
+                      className="card card-hover p-4 sm:p-5 flex gap-4 sm:gap-6 items-center"
+                    >
+                      {/* rank + thumbnail */}
+                      <div className="shrink-0 flex flex-col items-center gap-2">
+                        <div className="w-7 h-7 rounded bg-[#0a1120] flex items-center justify-center text-xs text-slate-500 font-mono border border-[#1e3a5f]">
+                          {globalIdx + 1}
                         </div>
-                        <RiskBadge level={risk} />
+                        <div className="w-24 h-[4.5rem] sm:w-48 sm:h-36 md:w-64 md:h-48 bg-[#0a1120] rounded border border-[#1e3a5f] flex items-center justify-center relative overflow-hidden">
+                          <ClipThumbnail clipId={clip.clip_id} iconSize="sm" />
+                          {clip.is_gold && (
+                            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-yellow-500/80 flex items-center justify-center">
+                              <span className="text-[8px] text-gray-950 font-bold">G</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-xs font-mono text-slate-600 text-center leading-tight">
+                          {clip.start_s !== null && clip.end_s !== null
+                            ? `${clip.start_s.toFixed(1)}–${clip.end_s.toFixed(1)}s`
+                            : "—"}
+                        </div>
+                        <div className="text-xs font-mono text-cyan-400 text-center leading-tight">
+                          {clip.score.toFixed(3)}
+                        </div>
                       </div>
-                      <OddbBadges odd={dna?.odd} />
-                      <TopologyBadges topology={dna?.topology} />
-                      <ActorBadges actors={dna?.actor_dynamics} />
-                      <div className="flex items-center gap-2">
-                        <PlannerBadge planner={dna?.planner_logic} />
-                        {dna?.confidence?.overall !== undefined && (
-                          <ConfidenceBar value={dna.confidence.overall} />
-                        )}
+
+                      {/* DNA summary */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-mono text-slate-400 truncate">
+                              {clip.clip_id}
+                            </div>
+                            <div className="text-xs text-slate-600 mt-0.5">
+                              {clip.source_clip_id
+                                ? `source: ${clip.source_clip_id}`
+                                : (clip.blob_uri ?? "")}
+                            </div>
+                          </div>
+                          <RiskBadge level={risk} />
+                        </div>
+                        <OddbBadges odd={dna?.odd} />
+                        <TopologyBadges topology={dna?.topology} />
+                        <ActorBadges actors={dna?.actor_dynamics} />
+                        <div className="flex items-center gap-2">
+                          <PlannerBadge planner={dna?.planner_logic} />
+                          {dna?.confidence?.overall !== undefined && (
+                            <ConfidenceBar value={dna.confidence.overall} />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              {/* pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-[#1e3a5f]">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                    .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                      if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push("…");
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((p, i) =>
+                      p === "…" ? (
+                        <span key={`ellipsis-${i}`} className="text-slate-600 text-xs px-1">…</span>
+                      ) : (
+                        <button
+                          key={p}
+                          onClick={() => setPage(p as number)}
+                          className={`min-w-[2rem] h-8 rounded border text-xs font-mono transition-colors ${
+                            page === p
+                              ? "border-cyan-500/60 text-cyan-400 bg-cyan-500/10"
+                              : "border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

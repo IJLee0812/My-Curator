@@ -33,32 +33,34 @@ export default async function ClipDetailPage({ params }: PageProps) {
   const risk = dna?.planner_logic?.risk_level ?? "nominal";
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl">
+    <div className="p-4 sm:p-6 space-y-5 w-full">
       {/* back + title */}
       <div className="flex items-center gap-3">
         <Link
           href="/search"
-          className="p-2 rounded-lg hover:bg-[#111f36] transition-colors"
+          className="p-2 rounded-lg hover:bg-[#111f36] transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4 text-slate-400" />
         </Link>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-base font-bold text-slate-100 font-mono truncate">
+            <h1 className="text-sm sm:text-base font-bold text-slate-100 font-mono truncate">
               {clip.clip_id}
             </h1>
             {clip.is_gold && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 shrink-0">
                 gold set
               </span>
             )}
             <RiskBadge level={risk} />
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {clip.start_s.toFixed(2)}s – {clip.end_s.toFixed(2)}s · session: {clip.session_id}
+          <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-1.5">
+            <span>{clip.start_s.toFixed(2)}s – {clip.end_s.toFixed(2)}s</span>
+            <span>·</span>
+            <span>session: {clip.session_id}</span>
             {clip.source_clip_id && (
               <>
-                {" · "}
+                <span>·</span>
                 <span className="text-slate-400">
                   source: <span className="font-mono">{clip.source_clip_id}</span>
                 </span>
@@ -70,7 +72,7 @@ export default async function ClipDetailPage({ params }: PageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* left: video + actions */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-3 space-y-4">
           <VideoPlayer
             clipId={clip.clip_id}
             presignedUrl={clip.presigned_url}
@@ -89,7 +91,7 @@ export default async function ClipDetailPage({ params }: PageProps) {
         </div>
 
         {/* right: 4-Layer DNA accordion */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           <DnaAccordion dna={dna} />
         </div>
       </div>
