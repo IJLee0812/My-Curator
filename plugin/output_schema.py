@@ -15,48 +15,13 @@
 # limitations under the License.
 ###################################################################################################
 
-"""Pydantic schema for VLM output validation.
+"""Shim — moved to my_curator.domain.legacy_schema (A4: live).  Removed in R-7."""
 
-Mirrors the JSON shape documented in configs/config_driving_scene.yaml
-system_prompt. Used to flag malformed outputs via metadata.json_valid in
-the Kafka message; invalid outputs are still published.
-"""
+from my_curator.domain.legacy_schema import (  # noqa: F401
+    DrivingSceneResult,
+    EgoVehicle,
+    KeyObject,
+    RoadFeatures,
+)
 
-from pydantic import BaseModel, ConfigDict
-
-
-class RoadFeatures(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    num_lanes: int
-    lane_markings: str
-    road_surface: str
-    road_condition: str
-
-
-class KeyObject(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    type: str
-    description: str
-
-
-class EgoVehicle(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    action: str
-    estimated_speed: str
-
-
-class DrivingSceneResult(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    scene_summary: str
-    road_type: str
-    road_features: RoadFeatures
-    weather: str
-    visibility: str
-    traffic_density: str
-    key_objects: list[KeyObject]
-    ego_vehicle: EgoVehicle
-    potential_risks: list[str]
+__all__ = ["DrivingSceneResult", "EgoVehicle", "KeyObject", "RoadFeatures"]
