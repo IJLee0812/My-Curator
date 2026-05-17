@@ -31,15 +31,37 @@ def _video_data_root() -> str:
     return root
 
 
+def _safe_resolve(root: Path, rel: str) -> Path:
+    """Resolve ``root / rel`` and assert the result stays inside ``root``.
+
+    Raises HTTPException(403) when the resolved path escapes the root —
+    defends against absolute-path injection (``/etc/passwd``), relative
+    traversal (``../../etc/passwd``), and symlink escape.  Callers are
+    responsible for the 422 on a malformed scheme; this helper only
+    enforces containment.
+    """
+    root_resolved = root.resolve()
+    candidate = (root_resolved / rel).resolve()
+    if not candidate.is_relative_to(root_resolved):
+        raise HTTPException(status_code=403, detail="Path escapes video data root")
+    return candidate
+
+
 def resolve_path(blob_uri: str) -> Path:
-    """Convert file://{relative} to absolute path under VIDEO_DATA_ROOT."""
+    """Convert file://{relative} to absolute path under VIDEO_DATA_ROOT.
+
+    Strips any leading ``/`` from the path portion so absolute-looking
+    payloads (``file:///etc/passwd``) are treated as root-relative instead
+    of replacing the root via Python's ``Path / "/abs"`` discard rule.
+    Containment is verified by :func:`_safe_resolve`.
+    """
     if not blob_uri.startswith("file://"):
         raise HTTPException(
             status_code=422,
             detail=f"blob_uri scheme not streamable: {blob_uri!r}",
         )
-    rel = blob_uri[len("file://") :]
-    return Path(_video_data_root()) / rel
+    rel = blob_uri[len("file://") :].lstrip("/")
+    return _safe_resolve(Path(_video_data_root()), rel)
 
 
 async def serve_segment(blob_uri: str) -> FileResponse:
