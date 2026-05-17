@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from consumer import _build_arg_parser, _format_result_text
+from my_curator.cli.dev_kafka_tail import _build_arg_parser, _format_result_text
 
 
 @pytest.mark.unit

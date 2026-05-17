@@ -35,14 +35,8 @@ def test_cosmos_reason_scout_gpu_smoke():
     import numpy as np
     from gi.repository import Gst  # type: ignore[import]
 
-    # Ensure plugin directory is on path
-    plugin_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "plugin"))
-    if plugin_dir not in sys.path:
-        sys.path.insert(0, plugin_dir)
-
     Gst.init(None)
-    import gstnvvllmvlm  # noqa: PLC0415
-    from gstnvvllmvlm import NvVllmVLM
+    from my_curator.adapters.gst.nvvllmvlm import NvVllmVLM  # noqa: PLC0415
 
     Gst.Element.register(None, "nvvllmvlm", Gst.Rank.NONE, NvVllmVLM)
 
@@ -59,8 +53,8 @@ def test_cosmos_reason_scout_gpu_smoke():
 
     from PIL import Image as PILImage
 
-    from src.scouts.base import ScoutConfig
-    from src.scouts.cosmos_reason import CosmosReasonScout
+    from my_curator.adapters.scout.cosmos_reason import CosmosReasonScout
+    from my_curator.domain.scout.base import ScoutConfig
 
     scout = CosmosReasonScout(llm=llm)
     config = ScoutConfig.from_yaml("configs/scout.yaml")

@@ -46,7 +46,7 @@ services:
       - MINIO_FRAMES_BUCKET=${MINIO_FRAMES_BUCKET:-frames}
       - VIDEO_DATA_ROOT=${VIDEO_DATA_ROOT}
       - CURATOR_SESSION_ID=${CURATOR_SESSION_ID}
-      - PYTHONPATH=/workspace/plugin
+      - PYTHONPATH=/workspace
     volumes:
       - ..:/workspace
       - /tmp/.X11-unix:/tmp/.X11-unix

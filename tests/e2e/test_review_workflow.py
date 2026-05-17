@@ -52,7 +52,11 @@ def review_clip_id(client):
             "clip_id": clip_id,
             "timestamp_range": {"start_s": 0.0, "end_s": 4.0},
             "odd": {"weather": "clear", "lighting": "day", "sensor_fidelity": ["camera"]},
-            "topology": {"road_type": "highway", "lane_event": "normal", "intersection_type": "none"},
+            "topology": {
+                "road_type": "highway",
+                "lane_event": "normal",
+                "intersection_type": "none",
+            },
             "actor_dynamics": [],
             "planner_logic": {
                 "ego_maneuver": "lane_keep",

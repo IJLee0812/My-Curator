@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 
 import pytest
-from vlm_utils import move_built_engine
+
+from my_curator.adapters.gst.utils import move_built_engine
 
 
 @pytest.mark.integration

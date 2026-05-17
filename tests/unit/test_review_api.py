@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from services.curation_api.review import router
+from my_curator.interfaces.http.curation_api.routers.review import router
 
 pytestmark = pytest.mark.unit
 

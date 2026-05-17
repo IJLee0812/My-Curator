@@ -122,7 +122,6 @@ class TestMainArgParser:
         assert args.source_clip_id == "66751"
 
 
-
 # ---------------------------------------------------------------------------
 # Tests: seg_mode logic — is_segmentation_config integration via env vars
 # ---------------------------------------------------------------------------
@@ -138,7 +137,7 @@ class TestSegModeEnvVarExport:
 
         Returns (nvinfer_config, seg_mode, env_snapshot).
         """
-        from vlm_utils import is_segmentation_config, parse_nvinfer_config
+        from my_curator.adapters.gst.utils import is_segmentation_config, parse_nvinfer_config
 
         cfg_path = _write_cfg(tmp_path, cfg_lines, cfg_name)
 
@@ -315,7 +314,7 @@ class TestBuildOsdBranch:
         return _make
 
     def _build_app(self):
-        from vllm_ds_app_kafka_publish import VLMKafkaApp
+        from my_curator.application.pipeline.ds_app import VLMKafkaApp
 
         app = VLMKafkaApp.__new__(VLMKafkaApp)
         app.seg_mode = False
@@ -333,7 +332,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True, nvosdbin_missing=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             result = app._build_osd_branch(str(tmp_path / "out.mp4"), seg_mode=False)
@@ -346,7 +345,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True, encoder_missing=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             result = app._build_osd_branch(str(tmp_path / "out.mp4"), seg_mode=False)
@@ -364,7 +363,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -380,7 +379,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -394,7 +393,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -408,7 +407,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -422,7 +421,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -437,7 +436,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -451,7 +450,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -468,7 +467,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -484,8 +483,8 @@ class TestBuildOsdBranch:
         factory_fn = self._make_factory_fn(els, use_gpu_enc=True)
 
         with (
-            patch("vllm_ds_app_kafka_publish.Gst") as gst_mock,
-            patch("vllm_ds_app_kafka_publish.os.makedirs") as mkdirs_mock,
+            patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock,
+            patch("my_curator.application.pipeline.osd_branch.os.makedirs") as mkdirs_mock,
         ):
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
@@ -502,7 +501,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=False)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()
@@ -516,7 +515,7 @@ class TestBuildOsdBranch:
         app = self._build_app()
         factory_fn = self._make_factory_fn(els, use_gpu_enc=False)
 
-        with patch("vllm_ds_app_kafka_publish.Gst") as gst_mock:
+        with patch("my_curator.application.pipeline.osd_branch.Gst") as gst_mock:
             gst_mock.ElementFactory.make.side_effect = factory_fn
             gst_mock.PadLinkReturn.OK = 0
             gst_mock.Caps.from_string.return_value = MagicMock()

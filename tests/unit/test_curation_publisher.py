@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.scouts.aggregator import BestOfNAggregator
-from src.scouts.base import ScoutConfig, ScoutReport
+from my_curator.domain.scout.aggregator import BestOfNAggregator
+from my_curator.domain.scout.base import ScoutConfig, ScoutReport
 
 # Minimal valid DNA v0.1 CoT output. Contains "vehicle_car" so the aggregator
 # score > 0 when inventory has {"car": N} (substring match).
@@ -90,7 +90,7 @@ def _make_element(stream_id: int = 0, last_inventory=None, last_inputs=None, llm
 
 
 def _make_publisher(aggregator=None, scout_config=None, source_map=None):
-    from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
+    from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
     return VLMKafkaSignalPublisher(
         {},
@@ -177,7 +177,7 @@ class TestScoutLazyInit:
     def test_scout_created_on_first_call(self):
         pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
         best = _make_report()
-        with patch("src.scouts.cosmos_reason.CosmosReasonScout") as MockScout:
+        with patch("my_curator.adapters.scout.cosmos_reason.CosmosReasonScout") as MockScout:
             mock_instance = MagicMock()
             mock_instance.sample.return_value = [best]
             MockScout.return_value = mock_instance
@@ -187,7 +187,7 @@ class TestScoutLazyInit:
     def test_scout_not_recreated_on_subsequent_calls(self):
         pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
         best = _make_report()
-        with patch("src.scouts.cosmos_reason.CosmosReasonScout") as MockScout:
+        with patch("my_curator.adapters.scout.cosmos_reason.CosmosReasonScout") as MockScout:
             mock_instance = MagicMock()
             mock_instance.sample.return_value = [best]
             MockScout.return_value = mock_instance

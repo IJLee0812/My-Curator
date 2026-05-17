@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.scouts.versioning import (
+from my_curator.domain.scout.versioning import (
     PROMPT_VERSION_MAP,
     assert_prompt_registered,
     resolve_dna_version,
@@ -44,7 +44,7 @@ class TestResolvednaVersion:
 
     def test_new_hash_maps_to_new_version(self):
         """Adding a new hash→version entry to PROMPT_VERSION_MAP resolves correctly."""
-        import src.scouts.versioning as versioning_mod
+        import my_curator.domain.scout.versioning as versioning_mod
 
         new_hash = "abcdef1234567890"
         new_version = "0.2.0"
@@ -86,7 +86,7 @@ class TestMainStartupGuard:
         import sys
         from pathlib import Path
 
-        import src.bus.kafka as kafka_mod
+        import my_curator.cli.run_curation_consumer as kafka_mod
 
         self._patch_env(monkeypatch)
         monkeypatch.setattr(sys, "argv", ["kafka"])
@@ -100,7 +100,7 @@ class TestMainStartupGuard:
         """main() sys.exit(1) when prompt hash is not in PROMPT_VERSION_MAP."""
         import sys
 
-        import src.bus.kafka as kafka_mod
+        import my_curator.cli.run_curation_consumer as kafka_mod
 
         self._patch_env(monkeypatch)
         monkeypatch.setattr(sys, "argv", ["kafka"])
@@ -118,7 +118,7 @@ class TestMainStartupGuard:
         """main() reaches asyncio.run() without sys.exit when hash IS registered."""
         import sys
 
-        import src.bus.kafka as kafka_mod
+        import my_curator.cli.run_curation_consumer as kafka_mod
 
         self._patch_env(monkeypatch)
         monkeypatch.setattr(sys, "argv", ["kafka"])
@@ -146,14 +146,14 @@ class TestConsumerStartupSmoke:
         import unittest.mock as mock
         from pathlib import Path
 
-        import src.bus.kafka as kafka_mod
+        import my_curator.cli.run_curation_consumer as kafka_mod
 
         monkeypatch.setattr(kafka_mod, "_compute_prompt_hash", lambda _path: _KNOWN_HASH)
 
         captured: list[str] = []
 
         async def fake_run(args: object, scout_prompt_hash: str) -> None:
-            from src.scouts.versioning import resolve_dna_version
+            from my_curator.domain.scout.versioning import resolve_dna_version
 
             captured.append(resolve_dna_version(scout_prompt_hash))
 

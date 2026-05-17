@@ -1,7 +1,8 @@
 """Tests for plugin/config_loader.py — YAML loading, defaults, singleton."""
 
 import pytest
-from config_loader import Config, get_config, reload_config
+
+from my_curator.adapters.gst.config_loader import Config, get_config, reload_config
 
 
 @pytest.mark.unit

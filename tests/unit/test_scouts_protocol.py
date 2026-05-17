@@ -5,8 +5,8 @@ All tests run with a mock engine — no GPU or vllm required.
 
 import pytest
 
-from src.scouts.base import Scout, ScoutConfig, ScoutReport
-from src.scouts.cosmos_reason import CosmosReasonScout
+from my_curator.adapters.scout.cosmos_reason import CosmosReasonScout
+from my_curator.domain.scout.base import Scout, ScoutConfig, ScoutReport
 
 # ---------------------------------------------------------------------------
 # Fixtures

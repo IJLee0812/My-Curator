@@ -22,7 +22,7 @@ from uuid import UUID
 
 import pytest
 
-from src.bus.kafka import (
+from my_curator.application.consumers.curation_consumer import (
     PIPELINE_VERSION,
     CurationConsumer,
     _compute_prompt_hash,
@@ -348,7 +348,7 @@ class TestCurationConsumerIntegration:
 
     @pytest.fixture
     async def pg(self):
-        from src.storage.pg import PGRepository, dsn_from_env
+        from my_curator.adapters.storage.pg import PGRepository, dsn_from_env
 
         repo = await PGRepository.create(dsn_from_env())
         yield repo

@@ -5,7 +5,8 @@ import os
 from types import SimpleNamespace
 
 import pytest
-from vlm_utils import (
+
+from my_curator.adapters.gst.utils import (
     VRU_CLASSES,
     YOLO26_CLASS_MAPPING,
     _bbox_to_zone,
@@ -392,8 +393,8 @@ class TestValidateDrivingSceneJson:
         """Returns (False, error_msg) gracefully when output_schema is absent."""
         import sys
 
-        monkeypatch.delitem(sys.modules, "output_schema", raising=False)
-        monkeypatch.setitem(sys.modules, "output_schema", None)
+        monkeypatch.delitem(sys.modules, "my_curator.domain.legacy_schema", raising=False)
+        monkeypatch.setitem(sys.modules, "my_curator.domain.legacy_schema", None)
         ok, err = validate_driving_scene_json(self._valid_payload())
         assert ok is False
         assert err is not None

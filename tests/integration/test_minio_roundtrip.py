@@ -24,7 +24,7 @@ import uuid
 import pytest
 import pytest_asyncio
 
-from src.storage.minio import MinIORepository
+from my_curator.adapters.storage.minio import MinIORepository
 
 REPO_ROOT = pathlib.Path(__file__).parents[2]
 
