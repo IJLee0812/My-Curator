@@ -56,7 +56,7 @@ async def test_single_clip_embed():
     }
 
     with patch(
-        "services.embedder.frame_loader.load_frames",
+        "my_curator.adapters.storage.frame_loader.load_frames",
         new=AsyncMock(return_value=mock_tensor),
     ):
         worker = EmbedderWorker(mock_model, mock_minio, mock_milvus)
@@ -105,7 +105,7 @@ async def test_bulk_embed_parquet(tmp_path):
     mock_model = _make_model_mock()
 
     with patch(
-        "services.embedder.frame_loader.load_frames",
+        "my_curator.adapters.storage.frame_loader.load_frames",
         new=AsyncMock(return_value=mock_tensor),
     ):
         worker = EmbedderWorker(mock_model, mock_minio, mock_milvus)
