@@ -196,10 +196,7 @@ My-Curator/
 │   ├── compose.pipeline.yml              # DS pipeline: my-curator-ds9-vlm-dev
 │   ├── cleanup_curator_db.py             # wipe PG + Milvus + MinIO for a fresh run
 │   └── init-sql/
-│       ├── 001_schema.sql                # base schema (sessions, clips, scenario_dna, review_queue)
-│       ├── 002_curation_meta.sql         # P2-6: curation_meta JSONB column
-│       ├── 003_frames_blob_uri.sql       # P3-1: frames_blob_uri column on clips
-│       └── 004_source_clip_id.sql        # P3-4: source_clip_id column on clips
+│       └── 001_schema.sql                # consolidated schema (sessions + clips + scenario_dna + review_queue + all migration deltas)
 ├── configs/                              # nvinfer .txt + YAML configs
 ├── scripts/                              # YOLO26 / YOLOE download + ONNX export
 ├── lib/                                  # DS 9.0 custom YOLO parsers (.so)
@@ -260,7 +257,7 @@ cp .env.example .env
 docker compose -f infra/compose.base.yml --env-file .env up -d
 ```
 
-> **Fresh DB only**: `docker-entrypoint-initdb.d` (i.e. `infra/init-sql/001–004`) runs only when the Postgres data directory is empty. If you have an existing volume and need a clean slate:
+> **Fresh DB only**: `docker-entrypoint-initdb.d` (i.e. `infra/init-sql/001_schema.sql`) runs only when the Postgres data directory is empty. If you have an existing volume and need a clean slate:
 > ```bash
 > .venv/bin/python3.10 infra/cleanup_curator_db.py   # wipe PG + Milvus + MinIO
 > # then recreate the postgres volume and restart compose.base.yml
