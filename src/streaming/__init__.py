@@ -1,7 +1,14 @@
-"""Video streaming helpers for curation-api (P3-4+).
-
-Public surface:
-  base.py        — resolve file:// blob_uri → FileResponse (Accept-Ranges)
-  timestamp.py   — .timestamp sidecar parsing for frame-accurate seeking
-  minio.py       — minio:// / legacy blob_uri → presigned URL
+"""Backwards-compatibility shim — moved to my_curator.adapters.storage.streaming
+(byte-range / presigned URL helpers) and my_curator.domain.timestamp
+(sidecar parser).  Removed in R-7.
 """
+
+import warnings
+
+warnings.warn(
+    "src.streaming is moving to my_curator.adapters.storage.streaming "
+    "(byte-range helpers) and my_curator.domain.timestamp (sidecar parser); "
+    "update imports.",
+    DeprecationWarning,
+    stacklevel=2,
+)
