@@ -558,6 +558,14 @@ class VLMKafkaApp:
                 _source_map[_i] = (_clip_id, _rel)
         self._source_map = _source_map
 
+        # R-4 positive assert: silent GI_AVAILABLE=False fallback would otherwise
+        # let the pipeline build with a broken GStreamer registration.  Failing
+        # loudly here is the acceptance gate's requirement (plan §7 risk row).
+        assert GI_AVAILABLE is True, (
+            "GStreamer / gstnvvllmvlm import failed at module load — "
+            "VLMKafkaApp cannot run without a working GI environment."
+        )
+
         # P2-4: load ScoutConfig + BestOfNAggregator for curation wiring
         _scout_config = None
         _aggregator = None
