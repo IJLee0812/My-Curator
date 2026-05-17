@@ -19,7 +19,11 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from my_curator.adapters.storage.streaming import _safe_resolve, resolve_path
+from my_curator.adapters.storage.streaming import (
+    _safe_resolve,
+    resolve_path,
+    serve_segment,
+)
 from my_curator.domain.timestamp import get_precise_times
 
 # ── _safe_resolve direct tests ────────────────────────────────────────────────
@@ -162,3 +166,45 @@ class TestGetPreciseTimesContainment:
         # start = 0/30 = 0.0; end = min(150, 149)/30 = 149/30 ≈ 4.9667
         assert out[0] == pytest.approx(0.0, abs=1e-6)
         assert out[1] == pytest.approx(149 / 30, abs=1e-6)
+
+
+# ── serve_segment anti-download response headers (#44) ────────────────────────
+
+
+@pytest.mark.unit
+class TestServeSegmentAntiDownloadHeaders:
+    """Issue #44: serve_segment must set Content-Disposition / Cache-Control /
+    X-Content-Type-Options on every successful response so the browser does
+    not offer a save-as prompt and does not persist the bytes to disk cache.
+    The byte-range header (Accept-Ranges: bytes) must be preserved — the
+    video player's scrub/seek behaviour depends on it.
+
+    Runs ``serve_segment`` via ``asyncio.run`` (not the pytest-asyncio
+    decorator) so the FileResponse — which holds an OS file handle — is
+    constructed and dropped inside a single-purpose event loop that
+    exits cleanly within the test scope.  Letting an asyncio fixture's
+    loop outlive the response object leaks state into ``sys.modules``
+    under the default suite collection order.
+    """
+
+    @staticmethod
+    def _build_response(tmp_path, monkeypatch):
+        import asyncio
+
+        monkeypatch.setenv("VIDEO_DATA_ROOT", str(tmp_path))
+        (tmp_path / "session").mkdir()
+        target = tmp_path / "session" / "clip.mp4"
+        target.write_bytes(b"\x00" * 16)
+        return asyncio.run(serve_segment("file://session/clip.mp4"))
+
+    def test_serve_segment_emits_all_anti_download_headers(self, tmp_path, monkeypatch):
+        response = self._build_response(tmp_path, monkeypatch)
+        # Starlette MutableHeaders lower-cases keys; access is case-insensitive.
+        assert response.headers["content-disposition"] == 'inline; filename=""'
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["x-content-type-options"] == "nosniff"
+        assert response.headers["accept-ranges"] == "bytes"
+
+    def test_serve_segment_preserves_media_type(self, tmp_path, monkeypatch):
+        response = self._build_response(tmp_path, monkeypatch)
+        assert response.media_type == "video/mp4"
