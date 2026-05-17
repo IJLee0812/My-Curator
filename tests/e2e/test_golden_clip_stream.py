@@ -94,3 +94,73 @@ def test_clip_stream_accepts_byte_range():
     assert "accept-ranges" in {k.lower() for k in r.headers}
     if r.status_code == 206:
         assert "content-range" in {k.lower() for k in r.headers}
+
+
+def test_clip_stream_rejects_traversal_blob_uri():
+    """Issue #42 — a clip whose blob_uri attempts directory traversal must
+    return 403 (containment refusal) from the stream endpoint instead of
+    serving a host file.  We synthesise the row directly via PG so the
+    test does not depend on any naturally-occurring malicious record.
+    """
+    asyncpg = pytest.importorskip("asyncpg")
+
+    import asyncio
+    import os
+    import uuid
+
+    user = os.environ.get("PG_USER", "curation")
+    password = os.environ.get("PG_PASSWORD", "curation-password")
+    host = os.environ.get("PG_HOST", "localhost")
+    port = os.environ.get("PG_PORT", "5432")
+    db = os.environ.get("PG_DB", "curation")
+    dsn = f"postgresql://{user}:{password}@{host}:{port}/{db}"
+
+    async def _try() -> tuple[str, str] | None:
+        try:
+            conn = await asyncpg.connect(dsn)
+        except (asyncpg.InvalidPasswordError, asyncpg.InvalidCatalogNameError, OSError):
+            return None
+        try:
+            session_id = f"traversal-{int(uuid.uuid4().int % 1_000_000)}"
+            clip_id = uuid.uuid4()
+            await conn.execute(
+                """
+                INSERT INTO sessions (session_id, dataset, subset, dataset_version,
+                                       recorded_at, source_kind)
+                VALUES ($1, 'traversal', 'neg', 'v0', now(), 'real')
+                ON CONFLICT (session_id) DO NOTHING
+                """,
+                session_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO clips (clip_id, session_id, blob_uri, start_s, end_s)
+                VALUES ($1, $2, 'file://../../etc/passwd', 0, 5)
+                """,
+                clip_id,
+                session_id,
+            )
+            return (str(clip_id), session_id)
+        finally:
+            await conn.close()
+
+    async def _cleanup(clip_id: str, session_id: str) -> None:
+        conn = await asyncpg.connect(dsn)
+        try:
+            await conn.execute("DELETE FROM clips WHERE clip_id = $1", uuid.UUID(clip_id))
+            await conn.execute("DELETE FROM sessions WHERE session_id = $1", session_id)
+        finally:
+            await conn.close()
+
+    seeded = asyncio.run(_try())
+    if seeded is None:
+        pytest.skip("postgres not reachable or auth failed — cannot seed traversal row")
+    clip_id, session_id = seeded
+    try:
+        with httpx.Client(base_url=_API_BASE, timeout=10.0) as client:
+            r = client.get(f"/v1/clips/{clip_id}/stream")
+        assert r.status_code == 403, (
+            f"expected 403 containment refusal, got {r.status_code}: {r.text}"
+        )
+    finally:
+        asyncio.run(_cleanup(clip_id, session_id))

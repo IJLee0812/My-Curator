@@ -66,14 +66,30 @@ def get_precise_times(
 
     Falls back to the raw DB values when:
     - blob_uri is not file://
+    - the resolved path would escape ``video_data_root``
+      (directory-traversal defence; mirrors
+      :func:`my_curator.adapters.storage.streaming.resolve_path`)
     - sidecar file does not exist
     - sidecar is unreadable / malformed
+
+    Silent fall-through (rather than raising) is preferred here because
+    precise times are best-effort metadata — a hostile blob_uri must
+    not break the primary ``GET /v1/clips/{id}`` response.
     """
     if not blob_uri.startswith("file://"):
         return start_s, end_s
 
-    rel = blob_uri[len("file://") :]
-    video_path = Path(video_data_root) / rel
+    rel = blob_uri[len("file://") :].lstrip("/")
+    try:
+        root_resolved = Path(video_data_root).resolve()
+        video_path = (root_resolved / rel).resolve()
+        if not video_path.is_relative_to(root_resolved):
+            # Containment escape — refuse to open the sidecar; fall back
+            # to the caller-supplied start_s / end_s.
+            return start_s, end_s
+    except (OSError, RuntimeError):
+        # resolve() may raise on broken symlinks / permission errors.
+        return start_s, end_s
     ts_path = video_path.with_suffix(".timestamp")
 
     if not ts_path.exists():
