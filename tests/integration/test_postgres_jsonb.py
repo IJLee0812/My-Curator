@@ -26,10 +26,6 @@ from my_curator.adapters.storage.pg import PGRepository
 
 REPO_ROOT = pathlib.Path(__file__).parents[2]
 INIT_SQL = (REPO_ROOT / "infra" / "init-sql" / "001_schema.sql").read_text()
-INIT_SQL_002 = (REPO_ROOT / "infra" / "init-sql" / "002_curation_meta.sql").read_text()
-INIT_SQL_003 = (REPO_ROOT / "infra" / "init-sql" / "003_frames_blob_uri.sql").read_text()
-INIT_SQL_004 = (REPO_ROOT / "infra" / "init-sql" / "004_source_clip_id.sql").read_text()
-INIT_SQL_005 = (REPO_ROOT / "infra" / "init-sql" / "005_review_audit.sql").read_text()
 
 DOCKER_AVAILABLE = bool(shutil.which("docker"))
 
@@ -91,10 +87,6 @@ async def repo(pg_dsn: str):
     """Fresh pool per test — same event loop as the test function."""
     conn = await asyncpg.connect(pg_dsn)
     await conn.execute(INIT_SQL)
-    await conn.execute(INIT_SQL_002)
-    await conn.execute(INIT_SQL_003)
-    await conn.execute(INIT_SQL_004)
-    await conn.execute(INIT_SQL_005)
     # Wipe rows that survived previous tests so list_clips / get_stats
     # see a clean slate per function-scoped fixture.
     await conn.execute("TRUNCATE review_queue, scenario_dna, clips, sessions CASCADE")

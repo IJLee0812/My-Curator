@@ -28,7 +28,6 @@ REPO_ROOT = pathlib.Path(__file__).parents[2]
 COMPOSE_PATH = REPO_ROOT / "infra" / "compose.base.yml"
 COMPOSE_CURATE_PATH = REPO_ROOT / "infra" / "compose.curate.yml"
 INIT_SQL_PATH = REPO_ROOT / "infra" / "init-sql" / "001_schema.sql"
-INIT_SQL_004_PATH = REPO_ROOT / "infra" / "init-sql" / "004_source_clip_id.sql"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
 
 EXPECTED_BUCKETS = {"raw", "clips", "frames", "artifacts", "milvus"}
@@ -211,14 +210,14 @@ def test_milvus_healthz():
         assert resp.status == 200
 
 
-# ── P3-4: compose.curate.yml ui service + init-sql 004 ──────────────────────
+# ── P3-4: compose.curate.yml ui service + source_clip_id column ─────────────
 
 
 @pytest.mark.integration
-def test_init_sql_004_adds_source_clip_id_column():
-    """004_source_clip_id.sql introduces clips.source_clip_id (P3-4)."""
-    sql = INIT_SQL_004_PATH.read_text()
-    assert "ADD COLUMN IF NOT EXISTS source_clip_id" in sql
+def test_init_sql_carries_source_clip_id_column():
+    """Consolidated 001_schema.sql introduces clips.source_clip_id (P3-4)."""
+    sql = INIT_SQL_PATH.read_text()
+    assert "source_clip_id" in sql
     assert "idx_clips_source_clip_id" in sql
 
 
