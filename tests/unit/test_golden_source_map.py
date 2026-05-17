@@ -17,7 +17,7 @@ import pytest
 
 
 def _make_publisher(source_map):
-    from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
+    from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
     return VLMKafkaSignalPublisher(
         {},

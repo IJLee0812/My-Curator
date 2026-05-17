@@ -23,7 +23,7 @@ from typing import Generator
 import pytest
 import pytest_asyncio
 
-from src.storage.milvus import MilvusRepository
+from my_curator.adapters.storage.milvus import MilvusRepository
 
 MILVUS_URI = "http://localhost:19530"
 

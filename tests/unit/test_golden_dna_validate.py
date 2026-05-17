@@ -19,7 +19,7 @@ import copy
 
 import pytest
 
-from src.scouts.dna_validator import DNAValidator
+from my_curator.domain.scout.dna_validator import DNAValidator
 
 _VALID_DNA: dict = {
     "dna_version": "0.1.0",

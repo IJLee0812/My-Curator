@@ -9,7 +9,8 @@ the path if the file is missing, None otherwise.
 import os
 
 import pytest
-from vlm_utils import check_onnx_exists
+
+from my_curator.adapters.gst.utils import check_onnx_exists
 
 
 def _write_config(tmp_path, content: str) -> str:

@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from src.scouts.dna_validator import DNAValidator, _extract_last_object
+from my_curator.domain.scout.dna_validator import DNAValidator, _extract_last_object
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

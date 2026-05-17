@@ -28,6 +28,7 @@ MINIO_BUCKETS = ["frames", "clips", "raw", "artifacts"]
 
 # ── .env loader ───────────────────────────────────────────────────────────────
 
+
 def load_env(path: Path) -> dict:
     if not path.exists():
         sys.exit(f"[ERROR] .env not found at {path}")
@@ -42,6 +43,7 @@ def load_env(path: Path) -> dict:
 
 
 # ── PG cleanup (asyncpg) ──────────────────────────────────────────────────────
+
 
 async def _cleanup_pg_async(env: dict) -> None:
     import asyncpg  # type: ignore
@@ -69,6 +71,7 @@ def cleanup_pg(env: dict) -> None:
 
 # ── Milvus cleanup ────────────────────────────────────────────────────────────
 
+
 def cleanup_milvus(env: dict) -> None:
     from pymilvus import MilvusClient  # type: ignore
 
@@ -84,6 +87,7 @@ def cleanup_milvus(env: dict) -> None:
 
 
 # ── MinIO cleanup ─────────────────────────────────────────────────────────────
+
 
 def cleanup_minio(env: dict) -> None:
     import boto3  # type: ignore
@@ -120,6 +124,7 @@ def cleanup_minio(env: dict) -> None:
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

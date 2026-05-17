@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.scouts.base import ScoutConfig, ScoutReport
-from src.scouts.cosmos_reason import CosmosReasonScout
+from my_curator.adapters.scout.cosmos_reason import CosmosReasonScout
+from my_curator.domain.scout.base import ScoutConfig, ScoutReport
 
 # ---------------------------------------------------------------------------
 # Helpers

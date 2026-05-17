@@ -25,8 +25,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.scouts.aggregator import BestOfNAggregator
-from src.scouts.base import ScoutConfig, ScoutReport
+from my_curator.domain.scout.aggregator import BestOfNAggregator
+from my_curator.domain.scout.base import ScoutConfig, ScoutReport
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "golden"
 _REAL_FIXTURE = _FIXTURE_DIR / "publisher_last_inputs.json"
@@ -80,7 +80,7 @@ def _make_element(stream_id: int = 0):
 
 
 def _make_publisher_with_fixed_scout():
-    from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
+    from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
     pub = VLMKafkaSignalPublisher(
         {},

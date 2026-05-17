@@ -10,6 +10,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Modern setuptools (>=64) for PEP 660 editable-install support.
+RUN pip3 install --no-cache-dir --upgrade pip "setuptools>=68" wheel
+
 # torch + torchvision first (large wheels, cached separately)
 RUN pip3 install --no-cache-dir \
     torch torchvision --index-url https://download.pytorch.org/whl/cu124
@@ -41,7 +44,7 @@ COPY my_curator/ ./my_curator/
 COPY schemas/ ./schemas/
 COPY prompts/ ./prompts/
 
-RUN pip3 install --no-cache-dir -e .
+RUN pip3 install --no-cache-dir .
 
 EXPOSE 8001
 

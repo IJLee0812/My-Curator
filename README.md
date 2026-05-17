@@ -147,38 +147,30 @@ In My-Curator, this becomes the **Scout's symbolic grounding**: YOLOE inventory 
 
 ```
 My-Curator/
-├── main.py                               # entrypoint
-├── plugin/
-│   ├── gstnvvllmvlm.py                   # GStreamer VLM element (nvvllmvlm)
-│   ├── vlm_utils.py                      # pure utils (host-testable)
-│   ├── config_loader.py                  # YAML config singleton
-│   └── output_schema.py                  # DrivingSceneResult (Pydantic) — legacy; superseded by Scenario DNA
-├── src/
-│   ├── vllm_ds_app_kafka_publish.py      # pipeline builder + Kafka + OSD branch
-│   ├── consumer.py                       # optional Kafka consumer
-│   ├── scouts/
-│   │   ├── base.py                       # ScoutConfig, ScoutReport dataclasses
-│   │   ├── cosmos_reason.py              # CosmosReasonScout — N=3 temperature sampling
-│   │   ├── aggregator.py                 # BestOfNAggregator — symbolic reward + YOLO26 inventory overlap
-│   │   ├── dna_validator.py              # DNAValidator — 3-stage CoT JSON extraction + jsonschema validation
-│   │   └── versioning.py                 # PROMPT_VERSION_MAP — prompt hash → dna_version
-│   ├── bus/
-│   │   └── kafka.py                      # CurationConsumer — Kafka → Postgres + Milvus bridge
-│   ├── storage/
-│   │   ├── pg.py                         # PGRepository — asyncpg Postgres DAL
-│   │   ├── milvus.py                     # MilvusRepository — Milvus GPU_CAGRA DAL
-│   │   └── minio.py                      # MinIORepository — S3-compatible object store DAL
-│   └── streaming/
-│       ├── base.py                       # serve_segment() — FileResponse + Accept-Ranges for file:// URIs
-│       ├── minio.py                      # presigned-URL redirect for minio:// URIs
-│       └── timestamp.py                  # get_precise_times() — .timestamp sidecar → precise_start_s/end_s
+├── main.py                               # 3-line shim → my_curator.cli.run_pipeline.main()
+├── my_curator/                           # clean-architecture package (pip install -e .)
+│   ├── domain/                           # pure: no I/O, no GStreamer
+│   │   ├── scout/                        # Scout Protocol + ScoutConfig/Report, BestOfNAggregator,
+│   │   │                                 #   DNAValidator, PROMPT_VERSION_MAP
+│   │   ├── timestamp.py                  # .timestamp sidecar parser
+│   │   └── legacy_schema.py              # DrivingSceneResult (Pydantic) — live, post-Scenario-DNA fallback
+│   ├── adapters/                         # I/O wrappers
+│   │   ├── storage/                      # pg.py, milvus.py, minio.py, streaming.py, frame_loader.py
+│   │   ├── bus/kafka_consumer.py         # reusable run_consumer_loop()
+│   │   ├── scout/cosmos_reason.py        # CosmosReasonScout (vLLM 0.14.0)
+│   │   ├── embed/                        # video_tower.py + text_tower.py (Cosmos-Embed1-336p)
+│   │   └── gst/                          # nvvllmvlm.py, config_loader.py, utils.py, probes/osd_label.py
+│   ├── application/                      # use-cases
+│   │   ├── pipeline/                     # publisher, ds_app, osd_branch, _upload_frames
+│   │   ├── consumers/curation_consumer.py
+│   │   └── workers/embedder_worker.py
+│   ├── interfaces/                       # entrypoints
+│   │   └── http/curation_api/            # FastAPI app + routers/
+│   │       ├── app.py                    # factory + lifespan
+│   │       ├── deps.py
+│   │       └── routers/                  # search, ingest, clips, review, stats, video_search, collections
+│   └── cli/                              # run_pipeline, run_curation_consumer, run_embedder, dev_kafka_tail
 ├── services/
-│   ├── curation_api/                     # FastAPI curation-api (port 8001)
-│   │   ├── main.py                       # app factory + lifespan (PG + Milvus + MinIO pools)
-│   │   ├── clips.py                      # GET /v1/clips, /v1/clips/{id}, /v1/clips/{id}/stream
-│   │   ├── search.py                     # POST /v1/search (hybrid), POST /v1/search/video
-│   │   ├── stats.py                      # GET /v1/stats — live corpus metrics
-│   │   └── Dockerfile
 │   └── ui/                               # Next.js 16.2.6 + React 19 + Tailwind 4.3 curation console (port 3000)
 │       ├── app/
 │       │   ├── page.tsx                  # Dashboard — live stats + recent clips
@@ -287,7 +279,7 @@ docker compose -f infra/compose.curate.yml --env-file .env up -d
 ```bash
 docker compose -f infra/compose.pipeline.yml --env-file .env run --rm \
   -e CUDA_VISIBLE_DEVICES=1 my-curator-ds9-vlm-dev \
-  python3 src/vllm_ds_app_kafka_publish.py <sources> [--source-clip-id <id>]
+  python3 -m my_curator.cli.run_pipeline <sources> [--source-clip-id <id>]
 ```
 
 ---

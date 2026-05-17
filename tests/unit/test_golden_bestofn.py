@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.scouts.aggregator import BestOfNAggregator
-from src.scouts.base import ScoutReport
+from my_curator.domain.scout.aggregator import BestOfNAggregator
+from my_curator.domain.scout.base import ScoutReport
 
 
 def _r(text: str, t: float, partial: bool = False) -> ScoutReport:

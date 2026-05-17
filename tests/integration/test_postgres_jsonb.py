@@ -22,7 +22,7 @@ import pytest
 import pytest_asyncio
 from testcontainers.postgres import PostgresContainer
 
-from src.storage.pg import PGRepository
+from my_curator.adapters.storage.pg import PGRepository
 
 REPO_ROOT = pathlib.Path(__file__).parents[2]
 INIT_SQL = (REPO_ROOT / "infra" / "init-sql" / "001_schema.sql").read_text()

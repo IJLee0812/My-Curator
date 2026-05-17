@@ -122,7 +122,6 @@ class TestMainArgParser:
         assert args.source_clip_id == "66751"
 
 
-
 # ---------------------------------------------------------------------------
 # Tests: seg_mode logic — is_segmentation_config integration via env vars
 # ---------------------------------------------------------------------------
@@ -138,7 +137,7 @@ class TestSegModeEnvVarExport:
 
         Returns (nvinfer_config, seg_mode, env_snapshot).
         """
-        from vlm_utils import is_segmentation_config, parse_nvinfer_config
+        from my_curator.adapters.gst.utils import is_segmentation_config, parse_nvinfer_config
 
         cfg_path = _write_cfg(tmp_path, cfg_lines, cfg_name)
 
@@ -315,7 +314,7 @@ class TestBuildOsdBranch:
         return _make
 
     def _build_app(self):
-        from vllm_ds_app_kafka_publish import VLMKafkaApp
+        from my_curator.application.pipeline.ds_app import VLMKafkaApp
 
         app = VLMKafkaApp.__new__(VLMKafkaApp)
         app.seg_mode = False

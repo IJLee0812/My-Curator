@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.scouts.aggregator import BestOfNAggregator
-from src.scouts.base import ScoutConfig, ScoutReport
+from my_curator.domain.scout.aggregator import BestOfNAggregator
+from my_curator.domain.scout.base import ScoutConfig, ScoutReport
 
 # Minimal valid DNA v0.1 CoT output. Contains "vehicle_car" so the aggregator
 # score > 0 when inventory has {"car": N} (substring match).
@@ -90,7 +90,7 @@ def _make_element(stream_id: int = 0, last_inventory=None, last_inputs=None, llm
 
 
 def _make_publisher(aggregator=None, scout_config=None, source_map=None):
-    from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
+    from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
     return VLMKafkaSignalPublisher(
         {},

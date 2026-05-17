@@ -78,7 +78,7 @@ services:
   curation-api:
     build:
       context: ..
-      dockerfile: services/curation_api/Dockerfile
+      dockerfile: infra/curation_api.Dockerfile
     container_name: curation-api
     restart: unless-stopped
     depends_on:
@@ -136,7 +136,7 @@ services:
   embedder-worker:
     build:
       context: ..
-      dockerfile: services/curation_api/Dockerfile
+      dockerfile: infra/curation_api.Dockerfile
     container_name: my-curator-embedder
     restart: unless-stopped
     depends_on:
@@ -205,7 +205,7 @@ services:
   curation-consumer:
     build:
       context: ..
-      dockerfile: services/curation_api/Dockerfile
+      dockerfile: infra/curation_api.Dockerfile
     container_name: my-curator-consumer
     restart: unless-stopped
     depends_on:

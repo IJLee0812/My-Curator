@@ -12,7 +12,7 @@ import pytest
 
 @pytest.fixture
 def publisher():
-    from vllm_ds_app_kafka_publish import VLMKafkaSignalPublisher
+    from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
     return VLMKafkaSignalPublisher({}, "test-topic", dry_run=True)
 

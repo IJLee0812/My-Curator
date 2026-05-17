@@ -404,7 +404,7 @@ def validate_driving_scene_json(data: dict) -> tuple[bool, str | None]:
     Returns (True, None) on valid, (False, error_message) otherwise.
     """
     try:
-        from output_schema import DrivingSceneResult
+        from my_curator.domain.legacy_schema import DrivingSceneResult
     except ImportError as e:
         return False, f"output_schema import failed: {e}"
 

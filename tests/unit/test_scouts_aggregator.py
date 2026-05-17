@@ -5,8 +5,8 @@ All tests use mock ScoutReports — no GPU or vllm required.
 
 import pytest
 
-from src.scouts.aggregator import BestOfNAggregator
-from src.scouts.base import ScoutReport
+from my_curator.domain.scout.aggregator import BestOfNAggregator
+from my_curator.domain.scout.base import ScoutReport
 
 
 def _report(text: str, temperature: float, seed: int = 42, partial: bool = False) -> ScoutReport:

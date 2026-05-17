@@ -1,10 +1,16 @@
 [project]
-name = "deepstream-vlm"
-version = "0.4.0"
-description = "DeepStream 9.0 + Cosmos-Reason2-8B FP8 VLM pipeline with YOLO26 / YOLOE detection hints"
+name = "my-curator"
+version = "0.5.0"
+description = "DeepStream 9.0 + Cosmos-Reason2-8B FP8 driving-clip curation platform"
 requires-python = ">=3.10"
 # Runtime deps managed by Dockerfile + requirements.txt (not here,
 # because vllm/torch require CUDA which is unavailable on host).
+
+[project.scripts]
+my-curator-pipeline = "my_curator.cli.run_pipeline:main"
+my-curator-consumer = "my_curator.cli.run_curation_consumer:main"
+my-curator-embedder = "my_curator.cli.run_embedder:main"
+my-curator-kafka-tail = "my_curator.cli.dev_kafka_tail:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -76,10 +82,7 @@ ignore = [
 "my_curator/adapters/gst/nvvllmvlm.py" = ["E402", "B007"]
 "my_curator/interfaces/http/curation_api/*.py" = ["B008"]
 "my_curator/interfaces/http/curation_api/routers/*.py" = ["B008"]
-"plugin/gstnvvllmvlm.py" = ["E402", "B007"]
-"src/vllm_ds_app_kafka_publish.py" = ["E402", "F401"]
 "scripts/*" = ["E402", "B007"]
-"services/curation_api/*.py" = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"
