@@ -463,6 +463,17 @@ class VLMKafkaSignalPublisher:
                 self.messages_failed += 1
                 print(f"✗ Unexpected error during publish: {e}")
 
+    def get_collected_results(self) -> list:
+        """Return the list of messages emitted during this run.
+
+        Exposed as an accessor (R-3.5 preflight) so cross-module callers
+        (``VLMKafkaApp.run`` JSON dump) no longer reach into the
+        ``_collected_results`` private attribute.  Returns the live list by
+        reference — identical semantics to the previous direct attribute
+        access — so existing JSON-dump code keeps working unchanged.
+        """
+        return self._collected_results
+
     def close(self):
         """Close Kafka producer and print statistics"""
         self._upload_executor.shutdown(wait=True)
@@ -532,7 +543,7 @@ class VLMKafkaApp:
         _single_source = len(input_uris) == 1
         for _i, _uri in enumerate(input_uris):
             if _uri.startswith("file://"):
-                _abs = _uri[len("file://"):]
+                _abs = _uri[len("file://") :]
                 _clip_id = os.path.splitext(os.path.basename(_abs))[0]
                 if source_clip_id_override and _single_source:
                     _clip_id = source_clip_id_override
@@ -540,6 +551,7 @@ class VLMKafkaApp:
                 if _video_root:
                     try:
                         import pathlib as _pl
+
                         _rel = str(_pl.Path(_abs).relative_to(_video_root))
                     except ValueError:
                         pass
@@ -957,11 +969,12 @@ class VLMKafkaApp:
             print(f"✓ Engine moved to: {moved}")
 
         # Save results to JSON file if requested
-        if self.output_path and self.kafka_publisher._collected_results:
+        _results = self.kafka_publisher.get_collected_results()
+        if self.output_path and _results:
             output_data = {
                 "sources": [uri for uri in self.input_uris],
-                "total_segments": len(self.kafka_publisher._collected_results),
-                "segments": self.kafka_publisher._collected_results,
+                "total_segments": len(_results),
+                "segments": _results,
             }
             with open(self.output_path, "w", encoding="utf-8") as f:
                 json.dump(output_data, f, ensure_ascii=False, indent=2)
@@ -1140,6 +1153,7 @@ Examples:
     # are expanded so callers can pass the session root without listing files.
     input_uris = []
     import pathlib
+
     for src in args.sources:
         if not src.startswith("rtsp://") and os.path.isdir(src):
             found = sorted(pathlib.Path(src).glob("*/video/*.mp4"))
@@ -1151,7 +1165,7 @@ Examples:
         else:
             uri = to_uri(src)
             if uri.startswith("file://"):
-                file_path = uri[len("file://"):]
+                file_path = uri[len("file://") :]
                 if not os.path.exists(file_path):
                     print(f"Error: File not found: {file_path}")
                     sys.exit(1)
