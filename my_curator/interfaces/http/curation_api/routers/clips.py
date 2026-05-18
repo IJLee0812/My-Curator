@@ -145,7 +145,17 @@ async def thumbnail_clip(
     return Response(
         content=data,
         media_type="image/jpeg",
-        headers={"Cache-Control": "max-age=3600"},
+        headers={
+            # Anti-download hardening (#44): suppress the browser's
+            # default "save as" prompt by serving the response inline
+            # with an empty filename, drop disk-cache so the bytes do
+            # not persist after the tab is closed, and block MIME
+            # sniffing so the response cannot be reinterpreted as
+            # another downloadable type.
+            "Content-Disposition": 'inline; filename=""',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

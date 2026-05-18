@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, Film, Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
+import { Film, Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
 
@@ -109,6 +109,8 @@ export default function VideoPlayer({
       <div
         className="aspect-video bg-[#060c18] border-b border-[#1e3a5f] relative group cursor-pointer"
         onClick={togglePlay}
+        onContextMenu={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
       >
         <video
           ref={videoRef}
@@ -117,7 +119,13 @@ export default function VideoPlayer({
           muted
           loop={!isNasStream}
           preload="metadata"
-          className="w-full h-full"
+          controlsList="nodownload noremoteplayback noplaybackrate"
+          disablePictureInPicture
+          disableRemotePlayback
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+          className="w-full h-full select-none"
         />
 
         {/* Play/Pause overlay — always visible when paused, fades in on hover while playing */}
@@ -159,15 +167,9 @@ export default function VideoPlayer({
           <RotateCcw className="w-3 h-3 text-cyan-500/60" />
           {startS.toFixed(2)}s – {endS.toFixed(2)}s
         </span>
-        <a
-          href={videoSrc}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
-          title={blobUri}
-        >
-          <ExternalLink className="w-3 h-3" /> Open MP4
-        </a>
+        <span className="text-slate-600 truncate max-w-[60%]" title={blobUri}>
+          {blobUri.replace(/^file:\/\//, "").replace(/^[a-z]+:\/\//, "")}
+        </span>
       </div>
     </div>
   );

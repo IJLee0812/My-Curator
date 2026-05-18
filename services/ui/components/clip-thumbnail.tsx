@@ -22,7 +22,10 @@ export function ClipThumbnail({
     <img
       src={`${API_BASE}/v1/clips/${clipId}/thumbnail`}
       alt=""
-      className="absolute inset-0 w-full h-full object-cover"
+      className="absolute inset-0 w-full h-full object-cover select-none"
+      draggable={false}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
       onError={() => setError(true)}
     />
   );

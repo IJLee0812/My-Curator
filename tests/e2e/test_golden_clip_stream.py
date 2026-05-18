@@ -91,9 +91,62 @@ def test_clip_stream_accepts_byte_range():
         r = client.get(f"/v1/clips/{clip_id}/stream", headers={"Range": "bytes=0-1023"})
     # 206 partial content OR 200 with Accept-Ranges header.
     assert r.status_code in (200, 206), r.text
-    assert "accept-ranges" in {k.lower() for k in r.headers}
+    headers = {k.lower(): v for k, v in r.headers.items()}
+    assert "accept-ranges" in headers
     if r.status_code == 206:
-        assert "content-range" in {k.lower() for k in r.headers}
+        assert "content-range" in headers
+    # Issue #44: anti-download headers must accompany every successful
+    # stream response — the video player still works (it does not rely on
+    # any Content-Disposition value) but the browser stops offering "save
+    # video as" / disk-cache persistence.
+    assert headers.get("content-disposition") == 'inline; filename=""'
+    assert headers.get("cache-control") == "no-store"
+    assert headers.get("x-content-type-options") == "nosniff"
+
+
+def _pick_clip_with_thumbnail(max_probes: int = 100) -> tuple[str, dict] | None:
+    """Iterate the search corpus until one clip's /thumbnail endpoint returns 200.
+
+    Returns (clip_id, response_headers) on success; None when no clip in the
+    first ``max_probes`` results has frames_blob_uri set.  The corpus is not
+    guaranteed to contain a clip with frames, but in practice the DS pipeline
+    populates it for every segment ≥3 s.
+    """
+    if httpx is None:
+        return None
+    try:
+        r = httpx.post(
+            f"{_API_BASE}/v1/search",
+            json={"query": "scene", "limit": max_probes, "top_k": max_probes * 2},
+            timeout=10.0,
+        )
+        if r.status_code != 200:
+            return None
+        items = r.json().get("results") or []
+    except Exception:
+        return None
+    with httpx.Client(base_url=_API_BASE, timeout=10.0) as client:
+        for item in items:
+            cid = item["clip_id"]
+            resp = client.get(f"/v1/clips/{cid}/thumbnail")
+            if resp.status_code == 200:
+                return cid, {k.lower(): v for k, v in resp.headers.items()}
+    return None
+
+
+def test_clip_thumbnail_emits_anti_download_headers():
+    """Issue #44: /v1/clips/{id}/thumbnail must serve images inline with
+    no-store + nosniff so right-click / drag / cache-scrape paths return
+    bytes the browser refuses to persist as a file."""
+    picked = _pick_clip_with_thumbnail()
+    if picked is None:
+        pytest.skip("no clips with frames in corpus — thumbnail unavailable")
+    _clip_id, headers = picked
+    assert headers.get("content-disposition") == 'inline; filename=""'
+    assert headers.get("cache-control") == "no-store"
+    assert headers.get("x-content-type-options") == "nosniff"
+    # Thumbnail must still be served as a JPEG so the <img> element renders.
+    assert headers.get("content-type", "").startswith("image/")
 
 
 def test_clip_stream_rejects_traversal_blob_uri():

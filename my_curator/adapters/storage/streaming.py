@@ -77,7 +77,18 @@ async def serve_segment(blob_uri: str) -> FileResponse:
     return FileResponse(
         path=str(path),
         media_type="video/mp4",
-        headers={"Accept-Ranges": "bytes"},
+        headers={
+            # Byte-range support stays — it drives the curation console's
+            # video player seek/scrub behaviour.
+            "Accept-Ranges": "bytes",
+            # Anti-download hardening (#44): suppress the browser's
+            # default "save as" prompt, drop disk-cache, and block MIME
+            # sniffing.  Casual right-click / drag / "Open MP4" paths
+            # are also disabled at the React layer in VideoPlayer.tsx.
+            "Content-Disposition": 'inline; filename=""',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
