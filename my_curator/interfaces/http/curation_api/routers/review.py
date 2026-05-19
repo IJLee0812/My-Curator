@@ -15,8 +15,8 @@ from ..deps import get_pg
 
 router = APIRouter()
 
-_VALID_ACTIONS = {"approve", "reject"}
-_ACTION_TO_STATE = {"approve": "approved", "reject": "rejected"}
+_VALID_ACTIONS = {"approve", "reject", "pending"}
+_ACTION_TO_STATE = {"approve": "approved", "reject": "rejected", "pending": "pending"}
 
 
 class ReviewAction(BaseModel):

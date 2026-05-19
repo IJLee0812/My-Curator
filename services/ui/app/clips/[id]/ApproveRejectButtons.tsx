@@ -24,13 +24,22 @@ export default function ApproveRejectButtons({
   const [status, setStatus] = useState<ActiveState>(mapInitial(initialStatus));
   const [loading, setLoading] = useState<"approve" | "reject" | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reverted, setReverted] = useState(false);
 
   const act = async (action: "approve" | "reject") => {
     if (loading) return;
+    // Toggle: clicking the already-active state reverts to pending.
+    const effectiveAction: "approve" | "reject" | "pending" =
+      (action === "approve" && status === "approved") ||
+      (action === "reject"  && status === "rejected")
+        ? "pending"
+        : action;
     setLoading(action);
     try {
-      const res = await reviewClip(clipId, action);
-      setStatus(res.state === "approved" ? "approved" : "rejected");
+      const res = await reviewClip(clipId, effectiveAction);
+      if (res.state === "approved") { setStatus("approved"); setReverted(false); }
+      else if (res.state === "rejected") { setStatus("rejected"); setReverted(false); }
+      else { setStatus(null); setReverted(true); }
     } catch (e) {
       console.error("review action failed", e);
     } finally {
@@ -94,10 +103,11 @@ export default function ApproveRejectButtons({
           Reject
         </button>
       </div>
-      {status && (
+      {(status || reverted) && (
         <div className="text-xs text-slate-400 bg-[#0a1120] rounded-lg p-2 border border-[#1e3a5f]">
           {status === "approved" && "✓ Clip approved — persisted to review_queue."}
           {status === "rejected" && "✗ Clip rejected — persisted to review_queue."}
+          {reverted && !status && "↩ Reverted to pending."}
         </div>
       )}
       <div className="text-xs text-slate-600">DNA v{dnaVersion ?? "—"}</div>
