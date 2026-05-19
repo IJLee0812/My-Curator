@@ -74,11 +74,27 @@ async def search_video(
     query_vec = await asyncio.to_thread(embedder.encode_video, frames_tensor)
     milvus_results = await milvus.search(query_vec, top_k=req.top_k)
 
+    if not milvus_results:
+        return SearchResponse(results=[], total=0)
+
+    clip_ids: list[UUID] = [r["clip_id"] for r in milvus_results]
+    score_map: dict[UUID, float] = {r["clip_id"]: r["score"] for r in milvus_results}
+
+    pg_results = await pg.filter_dna_by_ids(clip_ids, {}, limit=len(clip_ids))
+    ranked = sorted(pg_results, key=lambda r: score_map.get(r["clip_id"], 0.0), reverse=True)
+    ranked = ranked[: req.limit]
+
     results = [
         ClipResult(
             clip_id=str(r["clip_id"]),
-            score=r["score"],
+            score=score_map.get(r["clip_id"], 0.0),
+            dna_json=r.get("dna_json"),
+            start_s=r.get("start_s"),
+            end_s=r.get("end_s"),
+            blob_uri=r.get("blob_uri"),
+            is_gold=r.get("is_gold"),
+            source_clip_id=r.get("source_clip_id"),
         )
-        for r in milvus_results[: req.limit]
+        for r in ranked
     ]
     return SearchResponse(results=results, total=len(results))
