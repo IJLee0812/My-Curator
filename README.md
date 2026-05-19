@@ -3,7 +3,7 @@
 An autonomous driving front-camera **clip curation and validation platform**
 built on NVIDIA DeepStream 9.0. A GPU pipeline segments driving video, annotates
 each clip with a schema-validated **Scenario DNA v0.1** record, and surfaces the
-corpus through a hybrid vector+JSONB search API and a React curation console.
+corpus through a hybrid vector+JSONB search API and a React(Next.js) curation console.
 
 **Live:** [ijlee0812.github.io/My-Curator](https://ijlee0812.github.io/My-Curator)
 
@@ -49,7 +49,7 @@ My-Curator/
 ├── infra/
 │   ├── compose.base.yml          # storage stack — Postgres + Milvus + MinIO + etcd
 │   ├── compose.curate.yml        # curate overlay — Kafka + curation-api + embedder + UI
-│   └── compose.pipeline.yml      # DS pipeline container
+│   └── compose.pipeline.yml      # NVIDIA DeepStream pipeline container
 ├── schemas/                      # scenario_dna_v0_1.schema.json (frozen)
 ├── prompts/                      # scout_cosmos_reason2.v1.md
 ├── configs/                      # nvinfer .txt configs + YAML pipeline config
@@ -61,7 +61,7 @@ My-Curator/
 ## Quickstart
 
 **Prerequisites:** Docker + NVIDIA Container Toolkit · driver 580+ · NGC API key ·  
-2× RTX 4090-class GPUs (GPU 0: curate stack · GPU 1: DS pipeline, ~20 GiB VRAM).
+2× RTX 4090+ GPUs (GPU 0: curate stack · GPU 1: DeepStream pipeline, ~20 GiB VRAM).
 
 ```bash
 git clone https://github.com/IJLee0812/My-Curator.git
@@ -80,7 +80,7 @@ docker compose --env-file .env \
 - Curation console → `http://localhost:3000`
 - curation-api → `http://localhost:8001`
 
-**Run the DS pipeline:**
+**Run the NVIDIA DeepStream ETL pipeline:**
 
 ```bash
 docker compose --env-file .env -f infra/compose.pipeline.yml run --rm \

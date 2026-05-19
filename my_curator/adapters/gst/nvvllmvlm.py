@@ -1014,24 +1014,28 @@ class NvVllmVLM(GstBase.BaseTransform):
                 result_text = self._run_vlm_batch(segment, request.prompt_config)  # noqa: BLK100
                 if result_text:
                     if ctx:
-                        ctx.update_result(result_text, start_sec, end_sec)
-                        print(
-                            f"{GST_PLUGIN_NAME}{stream_label}: Completed "
-                            f"(total: {ctx.segments_completed})"
-                        )
                         # Print full result with timestamp prefix
                         print(
                             f"{GST_PLUGIN_NAME}{stream_label}: Result: "
                             f"{start_sec:.2f}s-{end_sec:.2f}s {result_text}"
                         )
 
-                        # Emit signal with result
+                        # Emit signal with result — Scout N=3 aggregation and
+                        # Kafka publish happen synchronously inside on_vlm_result.
+                        # update_result() must follow so do_stop()'s wait loop
+                        # does not break before the publish completes.
                         self.emit(
                             "vlm-result",
                             stream_id,
                             start_sec,
                             end_sec,
                             result_text,
+                        )
+
+                        ctx.update_result(result_text, start_sec, end_sec)
+                        print(
+                            f"{GST_PLUGIN_NAME}{stream_label}: Completed "
+                            f"(total: {ctx.segments_completed})"
                         )
                 else:
                     print(f"{GST_PLUGIN_NAME}{stream_label}: VLM returned empty result")

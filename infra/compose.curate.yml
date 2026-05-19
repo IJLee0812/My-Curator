@@ -226,6 +226,9 @@ services:
       PG_PORT: "5432"
       PG_DB: "curation"
       KAFKA_BROKER: "my-curator-kafka:29092"
+      VIDEO_DATA_ROOT: "${VIDEO_DATA_ROOT:-/tmp}"
+    volumes:
+      - "${VIDEO_DATA_ROOT:-/tmp}:${VIDEO_DATA_ROOT:-/tmp}:rw"
     command: ["python3", "-m", "my_curator.cli.run_curation_consumer", "--timeout", "0"]
     networks:
       - curation-net

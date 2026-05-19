@@ -279,7 +279,7 @@ export async function searchByVideo(
 
 export async function reviewClip(
   clipId: string,
-  action: "approve" | "reject",
+  action: "approve" | "reject" | "pending",
 ): Promise<{ clip_id: string; state: string }> {
   return patchJSON<{ clip_id: string; state: string }>(`/v1/clips/${clipId}/review`, { action });
 }

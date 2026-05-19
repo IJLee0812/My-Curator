@@ -15,10 +15,13 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   // Next 16: dynamic route params arrive as a Promise.
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 };
 
-export default async function ClipDetailPage({ params }: PageProps) {
+export default async function ClipDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { from } = await searchParams;
+  const backHref = from === "review" ? "/review" : "/search";
 
   let clip;
   try {
@@ -37,7 +40,7 @@ export default async function ClipDetailPage({ params }: PageProps) {
       {/* back + title */}
       <div className="flex items-center gap-3">
         <Link
-          href="/search"
+          href={backHref}
           className="p-2 rounded-lg hover:bg-[#111f36] transition-colors shrink-0"
         >
           <ArrowLeft className="w-4 h-4 text-slate-400" />

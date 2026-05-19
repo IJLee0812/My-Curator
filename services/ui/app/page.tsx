@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Activity,
-  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
@@ -122,12 +121,9 @@ export default async function DashboardPage() {
     rejected: 0,
     rejected_schema_invalid: 0,
   };
-  const dnaPassRate = stats?.dna_pass_rate ?? 0;
+  const dnaPassRate = stats?.dna_pass_rate ?? null;
   const vectorCount = collection?.vector_count ?? 0;
-
-  const criticalCount = clips.filter(
-    (c) => c.dna_json?.planner_logic?.risk_level === "critical",
-  ).length;
+  const decided = review.approved + review.rejected + review.rejected_schema_invalid;
 
   const apiStatus: "ok" | "warn" | "off" =
     health === "ok" ? "ok" : health === "loading" ? "warn" : "off";
@@ -172,15 +168,15 @@ export default async function DashboardPage() {
         />
         <StatCard
           label="DNA Pass Rate"
-          value={`${(dnaPassRate * 100).toFixed(1)}%`}
-          sub="approved / decided"
+          value={decided === 0 || dnaPassRate === null ? "N/A" : `${(dnaPassRate * 100).toFixed(1)}%`}
+          sub={decided === 0 ? "no decisions yet" : "approved / decided"}
           icon={CheckCircle2}
           accent="bg-green-500/15 text-green-400"
         />
       </div>
 
       {/* middle row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* review breakdown */}
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
@@ -210,36 +206,6 @@ export default async function DashboardPage() {
           <Link href="/review" className="mt-2 flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300">
             View queue <ArrowRight className="w-3 h-3" />
           </Link>
-        </div>
-
-        {/* risk distribution (recent clips) */}
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400" /> Risk Distribution (recent)
-          </h2>
-          {(["nominal", "elevated", "critical"] as const).map((level) => {
-            const count = clips.filter(
-              (c) => c.dna_json?.planner_logic?.risk_level === level,
-            ).length;
-            const pct = clips.length > 0 ? Math.round((count / clips.length) * 100) : 0;
-            const hex =
-              level === "critical" ? "#ef4444" : level === "elevated" ? "#f59e0b" : "#22c55e";
-            return (
-              <div key={level} className="mb-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="capitalize text-slate-400">{level}</span>
-                  <span className="text-slate-500">{count} ({pct}%)</span>
-                </div>
-                <div className="h-2 bg-[#1e3a5f] rounded-full">
-                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.8 }} />
-                </div>
-              </div>
-            );
-          })}
-          <div className="mt-3 pt-3 border-t border-[#1e3a5f] text-xs text-slate-500">
-            <span className="text-red-400 font-semibold">{criticalCount} critical</span> in the last
-            {" "}{clips.length} clip{clips.length === 1 ? "" : "s"}
-          </div>
         </div>
 
         {/* system status */}

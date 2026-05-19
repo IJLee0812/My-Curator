@@ -15,8 +15,12 @@ helpers.  KafkaConsumer wiring + argparse + entrypoint live in
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
+import os
+import struct
+import subprocess
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +28,44 @@ from pathlib import Path
 from my_curator.domain.scout.versioning import resolve_dna_version
 
 log = logging.getLogger(__name__)
+
+
+def _moov_at_end(path: Path) -> bool:
+    """Return True if the MP4 moov box comes after mdat (needs faststart)."""
+    try:
+        with path.open("rb") as f:
+            while True:
+                header = f.read(8)
+                if len(header) < 8:
+                    return False
+                size, box_type = struct.unpack(">I4s", header)
+                name = box_type.decode("ascii", errors="replace")
+                if name == "moov":
+                    return False
+                if name == "mdat":
+                    return True
+                if size < 8:
+                    return False
+                f.seek(f.tell() - 8 + size)
+    except OSError:
+        return False
+
+
+def _run_faststart(path: Path) -> None:
+    """Apply ffmpeg -movflags +faststart in-place (blocking, run in thread)."""
+    tmp = path.with_suffix(".faststart.tmp.mp4")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(path), "-c", "copy", "-movflags", "+faststart", str(tmp)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        tmp.replace(path)
+        log.info("faststart applied: %s", path.name)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        log.warning("faststart failed for %s — skipping", path.name, exc_info=True)
 
 _SCOUT_PROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
@@ -110,6 +152,10 @@ class CurationConsumer:
         # provides it; fall back to stream:// for legacy messages without path info.
         _svp = data.get("source_video_path")
         blob_uri = f"file://{_svp}" if _svp else f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        if _svp and (video_root := os.environ.get("VIDEO_DATA_ROOT")):
+            abs_path = Path(video_root) / _svp.lstrip("/")
+            if abs_path.exists() and _moov_at_end(abs_path):
+                await asyncio.to_thread(_run_faststart, abs_path)
         frames_blob_uri = data.get("frames_blob_uri")
         # P3-4: link the segment back to its original source clip identifier
         # when the publisher provides one.  Stays NULL otherwise (column is nullable).
