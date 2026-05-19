@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Film, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Film, Loader2 } from "lucide-react";
 
 import { listClips } from "@/lib/api";
 import type { ClipSummary } from "@/lib/api";
@@ -64,6 +64,39 @@ export default function RecentClipsSection({
           </Link>
         </div>
       </div>
+
+      {/* risk distribution — live with count selector */}
+      {clips.length > 0 && (
+        <div className="card p-5 mb-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" /> Risk Distribution (recent {count})
+          </h2>
+          {(["nominal", "elevated", "critical"] as const).map((level) => {
+            const n = clips.filter(
+              (c) => c.dna_json?.planner_logic?.risk_level === level,
+            ).length;
+            const pct = clips.length > 0 ? Math.round((n / clips.length) * 100) : 0;
+            const hex =
+              level === "critical" ? "#ef4444" : level === "elevated" ? "#f59e0b" : "#22c55e";
+            return (
+              <div key={level} className="mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="capitalize text-slate-400">{level}</span>
+                  <span className="text-slate-500">{n} ({pct}%)</span>
+                </div>
+                <div className="h-2 bg-[#1e3a5f] rounded-full">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.8 }} />
+                </div>
+              </div>
+            );
+          })}
+          <div className="mt-3 pt-3 border-t border-[#1e3a5f] text-xs text-slate-500">
+            <span className="text-red-400 font-semibold">
+              {clips.filter((c) => c.dna_json?.planner_logic?.risk_level === "critical").length} critical
+            </span>{" "}in the last {clips.length} clip{clips.length === 1 ? "" : "s"}
+          </div>
+        </div>
+      )}
 
       {clips.length === 0 && !loading ? (
         <div className="card p-6 text-center text-xs text-slate-500">

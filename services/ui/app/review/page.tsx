@@ -36,6 +36,7 @@ export default function ReviewQueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<Set<string>>(new Set());
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,9 +57,14 @@ export default function ReviewQueuePage() {
     setActing((s) => new Set(s).add(clipId));
     try {
       const res = await reviewClip(clipId, action);
-      setItems((prev) =>
-        prev.map((i) => (i.clip_id === clipId ? { ...i, state: res.state } : i))
-      );
+      // Start exit animation, then commit state change after transition completes.
+      setDismissing((s) => new Set(s).add(clipId));
+      setTimeout(() => {
+        setItems((prev) =>
+          prev.map((i) => (i.clip_id === clipId ? { ...i, state: res.state } : i))
+        );
+        setDismissing((s) => { const n = new Set(s); n.delete(clipId); return n; });
+      }, 320);
     } catch (e) {
       console.error("review action failed", e);
     } finally {
@@ -146,13 +152,16 @@ export default function ReviewQueuePage() {
               const cfg = TAB_CONFIG[stateKey] ?? TAB_CONFIG.pending;
               const isPending = item.state === "pending";
               const isActing = acting.has(item.clip_id);
+              const isDismissing = dismissing.has(item.clip_id);
               const risk = item.dna_json?.planner_logic?.risk_level ?? "nominal";
 
               return (
                 <div
                   key={item.queue_id}
-                  className="card p-4 flex gap-4 items-start cursor-pointer hover:border-slate-600 transition-colors"
-                  onClick={() => router.push(`/clips/${item.clip_id}`)}
+                  className={`card p-4 flex gap-4 items-start cursor-pointer hover:border-slate-600 transition-all duration-300 ${
+                    isDismissing ? "opacity-0 translate-x-8 pointer-events-none" : "opacity-100 translate-x-0"
+                  }`}
+                  onClick={() => router.push(`/clips/${item.clip_id}?from=review`)}
                 >
                   {/* queue id + state */}
                   <div className="shrink-0 flex flex-col items-center gap-2 w-20">

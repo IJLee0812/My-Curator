@@ -62,13 +62,20 @@ export default function VideoPlayer({
     if (!video || !isNasStream) return;
     const onLoadedMetadata = () => { video.currentTime = startS; };
     const onTimeUpdate = () => { if (video.currentTime >= endS) video.currentTime = startS; };
-    const onPlay = () => { if (video.currentTime >= endS) video.currentTime = startS; };
+    // When endS equals the file's natural duration, the browser fires `ended`
+    // before `timeupdate` can seek back.  `ended` also resets currentTime to 0
+    // before the next `play` event, so the >= endS guard in onPlay would miss.
+    // Fix: handle `ended` explicitly (restart loop) and also catch currentTime < startS.
+    const onEnded = () => { video.currentTime = startS; video.play(); };
+    const onPlay  = () => { if (video.currentTime < startS || video.currentTime >= endS) video.currentTime = startS; };
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("timeupdate",     onTimeUpdate);
+    video.addEventListener("ended",          onEnded);
     video.addEventListener("play",           onPlay);
     return () => {
       video.removeEventListener("loadedmetadata", onLoadedMetadata);
       video.removeEventListener("timeupdate",     onTimeUpdate);
+      video.removeEventListener("ended",          onEnded);
       video.removeEventListener("play",           onPlay);
     };
   }, [isNasStream, startS, endS]);
