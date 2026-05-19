@@ -30,7 +30,7 @@ class StatsResponse(BaseModel):
     scenario_dna_count: int
     vector_count: int
     review: ReviewCounts
-    dna_pass_rate: float
+    dna_pass_rate: float | None
 
 
 @router.get("/v1/stats", response_model=StatsResponse)

@@ -535,8 +535,8 @@ class PGRepository:
                            "rejected_schema_invalid": int},
                 "dna_pass_rate": float}``.
 
-            ``dna_pass_rate`` is ``approved / (approved + rejected + schema_invalid)``
-            with a ``1.0`` floor when no decisions have been recorded yet.
+            ``dna_pass_rate`` is ``approved / (approved + rejected + schema_invalid)``,
+            or ``None`` when no decisions have been recorded yet.
         """
         total_clips = await self._pool.fetchval("SELECT count(*) FROM clips")
         scenario_dna_count = await self._pool.fetchval("SELECT count(*) FROM scenario_dna")
@@ -554,7 +554,7 @@ class PGRepository:
             if state in review:
                 review[state] = int(r["n"])
         decided = review["approved"] + review["rejected"] + review["rejected_schema_invalid"]
-        dna_pass_rate = float(review["approved"]) / decided if decided else 1.0
+        dna_pass_rate = float(review["approved"]) / decided if decided else None
         return {
             "total_clips": int(total_clips or 0),
             "scenario_dna_count": int(scenario_dna_count or 0),
