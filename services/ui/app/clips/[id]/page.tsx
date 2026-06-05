@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import DnaAccordion from "@/components/dna-accordion";
 import { RiskBadge } from "@/components/dna-badges";
 import { getClip } from "@/lib/api";
 
 import ApproveRejectButtons from "./ApproveRejectButtons";
+import BackButton from "./BackButton";
 import SimilarClipsPanel from "./SimilarClipsPanel";
 import VideoPlayer from "./VideoPlayer";
 
@@ -39,12 +38,7 @@ export default async function ClipDetailPage({ params, searchParams }: PageProps
     <div className="p-4 sm:p-6 space-y-5 w-full">
       {/* back + title */}
       <div className="flex items-center gap-3">
-        <Link
-          href={backHref}
-          className="p-2 rounded-lg hover:bg-[#111f36] transition-colors shrink-0"
-        >
-          <ArrowLeft className="w-4 h-4 text-slate-400" />
-        </Link>
+        <BackButton fallback={backHref} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-sm sm:text-base font-bold text-slate-100 font-mono truncate">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronDown,
   ChevronLeft,
@@ -100,7 +101,7 @@ function FilterGroup({
   );
 }
 
-export default function SearchPage() {
+function SearchPageInner() {
   const [query, setQuery] = useState("");
   const [weather, setWeather] = useState<Set<string>>(new Set());
   const [lighting, setLighting] = useState<Set<string>>(new Set());
@@ -116,6 +117,10 @@ export default function SearchPage() {
 
   const [perPage, setPerPage] = useState<PageSize>(20);
   const [page, setPage] = useState(1);
+  const [initialized, setInitialized] = useState(false);
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const totalPages = Math.max(1, Math.ceil(allResults.length / perPage));
   const pageResults = allResults.slice((page - 1) * perPage, page * perPage);
@@ -143,6 +148,7 @@ export default function SearchPage() {
     setSubmitted(false);
     setError(null);
     setPage(1);
+    router.replace("/search");
   };
 
   const activeFilterCount =
@@ -161,8 +167,18 @@ export default function SearchPage() {
         risk_level: risk,
         ego_maneuver: maneuver,
       });
-      const data = await searchClips(query, filters, 500);
+      const data = await searchClips(query, filters, query.trim() ? 20 : 500);
       setAllResults(data.results);
+      // Sync filter state to URL so router.back() can restore it
+      const params = new URLSearchParams();
+      if (query) params.set("q", query);
+      [...weather].forEach((v) => params.append("weather", v));
+      [...lighting].forEach((v) => params.append("lighting", v));
+      [...road].forEach((v) => params.append("road_type", v));
+      [...risk].forEach((v) => params.append("risk_level", v));
+      [...maneuver].forEach((v) => params.append("ego_maneuver", v));
+      const qs = params.toString();
+      router.replace(qs ? `/search?${qs}` : "/search");
     } catch (e) {
       console.error(e);
       setError(
@@ -183,6 +199,32 @@ export default function SearchPage() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weather, lighting, road, risk, maneuver]);
+
+  // Restore filter state from URL params on mount (e.g., after router.back()).
+  useEffect(() => {
+    const q = searchParams.get("q") ?? "";
+    const w = new Set(searchParams.getAll("weather"));
+    const l = new Set(searchParams.getAll("lighting"));
+    const ro = new Set(searchParams.getAll("road_type"));
+    const ri = new Set(searchParams.getAll("risk_level"));
+    const m = new Set(searchParams.getAll("ego_maneuver"));
+    if (q || w.size || l.size || ro.size || ri.size || m.size) {
+      setQuery(q);
+      setWeather(w);
+      setLighting(l);
+      setRoad(ro);
+      setRisk(ri);
+      setManeuver(m);
+      setInitialized(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-run search once after URL-based state restoration.
+  useEffect(() => {
+    if (initialized) runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized]);
 
   // Reset to first page when perPage changes.
   useEffect(() => {
@@ -452,5 +494,13 @@ export default function SearchPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense>
+      <SearchPageInner />
+    </Suspense>
   );
 }
