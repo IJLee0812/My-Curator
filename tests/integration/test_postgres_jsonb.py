@@ -355,8 +355,8 @@ async def test_list_clips_respects_limit(repo: PGRepository):
     assert isinstance(rows_zero, list)
 
 
-async def test_get_stats_empty_returns_one_pass_rate(repo: PGRepository):
-    """get_stats returns 1.0 dna_pass_rate when no review decisions exist (P3-4)."""
+async def test_get_stats_empty_returns_none_pass_rate(repo: PGRepository):
+    """get_stats returns None dna_pass_rate when no review decisions exist (P3-2)."""
     stats = await repo.get_stats()
     assert stats["total_clips"] == 0
     assert stats["scenario_dna_count"] == 0
@@ -366,7 +366,7 @@ async def test_get_stats_empty_returns_one_pass_rate(repo: PGRepository):
         "rejected": 0,
         "rejected_schema_invalid": 0,
     }
-    assert stats["dna_pass_rate"] == 1.0
+    assert stats["dna_pass_rate"] is None
 
 
 async def test_get_stats_counts_review_states(repo: PGRepository):
