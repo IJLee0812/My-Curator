@@ -1,4 +1,4 @@
-"""Post-aggregator JSON-Schema validator for Scenario DNA v0.1 (P2-6).
+"""Post-aggregator JSON-Schema validator for Scenario DNA (P2-6; multi-version dispatch P4-1).
 
 Importable without GStreamer, CUDA, or torch — safe for unit tests on the host.
 """
@@ -13,18 +13,35 @@ from typing import Any
 import jsonschema
 import jsonschema.validators
 
-_SCHEMA_PATH = (
-    Path(__file__).parent.parent.parent.parent / "schemas" / "scenario_dna_v0_1.schema.json"
-)
+_SCHEMA_DIR = Path(__file__).parent.parent.parent.parent / "schemas"
+
+# dna_version -> schema filename. Every registered version is loaded and compiled
+# once at construction; ``validate`` dispatches on the document's dna_version.
+_SCHEMA_FILES: dict[str, str] = {
+    "0.1.0": "scenario_dna_v0_1.schema.json",
+    "0.2.0": "scenario_dna_v0_2.schema.json",
+}
 _CODE_FENCE_RE = re.compile(r"```json\s*(.*?)```", re.DOTALL)
 
 
 class DNAValidator:
-    """Post-aggregator JSON-Schema validator for Scenario DNA v0.1."""
+    """Post-aggregator JSON-Schema validator with dna_version-based dispatch.
+
+    Loads every registered Scenario DNA schema once at construction and compiles
+    one validator per version. ``validate`` dispatches on the document's
+    ``dna_version``; an unknown or missing version is an explicit failure, never
+    a silent fallback to v0.1.
+    """
 
     def __init__(self) -> None:
-        raw = _SCHEMA_PATH.read_text(encoding="utf-8")
-        self._schema: dict[str, Any] = json.loads(raw)
+        self._schemas: dict[str, dict[str, Any]] = {}
+        self._validators: dict[str, Any] = {}
+        for version, filename in _SCHEMA_FILES.items():
+            raw = (_SCHEMA_DIR / filename).read_text(encoding="utf-8")
+            schema = json.loads(raw)
+            cls = jsonschema.validators.validator_for(schema)
+            self._schemas[version] = schema
+            self._validators[version] = cls(schema)
 
     def extract_json(self, text: str) -> dict[str, Any] | None:
         """3-stage extraction from CoT output.
@@ -53,13 +70,20 @@ class DNAValidator:
         return None
 
     def validate(self, dna: dict[str, Any]) -> tuple[bool, list[str]]:
-        """Validate *dna* against scenario_dna_v0_1.schema.json.
+        """Validate *dna* against the schema for its ``dna_version``.
 
-        Schema is loaded once at __init__ — no repeated disk I/O.
+        Dispatches on ``dna["dna_version"]``. A missing or unregistered version
+        is an explicit failure (no v0.1 fallback). Schemas are compiled once at
+        __init__ — no repeated disk I/O.
         Returns (is_valid, [error_messages]).
         """
-        cls = jsonschema.validators.validator_for(self._schema)
-        validator = cls(self._schema)
+        version = dna.get("dna_version") if isinstance(dna, dict) else None
+        validator = self._validators.get(version) if isinstance(version, str) else None
+        if validator is None:
+            return False, [
+                f"unknown or missing dna_version: {version!r} "
+                f"(registered versions: {sorted(self._validators)})"
+            ]
         errors = sorted(validator.iter_errors(dna), key=lambda e: list(e.path))
         if errors:
             return False, [e.message for e in errors]
