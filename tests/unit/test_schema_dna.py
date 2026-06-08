@@ -861,3 +861,337 @@ def test_property_valid_dna_passes(validator, doc):
 def test_property_corrupted_dna_fails(validator, doc):
     """500 deterministically corrupted DNAs must all fail schema validation."""
     assert _fails(validator, doc), f"Corrupted doc unexpectedly passed validation: {doc}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Scenario DNA v0.2 (P4-1) — additive: scene_description, planner_logic.{risk_level_rationale,
+# safety_event}. Appended below the v0.1 block; zero v0.1 lines above are modified.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SCHEMA_PATH_V02 = pathlib.Path(__file__).parents[2] / "schemas" / "scenario_dna_v0_2.schema.json"
+
+_EVENT_TYPE = ["none", "near_miss", "hard_brake", "evasive_swerve", "collision"]
+_COLLISION_TYPE = [
+    "head_on",
+    "rear_end",
+    "t_bone",
+    "sideswipe",
+    "single_vehicle",
+    "vru_struck",
+    "none",
+]
+_SEVERITY = ["no_harm", "minor", "major", "fatal"]
+_REQUIRED_TOP_LEVEL_V02 = _REQUIRED_TOP_LEVEL + ["scene_description"]
+
+
+@pytest.fixture(scope="module")
+def schema_v02() -> dict:
+    return json.loads(SCHEMA_PATH_V02.read_text())
+
+
+@pytest.fixture(scope="module")
+def validator_v02(schema_v02):
+    import jsonschema
+
+    return jsonschema.Draft202012Validator(schema_v02)
+
+
+def _valid_doc_v02() -> dict:
+    """Minimal fully-valid Scenario DNA v0.2 document (routine nominal clip)."""
+    doc = _valid_doc()
+    doc["dna_version"] = "0.2.0"
+    doc["scene_description"] = (
+        "Clear-day cruise on a two-lane primary road with no active intersection. "
+        "Ego maintains a steady following gap with no notable actor interactions. "
+        "Routine segment; no safety-relevant event observed."
+    )
+    doc["planner_logic"]["risk_level_rationale"] = (
+        "Clear primary road, no actors within 50 m, ego cruise within posted limit."
+    )
+    doc["planner_logic"]["safety_event"] = {
+        "has_event": False,
+        "event_type": "none",
+        "collision_type": None,
+        "severity_estimate": None,
+    }
+    return doc
+
+
+# ── v0.2 schema file integrity ──────────────────────────────────────────────────
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_schema_v02_file_is_valid_json():
+    data = json.loads(SCHEMA_PATH_V02.read_text())
+    assert data["title"] == "Scenario DNA v0.2"
+    assert data["properties"]["dna_version"]["const"] == "0.2.0"
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_full_valid_document(validator_v02):
+    assert not _fails(validator_v02, _valid_doc_v02())
+
+
+# ── v0.2 new required fields ────────────────────────────────────────────────────
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["scene_description"])
+def test_v02_missing_top_level_field_fails(validator_v02, field):
+    doc = _valid_doc_v02()
+    del doc[field]
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["risk_level_rationale", "safety_event"])
+def test_v02_missing_planner_logic_field_fails(validator_v02, field):
+    doc = _valid_doc_v02()
+    del doc["planner_logic"][field]
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "field", ["has_event", "event_type", "collision_type", "severity_estimate"]
+)
+def test_v02_missing_safety_event_field_fails(validator_v02, field):
+    doc = _valid_doc_v02()
+    del doc["planner_logic"]["safety_event"][field]
+    assert _fails(validator_v02, doc)
+
+
+# ── v0.2 length constraints (scene_description <= 500, no min; rationale <= 300) ──
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_scene_description_empty_allowed(validator_v02):
+    doc = _valid_doc_v02()
+    doc["scene_description"] = ""  # no minLength constraint
+    assert not _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_scene_description_max_500(validator_v02):
+    doc = _valid_doc_v02()
+    doc["scene_description"] = "x" * 500
+    assert not _fails(validator_v02, doc)
+    doc["scene_description"] = "x" * 501
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_risk_level_rationale_max_300(validator_v02):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["risk_level_rationale"] = "x" * 300
+    assert not _fails(validator_v02, doc)
+    doc["planner_logic"]["risk_level_rationale"] = "x" * 301
+    assert _fails(validator_v02, doc)
+
+
+# ── v0.2 safety_event structural invariants (if/then) ───────────────────────────
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_collision_with_null_collision_type_allowed(validator_v02):
+    # collision + collision_type=null = indeterminate, MUST be accepted.
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"] = {
+        "has_event": True,
+        "event_type": "collision",
+        "collision_type": None,
+        "severity_estimate": "major",
+    }
+    assert not _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize("ctype", _COLLISION_TYPE)
+def test_v02_collision_with_typed_collision_type_allowed(validator_v02, ctype):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"] = {
+        "has_event": True,
+        "event_type": "collision",
+        "collision_type": ctype,
+        "severity_estimate": "minor",
+    }
+    assert not _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_none_with_nonnull_severity_fails(validator_v02):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"]["severity_estimate"] = "minor"  # event_type=none
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize("etype", ["near_miss", "hard_brake", "evasive_swerve"])
+def test_v02_noncollision_with_collision_type_fails(validator_v02, etype):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"] = {
+        "has_event": True,
+        "event_type": etype,
+        "collision_type": "rear_end",  # only allowed when event_type=collision
+        "severity_estimate": "minor",
+    }
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@pytest.mark.parametrize("etype", ["near_miss", "hard_brake", "evasive_swerve", "collision"])
+def test_v02_nonnone_with_null_severity_fails(validator_v02, etype):
+    # Bidirectional: severity_estimate=null is allowed ONLY when event_type=none.
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"] = {
+        "has_event": True,
+        "event_type": etype,
+        "collision_type": None,
+        "severity_estimate": None,
+    }
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_additional_property_blocked(validator_v02):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"]["_extra_"] = "nope"
+    assert _fails(validator_v02, doc)
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+def test_v02_invalid_event_type_fails(validator_v02):
+    doc = _valid_doc_v02()
+    doc["planner_logic"]["safety_event"]["event_type"] = "__invalid__"
+    assert _fails(validator_v02, doc)
+
+
+# ── v0.2 property-based (Hypothesis 500 valid / 500 corrupted) ──────────────────
+
+
+@st.composite
+def _safety_event_st(draw):
+    event_type = draw(st.sampled_from(_EVENT_TYPE))
+    if event_type == "none":
+        collision_type = None
+        severity = None
+    elif event_type == "collision":
+        collision_type = draw(st.sampled_from(_COLLISION_TYPE + [None]))
+        severity = draw(st.sampled_from(_SEVERITY))
+    else:  # near_miss / hard_brake / evasive_swerve
+        collision_type = None
+        severity = draw(st.sampled_from(_SEVERITY))
+    return {
+        "has_event": draw(st.booleans()),  # schema does not couple has_event to event_type
+        "event_type": event_type,
+        "collision_type": collision_type,
+        "severity_estimate": severity,
+    }
+
+
+@st.composite
+def _valid_dna_v02_st(draw):
+    doc = copy.deepcopy(draw(_valid_dna_st))
+    doc["dna_version"] = "0.2.0"
+    doc["scene_description"] = draw(st.text(max_size=500))
+    doc["planner_logic"]["risk_level_rationale"] = draw(st.text(max_size=300))
+    doc["planner_logic"]["safety_event"] = draw(_safety_event_st())
+    return doc
+
+
+_V02_CORRUPTIONS = [
+    "enum",
+    "missing_required_top",
+    "extra_field",
+    "out_of_range",
+    "scene_too_long",
+    "rationale_too_long",
+    "missing_scene",
+    "missing_rationale",
+    "missing_safety_event",
+    "bad_event_type",
+    "none_with_severity",
+    "noncollision_with_collision_type",
+    "nonnone_with_null_severity",
+]
+
+
+@st.composite
+def _corrupt_dna_v02_st(draw):
+    doc = draw(_valid_dna_v02_st())
+    se = doc["planner_logic"]["safety_event"]
+    strategy = draw(st.sampled_from(_V02_CORRUPTIONS))
+    if strategy == "enum":
+        parent, key = draw(st.sampled_from(_ENUM_PATHS))
+        doc[parent][key] = "__invalid_enum_value__"
+    elif strategy == "missing_required_top":
+        del doc[draw(st.sampled_from(_REQUIRED_TOP_LEVEL_V02))]
+    elif strategy == "extra_field":
+        doc["_undeclared_field_"] = "corrupted"
+    elif strategy == "out_of_range":
+        parent, key = draw(st.sampled_from(_CONFIDENCE_PATHS))
+        doc[parent][key] = draw(
+            st.one_of(
+                st.floats(min_value=1.0001, max_value=1e6, allow_nan=False, allow_infinity=False),
+                st.floats(min_value=-1e6, max_value=-0.0001, allow_nan=False, allow_infinity=False),
+            )
+        )
+    elif strategy == "scene_too_long":
+        doc["scene_description"] = "x" * 501
+    elif strategy == "rationale_too_long":
+        doc["planner_logic"]["risk_level_rationale"] = "x" * 301
+    elif strategy == "missing_scene":
+        del doc["scene_description"]
+    elif strategy == "missing_rationale":
+        del doc["planner_logic"]["risk_level_rationale"]
+    elif strategy == "missing_safety_event":
+        del doc["planner_logic"]["safety_event"]
+    elif strategy == "bad_event_type":
+        se["event_type"] = "__invalid__"
+    elif strategy == "none_with_severity":
+        se["event_type"] = "none"
+        se["collision_type"] = None
+        se["severity_estimate"] = "minor"  # null required when event_type=none
+    elif strategy == "noncollision_with_collision_type":
+        se["event_type"] = "near_miss"
+        se["collision_type"] = "rear_end"  # must be null when event_type!=collision
+        se["severity_estimate"] = "minor"
+    else:  # nonnone_with_null_severity
+        se["event_type"] = "hard_brake"
+        se["collision_type"] = None
+        se["severity_estimate"] = None  # non-null required when event_type!=none
+    return doc
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+@given(doc=_valid_dna_v02_st())
+def test_property_valid_dna_v02_passes(validator_v02, doc):
+    """500 randomly generated valid Scenario DNA v0.2 documents must all pass."""
+    errors = list(validator_v02.iter_errors(doc))
+    assert errors == [], [e.message for e in errors]
+
+
+@pytest.mark.schema
+@pytest.mark.unit
+@settings(max_examples=500, suppress_health_check=[HealthCheck.too_slow])
+@given(doc=_corrupt_dna_v02_st())
+def test_property_corrupted_dna_v02_fails(validator_v02, doc):
+    """500 deterministically corrupted v0.2 DNAs must all fail schema validation."""
+    assert _fails(validator_v02, doc), f"Corrupted v0.2 doc unexpectedly passed: {doc}"

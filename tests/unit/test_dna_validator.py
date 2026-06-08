@@ -51,6 +51,27 @@ _VALID_DNA: dict = {
     },
 }
 
+_VALID_DNA_V02: dict = {
+    **copy.deepcopy(_VALID_DNA),
+    "dna_version": "0.2.0",
+    "scene_description": (
+        "Clear-day cruise on a two-lane primary road with no active intersection. "
+        "Ego maintains a steady following gap with no notable actor interactions. "
+        "Routine segment; no safety-relevant event observed."
+    ),
+    "planner_logic": {
+        "ego_maneuver": "cruise",
+        "risk_level": "nominal",
+        "risk_level_rationale": "Clear primary road, no actors within 50 m, ego cruise within limit.",
+        "safety_event": {
+            "has_event": False,
+            "event_type": "none",
+            "collision_type": None,
+            "severity_estimate": None,
+        },
+    },
+}
+
 _COT_PREFIX = (
     "Let me analyze the scene step by step.\n\n"
     "Weather: The sky appears clear with good visibility.\n"
@@ -69,6 +90,11 @@ def validator() -> DNAValidator:
 @pytest.fixture
 def valid_dna() -> dict:
     return copy.deepcopy(_VALID_DNA)
+
+
+@pytest.fixture
+def valid_dna_v02() -> dict:
+    return copy.deepcopy(_VALID_DNA_V02)
 
 
 # ---------------------------------------------------------------------------
@@ -219,9 +245,16 @@ class TestValidate:
         ok, errors = validator.validate(valid_dna)
         assert ok is False
 
-    def test_dna_version_const_enforced(self, validator, valid_dna):
+    def test_v01_doc_with_v01_version_passes(self, validator, valid_dna):
+        # A well-formed v0.1 document validates under its own version.
+        ok, _ = validator.validate(valid_dna)
+        assert ok is True
+
+    def test_v01_doc_mislabelled_as_v02_fails(self, validator, valid_dna):
+        # A v0.1-shaped doc claiming dna_version 0.2.0 is dispatched to the v0.2
+        # validator and fails on the missing v0.2-required fields.
         valid_dna["dna_version"] = "0.2.0"
-        ok, errors = validator.validate(valid_dna)
+        ok, _ = validator.validate(valid_dna)
         assert ok is False
 
     def test_confidence_out_of_range_fails(self, validator, valid_dna):
@@ -240,6 +273,48 @@ class TestValidate:
         ok, errors = validator.validate(valid_dna)
         assert ok is False
         assert len(errors) >= 2
+
+
+# ---------------------------------------------------------------------------
+# TestVersionDispatch (P4-1 multi-version routing)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.schema
+class TestVersionDispatch:
+    def test_v01_doc_routes_to_v01_validator(self, validator, valid_dna):
+        ok, errors = validator.validate(valid_dna)
+        assert ok is True
+        assert errors == []
+
+    def test_v02_doc_routes_to_v02_validator(self, validator, valid_dna_v02):
+        ok, errors = validator.validate(valid_dna_v02)
+        assert ok is True
+        assert errors == []
+
+    def test_v02_fields_rejected_under_v01(self, validator, valid_dna):
+        # v0.2-only fields on a v0.1-versioned doc violate additionalProperties:false.
+        valid_dna["scene_description"] = "should not be allowed under v0.1"
+        ok, _ = validator.validate(valid_dna)
+        assert ok is False
+
+    def test_unknown_version_is_explicit_error(self, validator, valid_dna_v02):
+        valid_dna_v02["dna_version"] = "9.9.9"
+        ok, errors = validator.validate(valid_dna_v02)
+        assert ok is False
+        assert any("dna_version" in e for e in errors)
+
+    def test_missing_version_is_explicit_error(self, validator, valid_dna_v02):
+        del valid_dna_v02["dna_version"]
+        ok, errors = validator.validate(valid_dna_v02)
+        assert ok is False
+        assert any("dna_version" in e for e in errors)
+
+    def test_non_dict_input_is_explicit_error(self, validator):
+        ok, errors = validator.validate([])  # type: ignore[arg-type]
+        assert ok is False
+        assert any("dna_version" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
