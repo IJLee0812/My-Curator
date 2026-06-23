@@ -355,7 +355,7 @@ class TestCurationConsumerIntegration:
         await repo.close()
 
     @pytest.fixture
-    async def session_id(self, pg) -> str:
+    async def session_id(self, pg):
         sid = "integ-test-session-p24"
         await pg.insert_session(
             session_id=sid,
@@ -365,7 +365,8 @@ class TestCurationConsumerIntegration:
             recorded_at=datetime.now(timezone.utc),
             source_kind="synthetic",
         )
-        return sid
+        yield sid
+        await pg._pool.execute("DELETE FROM sessions WHERE session_id = $1", sid)
 
     @pytest.fixture
     def consumer(self, pg, session_id) -> CurationConsumer:
