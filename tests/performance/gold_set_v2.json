@@ -1,0 +1,785 @@
+{
+  "version": "2.0",
+  "description": "Balanced ~50-segment risk capability gold set (P4-3). Per-class CAPABILITY benchmark — NOT a production-distribution claim. This file is the sole source of truth for gold membership (no DB is_gold flag).",
+  "target_counts": {
+    "nominal": 13,
+    "elevated": 15,
+    "critical": 22,
+    "total": 50
+  },
+  "boundary_crossing_required": 3,
+  "labeling_protocol": {
+    "risk_level": "Author approve-only over the existing v0.1 review queue; an APPROVED v0.1 label becomes GT. Rejects stay queued and unused (=> set is the model-agreed subset; known, accepted selection bias).",
+    "safety_event": "Hand-labeled per segment against the SOTIF C x S rubric. Honor intra-object invariants: collision_type is non-null ONLY when event_type=collision; severity_estimate is null IFF event_type=none.",
+    "boundary_crossing": "Flag >=3 critical/elevated segments whose hazardous event spans a 0-overlap 5-s boundary (identified by eye on the original mp4).",
+    "viewing": "Author labels solo, viewing the original mp4 under VIDEO_DATA_ROOT.",
+    "source": "Segments are drawn from the real ingested corpus (session 'curation-daemon')."
+  },
+  "_segment_field_spec": {
+    "clip_id": "uuid — segment clip_id from the clips table",
+    "start_s": "float",
+    "end_s": "float",
+    "video": "source mp4 path (file://... relative to VIDEO_DATA_ROOT; human reference)",
+    "risk_level": "nominal | elevated | critical (approved GT)",
+    "safety_event": {
+      "has_event": "bool",
+      "event_type": "none | near_miss | hard_brake | evasive_swerve | collision",
+      "collision_type": "head_on | rear_end | t_bone | sideswipe | single_vehicle | vru_struck | none | null  (null unless event_type=collision)",
+      "severity_estimate": "no_harm | minor | major | fatal | null  (null iff event_type=none)"
+    },
+    "boundary_crossing": "bool",
+    "notes": "optional free text"
+  },
+  "clips": [
+    {
+      "clip_id": "46c46784-a7f4-4809-92a9-61eacae8a2fc",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/straight/bb_1_150601_bike_38_009.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "5a901ebc-8470-454e-932b-28d193a6f0f3",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/straight/bb_1_210827_bike_195_148.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "8e2002fa-104d-4503-be3e-2144aa65e9d4",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/bicycle-lane/bb_1_180703_bike_125_273.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "b4ace752-1168-4adb-937b-8a37ab36b7c8",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/bicycle-lane/bb_1_140202_bike_46_085.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "3a00fa46-faa8-4de4-97e2-0f3fecf69872",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/intersection-signal/bb_1_181128_two-wheeled-vehicle_120_123.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "5226ba33-b45a-47ae-a6f0-255bf09a4d63",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/straight/bb_1_161229_two-wheeled-vehicle_234_22259.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "0b25925e-1c06-465d-a800-e361af19577b",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/overpass/bb_1_201220_pedestrian_209_21158.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "ba81c3bf-8c85-425b-8401-feed20785ad9",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal/bb_1_180414_pedestrian_117_200.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "d3645378-2963-41de-9523-c6c91ca064d1",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal/bb_1_181029_pedestrian_257_22070.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "35469e2c-d30d-4680-bfc8-1b2f1d064e79",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/straight/bb_1_170511_vehicle_223_46282.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "44bc2c0a-d735-44b9-bab2-fd409ff51cf1",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/t-junction/bb_1_161102_vehicle_147_145.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "70d0af7e-38bc-442b-8ef3-66439c2c7a69",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/roundabout/bb_1_180919_vehicle_189_058.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "b091a2ff-ac9a-4f70-a281-462a31b0d38d",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/intersection-no-sig/bb_1_140625_vehicle_147_110.mp4",
+      "risk_level": "nominal",
+      "safety_event": {
+        "has_event": false,
+        "event_type": "none",
+        "collision_type": null,
+        "severity_estimate": null
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "827ec7cd-3928-4993-8019-c72493c74113",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/intersection-signal/bb_1_190915_bike_219_22411.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": true,
+      "notes": ""
+    },
+    {
+      "clip_id": "8e18345f-558b-49c7-bf0e-8da662435356",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/intersection-no-sig/bb_1_191001_bike_200_175.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "hard_brake",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "18dfcb2b-9a5c-4031-b727-5f95147ca582",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/off-road/bb_1_171031_two-wheeled-vehicle_251_33159.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "247b4032-2111-41db-b1cc-afbad1c5521a",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/t-junction/bb_1_190921_two-wheeled-vehicle_129_180.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "3a6c673b-c882-4171-ab8e-7b34dde0bf2d",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/intersection-no-sig/bb_1_211118_two-wheeled-vehicle_30_014.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "vru_struck",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "561ab626-3be8-43ff-b841-ed360596f3ce",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/intersection-signal/bb_1_151116_two-wheeled-vehicle_214_21927.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "b6429c77-b874-4474-810f-a04a6ff7f65f",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/off-road/bb_1_220621_two-wheeled-vehicle_252_22323.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "614334a0-ddce-4d28-a326-0f9f3ca3d44f",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal-near/bb_1_161017_pedestrian_39_051.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": true,
+      "notes": ""
+    },
+    {
+      "clip_id": "8cc4cdb7-4647-4748-8020-01fb52d08e36",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-signal-near/bb_1_161223_pedestrian_117_099.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "evasive_swerve",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": true,
+      "notes": ""
+    },
+    {
+      "clip_id": "cf6ab0ed-95de-44d6-a58f-f635ad96407a",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/no-crosswalk/bb_1_200111_pedestrian_126_173.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "hard_brake",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "d39bd6e0-93ef-4182-b5a1-cdc22486d757",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-signal/bb_1_160901_pedestrian_200_21695.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "sideswipe",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "dab896e4-bf51-4ef5-8d60-1146033f590d",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal/bb_1_181029_pedestrian_257_22070.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "evasive_swerve",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "38425b73-ac8b-41ae-9c10-4939a9303244",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/straight/bb_1_210319_vehicle_03_008.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "4374542a-d50d-44f3-b109-4d4a0bfdad5f",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/roundabout/bb_1_191114_vehicle_195_110.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "sideswipe",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "62284538-0f9f-433d-8dbd-574769a8b4d4",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/intersection-signal/bb_1_211028_vehicle_34_024.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "b5619d24-b0b9-4d69-8057-bcf476f68356",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/t-junction/bb_1_180512_vehicle_144_232.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "e8f7202a-c4e5-4896-b890-04fb0a0a18ef",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/parking/bb_1_220529_vehicle_46_002.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "near_miss",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "f54723fb-4efb-49c6-9d02-3a7573aa54fe",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/off-road/bb_1_220719_vehicle_235_22008.mp4",
+      "risk_level": "elevated",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "hard_brake",
+        "collision_type": null,
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "083f5bce-734a-4c96-9fd3-80edaaa181ca",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/straight/bb_1_190409_bike_217_21759.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "1eab1a7e-84de-4e7d-8163-02de045c48ec",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/intersection-no-sig/bb_1_170306_bike_120_196.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "vru_struck",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "1ff5b015-ebf0-433c-a965-f6357bcf200e",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/straight/bb_1_210827_bike_195_148.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "rear_end",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "5992778c-1ae6-4f65-9c44-7d5e075fd1ff",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/bicycle/bicycle-lane/bb_1_170908_bike_206_21804.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "041dc99f-c918-4b25-b3eb-b02c8b60bf03",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/t-junction/bb_1_200101_two-wheeled-vehicle_248_21087.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "41e69117-881b-49bf-829f-8a4c832e9c20",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/intersection-signal/bb_1_190404_two-wheeled-vehicle_30_021.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "major"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "59516f7d-5573-4e8a-9f77-3b49b3f156f8",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/roundabout/bb_1_200702_two-wheeled-vehicle_142_268.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "bff61fa3-64ea-4be5-be77-6e94579b2baf",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/off-road/bb_1_211004_two-wheeled-vehicle_231_22207.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "major"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "dddb3ca4-d33c-4a65-95f6-dac923643fea",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/motorcycle/straight/bb_1_220827_two-wheeled-vehicle_116_235.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "sideswipe",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "028c8081-38f9-4e4d-8261-733a40bea187",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-signal-near/bb_1_180409_pedestrian_116_003.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "0abb6039-c58f-4651-8a78-568d96037162",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-signal/bb_1_191008_pedestrian_125_193.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "1dcb2b4f-119d-445b-aff5-49ad32f3125d",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal-near/bb_1_170227_pedestrian_228_22023.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "major"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "8e5a5afa-b49a-4910-bda2-0be3dec983f1",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/overpass/bb_1_210211_pedestrian_250_20034.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "df1b25d0-c71e-4ddb-8765-aeb535604a0f",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/pedestrian/xwalk-no-signal/bb_1_170127_pedestrian_38_005.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "minor"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "02dd3fbd-4e7b-4fb2-9a02-cc99196a424f",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/straight/bb_1_150113_vehicle_121_037.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "t_bone",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "2905aac7-fdc0-4a74-970f-3c3638bab9b7",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/t-junction/bb_1_180512_vehicle_144_232.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "315ca2c4-008f-4489-8b69-1ba0c5eb11d8",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/off-road/bb_1_170902_vehicle_114_079.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "475b4abd-1cc8-4257-8b9f-1cd385b15476",
+      "start_s": 5.13,
+      "end_s": 10.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/intersection-no-sig/bb_1_200222_vehicle_118_055.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "head_on",
+        "severity_estimate": "no_harm"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    },
+    {
+      "clip_id": "4eea1c65-2d9c-478a-a558-093ac58d7cd4",
+      "start_s": 0.13,
+      "end_s": 5.13,
+      "video": "aihub-av/597-traffic-accident/clips/vehicle/highway/bb_1_141227_vehicle_185_087.mp4",
+      "risk_level": "critical",
+      "safety_event": {
+        "has_event": true,
+        "event_type": "collision",
+        "collision_type": "rear_end",
+        "severity_estimate": "major"
+      },
+      "boundary_crossing": false,
+      "notes": ""
+    }
+  ]
+}
