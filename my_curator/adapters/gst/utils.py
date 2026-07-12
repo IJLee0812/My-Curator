@@ -269,6 +269,34 @@ def to_uri(path_or_uri: str) -> str:
     return "file://" + os.path.abspath(path_or_uri)
 
 
+def get_video_resolution(uri: str) -> tuple[int, int] | None:
+    """Probe a file URI's native video resolution via GstPbutils.Discoverer.
+
+    Returns (width, height) rounded down to even, or None (live/RTSP, probe
+    failure, or no video stream) for the caller to fall back on. gi imported lazily.
+    """
+    if uri.startswith(("rtsp://", "rtsps://")):
+        return None
+    try:
+        import gi
+
+        gi.require_version("Gst", "1.0")
+        gi.require_version("GstPbutils", "1.0")
+        from gi.repository import Gst, GstPbutils
+
+        if not Gst.is_initialized():
+            Gst.init(None)
+        info = GstPbutils.Discoverer.new(5 * Gst.SECOND).discover_uri(uri)
+        streams = info.get_video_streams()
+        if not streams:
+            return None
+        width = streams[0].get_width()
+        height = streams[0].get_height()
+        return (width - (width % 2), height - (height % 2))
+    except Exception:
+        return None
+
+
 def move_built_engine(engine_dest: str | None, cwd: str | None = None) -> str | None:
     """Move TRT engine built by nvinfer to the configured destination path.
 

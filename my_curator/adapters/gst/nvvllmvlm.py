@@ -29,8 +29,7 @@ import torch  # noqa: E402
 from gi.repository import GObject, Gst, GstBase  # noqa: E402
 from PIL import Image  # noqa: E402
 from pyservicemaker import Buffer  # noqa: E402
-from transformers import AutoTokenizer  # noqa: E402
-from vllm import LLM, SamplingParams  # noqa: E402
+from vllm import SamplingParams  # noqa: E402
 
 # Set multiprocessing start method for CUDA compatibility
 try:
@@ -448,9 +447,9 @@ class NvVllmVLM(GstBase.BaseTransform):
         self._class_mapping = load_class_mapping(labelfile) if labelfile else YOLO26_CLASS_MAPPING
         self._detector_name = os.environ.get("VLM_DETECTOR_NAME", "YOLO26")
 
-        # Single VLM model instance (shared across all streams naturally)
-        self.llm: LLM | None = None
-        self.tokenizer: AutoTokenizer | None = None
+        # vLLM engine: owned here by default, or injected via set_engine() for --warm reuse
+        self._engine = None
+        self._owns_engine = False
 
         # Per-stream contexts (keyed by pad_index/source_id)
         self.stream_contexts: dict[int, StreamContext] = {}
@@ -460,65 +459,6 @@ class NvVllmVLM(GstBase.BaseTransform):
         self._infer_queue: Queue = Queue(maxsize=self.queue_maxsize)
         self._infer_thread: threading.Thread | None = None
         self._stop_event: threading.Event = threading.Event()
-
-        # Load model once
-        try:
-            Gst.info(f"{GST_PLUGIN_NAME}: Loading VLM model '{self.model}'")
-
-            # Initialize CUDA
-            if torch.cuda.is_available():
-                torch.cuda.init()
-
-                # Determine which GPU to use
-                if self.gpu_id >= 0:
-                    # Explicit GPU ID specified
-                    if self.gpu_id >= torch.cuda.device_count():
-                        Gst.warning(
-                            f"{GST_PLUGIN_NAME}: Requested GPU "
-                            f"{self.gpu_id} not available. Using GPU 0 "
-                            f"(available: {torch.cuda.device_count()} GPUs)"
-                        )
-                        self.gpu_id = 0
-                    torch.cuda.set_device(self.gpu_id)
-                    device_name = torch.cuda.get_device_name(self.gpu_id)
-                    Gst.info(
-                        f"{GST_PLUGIN_NAME}: CUDA initialized on GPU {self.gpu_id} ({device_name})"
-                    )
-                else:
-                    # Auto-select from CUDA_VISIBLE_DEVICES
-                    # (use device 0 of visible devices)
-                    torch.cuda.set_device(0)
-                    device_name = torch.cuda.get_device_name(0)
-                    Gst.info(
-                        f"{GST_PLUGIN_NAME}: CUDA initialized on GPU 0 "
-                        f"(auto from CUDA_VISIBLE_DEVICES, {device_name})"
-                    )
-            else:
-                Gst.error(f"{GST_PLUGIN_NAME}: CUDA not available!")
-                raise RuntimeError("CUDA not available")
-
-            llm_kwargs = dict(
-                model=self.model,
-                max_model_len=self.max_model_len,
-                trust_remote_code=self.trust_remote_code,
-                gpu_memory_utilization=self.gpu_memory_utilization,
-            )
-            if config.enforce_eager:
-                llm_kwargs["enforce_eager"] = True
-            self.llm = LLM(**llm_kwargs)
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    self.model, trust_remote_code=self.trust_remote_code
-                )
-            except Exception:
-                self.tokenizer = None
-
-            Gst.info(f"{GST_PLUGIN_NAME}: VLM model loaded successfully")
-        except Exception as e:
-            Gst.error(f"{GST_PLUGIN_NAME}: Failed to initialize vLLM - {e}")
-            import traceback
-
-            traceback.print_exc()
 
     def _compute_step_ns(self) -> int:
         return compute_step_ns(self.segment_length_sec, self.overlap_sec)
@@ -642,11 +582,38 @@ class NvVllmVLM(GstBase.BaseTransform):
             msg = f"{GST_PLUGIN_NAME}: Unknown property '{prop.name}'"
             raise AttributeError(msg)
 
+    @property
+    def llm(self):
+        return self._engine.llm if self._engine is not None else None
+
+    @property
+    def tokenizer(self):
+        return self._engine.tokenizer if self._engine is not None else None
+
+    def set_engine(self, engine) -> None:
+        """Inject a shared VLMEngine (--warm); this element will not shut it down."""
+        self._engine = engine
+        self._owns_engine = False
+
+    def _ensure_engine(self) -> None:
+        if self._engine is None:
+            from my_curator.adapters.gst.vlm_engine import VLMEngine
+
+            self._engine = VLMEngine.from_config(config)
+            self._owns_engine = True
+        if not self._engine.is_loaded:
+            self._engine.load()
+
     def get_llm(self):
         """Return the live vllm.LLM instance (None if not yet initialised)."""
         return self.llm
 
     def do_start(self) -> bool:
+        try:
+            self._ensure_engine()
+        except Exception as e:
+            Gst.error(f"{GST_PLUGIN_NAME}: vLLM engine init failed - {e}")
+            return False
         if self.llm is None:
             Gst.error(f"{GST_PLUGIN_NAME}: vLLM not initialized")
             return False
@@ -1290,7 +1257,8 @@ class NvVllmVLM(GstBase.BaseTransform):
                 if _ctx is not None:
                     _ctx.last_inputs = inputs
 
-                outputs = self.llm.generate(inputs, sampling_params=sampling_params)  # noqa: BLK100
+                # Via the engine so its generate() lock serializes warm workers.
+                outputs = self._engine.generate(inputs, sampling_params)  # noqa: BLK100
                 if outputs:
                     return outputs[0].outputs[0].text
 
@@ -1372,10 +1340,27 @@ class NvVllmVLM(GstBase.BaseTransform):
         # Wait for queue to drain AND all processing to complete
         import time
 
-        max_wait = self.max_wait_timeout
+        # Scale the drain budget to the actual backlog (serial inference can't
+        # clear a burst within a flat timeout); floor = configured timeout, hard ceiling.
+        with self.stream_contexts_lock:
+            pending_at_stop = sum(
+                max(0, c.segments_submitted - c.segments_completed - c.segments_dropped)
+                for c in self.stream_contexts.values()
+            )
+        # Above the measured worst case (~28 s/seg @1080p, N=3) so a long clip's
+        # backlog drains fully instead of abandoning at EOS.
+        _DRAIN_PER_SEG_S = 40.0
+        _DRAIN_CEILING_S = 3600.0
+        max_wait = min(
+            _DRAIN_CEILING_S,
+            max(self.max_wait_timeout, pending_at_stop * _DRAIN_PER_SEG_S),
+        )
         elapsed = 0.0
 
-        print(f"{GST_PLUGIN_NAME}: Waiting for all segments to complete...")
+        print(
+            f"{GST_PLUGIN_NAME}: Waiting for all segments to complete "
+            f"({pending_at_stop} pending, drain budget {max_wait:.0f}s)..."
+        )
 
         while elapsed < max_wait:
             # Check both queue and per-stream completion status
@@ -1408,34 +1393,57 @@ class NvVllmVLM(GstBase.BaseTransform):
                 )
 
         if not all_complete:
+            # Account still-pending work as dropped and log it — never abandon silently.
+            abandoned = 0
+            with self.stream_contexts_lock:
+                for ctx in self.stream_contexts.values():
+                    lost = max(
+                        0,
+                        ctx.segments_submitted - ctx.segments_completed - ctx.segments_dropped,
+                    )
+                    ctx.segments_dropped += lost
+                    abandoned += lost
             print(
-                f"{GST_PLUGIN_NAME}: WARNING: Timeout waiting for "
-                f"segments. Some segments may not be fully processed."
+                f"{GST_PLUGIN_NAME}: WARNING: Drain budget ({max_wait:.0f}s) "
+                f"exhausted with {abandoned} segment(s) still unprocessed — "
+                f"ABANDONED (counted as dropped). Raise pipeline.max_wait_timeout "
+                f"or reduce concurrent sources."
             )
 
         # Give a small grace period to ensure any final result updates
         # are complete
         time.sleep(0.5)
 
-        # Stop worker thread
+        # Join must outlast one in-flight generate() (the worker only checks
+        # _stop_event at the loop top); a short join orphans it into the next clip.
         print(f"\n{GST_PLUGIN_NAME}: Stopping inference worker...")
         self._stop_event.set()
         if self._infer_thread:
-            self._infer_thread.join(timeout=5.0)
+            self._infer_thread.join(timeout=max(60.0, _DRAIN_PER_SEG_S * 2))
             self._infer_thread = None
 
-        # Shut down vLLM engine to release GPU memory
-        if self.llm is not None:
-            print(f"{GST_PLUGIN_NAME}: Shutting down vLLM engine...")
+        # Free GPU tensors held by segments abandoned at drain timeout so they
+        # don't accumulate across warm clips.
+        drained = 0
+        while True:
             try:
-                if hasattr(self.llm, "shutdown"):
-                    self.llm.shutdown()
-                elif hasattr(self.llm, "llm_engine") and hasattr(self.llm.llm_engine, "shutdown"):
-                    self.llm.llm_engine.shutdown()
-            except Exception as e:
-                print(f"{GST_PLUGIN_NAME}: Warning: vLLM shutdown error: {e}")
-            finally:
-                self.llm = None
+                leftover = self._infer_queue.get_nowait()
+            except Empty:
+                break
+            seg = getattr(leftover, "segment", None)
+            if seg is not None and getattr(seg, "frames", None):
+                seg.frames.clear()
+            self._infer_queue.task_done()
+            drained += 1
+        if drained:
+            print(f"{GST_PLUGIN_NAME}: Released {drained} abandoned queued segment(s)")
+
+        # Release the engine only if this element owns it. Injected (--warm)
+        # engines are kept alive by the driver for reuse across clips.
+        if self._engine is not None and self._owns_engine:
+            print(f"{GST_PLUGIN_NAME}: Shutting down vLLM engine...")
+            self._engine.shutdown()
+        self._engine = None
 
         # Print statistics for each stream
         # (AFTER worker stops to ensure final counts)
