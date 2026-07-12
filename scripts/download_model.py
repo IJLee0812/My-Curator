@@ -2,8 +2,8 @@
 
 Ultralytics publishes YOLOE only as the seg checkpoint (no detect-only `.pt`);
 the same ``yoloe-26{size}-seg.pt`` file feeds BOTH export scripts —
-``export_yoloe.py`` strips mask coefficients for detection-only inference,
-and ``export_yoloe_seg.py`` keeps them for instance segmentation. Pick the
+``export_yoloe-26.py`` strips mask coefficients for detection-only inference,
+and ``export_yoloe-26-seg.py`` keeps them for instance segmentation. Pick the
 script based on the nvinfer config you want to use at runtime.
 
     --model yolo26   → yolo26{size}.pt             (closed-vocab, 80 COCO classes)

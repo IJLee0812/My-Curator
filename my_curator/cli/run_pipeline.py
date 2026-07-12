@@ -178,7 +178,7 @@ Examples:
             print("  Export first (inside container):")
             if "yoloe" in nvinfer_config.lower() or "yolo26e" in nvinfer_config.lower():
                 print(
-                    "  python3 /workspace/scripts/export_yoloe.py "
+                    "  python3 /workspace/scripts/export_yoloe-26.py "
                     '-w /workspace/models/yoloe-26m-seg.pt --custom-classes "vehicle,person" '
                     "--dynamic --simplify"
                 )

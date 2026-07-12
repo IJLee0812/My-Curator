@@ -9,7 +9,7 @@ same output tensor layout as YOLO26, so the existing
 ``libnvdsinfer_custom_impl_Yolo.so`` parser works as-is.
 
 Usage (inside container):
-    python3 scripts/export_yoloe.py \\
+    python3 scripts/export_yoloe-26.py \\
         -w models/yoloe-26m-seg.pt \\
         --custom-classes "vehicle,person,motorcycle,traffic_sign" \\
         --dynamic --simplify
@@ -21,6 +21,7 @@ weights file. Point ``configs/config_infer_yolo26e.txt`` at those paths.
 
 import os
 import sys
+import types
 from copy import deepcopy
 
 import onnx
@@ -44,6 +45,25 @@ def _dist2bbox(distance, anchor_points, xywh=False, dim=-1):
 
 
 _m.dist2bbox.__code__ = _dist2bbox.__code__
+
+
+def forward_deepstream(self, x):
+    """Emit the DENSE detection predictions [B, 4+nc(+mask), 8400], bypassing the
+    YOLO26/YOLOE NMS-free (end2end) head whose native output is [B, max_det, attrs].
+    Without this override the exported ONNX carries the post-NMS tensor and the
+    DeepStream parser mis-reads it (the anchor dimension collapses, e.g. 8400->38).
+    Mirrors export_yolo26.forward_deepstream."""
+    x_detach = [xi.detach() for xi in x]
+    if hasattr(self, "inference"):
+        one2one = [
+            torch.cat((self.one2one_cv2[i](x_detach[i]), self.one2one_cv3[i](x_detach[i])), 1)
+            for i in range(self.nl)
+        ]
+        y = self.inference(one2one)
+    else:
+        one2one = self.forward_head(x_detach, **self.one2one)
+        y = self._inference(one2one)
+    return y
 
 
 class DeepStreamOutput(nn.Module):
@@ -103,7 +123,12 @@ def yoloe_export(weights, device, custom_classes, fuse=False):
             m.dynamic = False
             m.export = True
             m.format = "onnx"
-            m.end2end = False
+            try:
+                m.end2end = False
+            except AttributeError:
+                pass  # read-only property on ultralytics>=8.4; already non-end2end
+            # Emit dense predictions instead of the NMS-free (end2end) output.
+            m.forward = types.MethodType(forward_deepstream, m)
         elif isinstance(m, (C2f, C3k2)):
             m.forward = m.forward_split
 
@@ -149,7 +174,6 @@ def main(args):
         input_names=["input"],
         output_names=["output"],
         dynamic_axes=dynamic_axes if args.dynamic else None,
-        dynamo=False,  # Ultralytics models fail with dynamo exporter on torch>=2.5
     )
 
     if args.simplify:
