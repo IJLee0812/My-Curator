@@ -131,6 +131,19 @@ Examples:
         help="Override source_clip_id stored in PG (single-source only; "
         "ignored when multiple sources are provided). Defaults to filename stem.",
     )
+    parser.add_argument(
+        "--warm",
+        action="store_true",
+        help="(default) Warm batch=1 execution — sources processed one at a time "
+        "reusing a single vLLM engine loaded once per session. Warm is now the "
+        "default, so this flag is a no-op; use --concurrent to opt out.",
+    )
+    parser.add_argument(
+        "--concurrent",
+        action="store_true",
+        help="DEPRECATED: process all sources in one batch>1 pipeline (legacy "
+        "multi-batch). Default is warm batch=1.",
+    )
     args = parser.parse_args()
 
     # Resolve nvinfer config path
@@ -249,19 +262,63 @@ Examples:
         print("Error: --detect-output requires --detect")
         sys.exit(1)
 
-    # Create and run app
-    app = VLMKafkaApp(
-        input_uris=input_uris,
-        kafka_config=kafka_config,
-        topic=args.topic,
-        dry_run=args.dry_run,
+    def _make_app(uris, engine=None, output_path=None, src_override=None):
+        return VLMKafkaApp(
+            input_uris=uris,
+            kafka_config=kafka_config,
+            topic=args.topic,
+            dry_run=args.dry_run,
+            output_path=output_path,
+            nvinfer_config=nvinfer_config,
+            osd_output_path=args.detect_output,
+            seg_mode=seg_mode,
+            source_clip_id_override=src_override,
+            engine=engine,
+        )
+
+    # Warm batch=1 is the DEFAULT: load the engine once and process sources one at
+    # a time. --concurrent opts into the deprecated batch>1 path.
+    if not args.concurrent:
+        from my_curator.adapters.gst.config_loader import get_config
+        from my_curator.adapters.gst.vlm_engine import VLMEngine
+
+        engine = VLMEngine.from_config(get_config())
+        try:
+            engine.load()
+        except Exception as e:
+            print(f"[warm] engine load failed ({e}); falling back to concurrent run")
+            engine = None
+        if engine is not None:
+            single = len(input_uris) == 1
+            if args.output and not single:
+                print(
+                    "Warning: --output is ignored for multi-source warm runs "
+                    "(per-clip JSON not written)"
+                )
+            try:
+                total = len(input_uris)
+                for i, uri in enumerate(input_uris):
+                    print(f"\n[warm {i + 1}/{total}] {uri}")
+                    try:
+                        _make_app(
+                            [uri],
+                            engine=engine,
+                            output_path=args.output if single else None,
+                            src_override=args.source_clip_id if single else None,
+                        ).run()
+                    except Exception as e:
+                        print(f"[warm] clip failed ({uri}): {e}")
+            finally:
+                engine.shutdown()
+            return
+
+    # Concurrent (DEPRECATED legacy / warm-load fallback): all sources in one
+    # batch>1 pipeline (element self-loads its own engine).
+    _make_app(
+        input_uris,
         output_path=args.output,
-        nvinfer_config=nvinfer_config,
-        osd_output_path=args.detect_output,
-        seg_mode=seg_mode,
-        source_clip_id_override=args.source_clip_id,
-    )
-    app.run()
+        src_override=args.source_clip_id,
+    ).run()
 
 
 if __name__ == "__main__":

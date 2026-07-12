@@ -48,7 +48,11 @@ try:
 except (ImportError, ValueError):
     GI_AVAILABLE = False
 
-from my_curator.adapters.gst.utils import load_class_mapping, move_built_engine
+from my_curator.adapters.gst.utils import (
+    get_video_resolution,
+    load_class_mapping,
+    move_built_engine,
+)
 from my_curator.application.pipeline.osd_branch import build_osd_branch
 from my_curator.application.pipeline.publisher import VLMKafkaSignalPublisher
 
@@ -68,6 +72,7 @@ class VLMKafkaApp:
         osd_output_path=None,
         seg_mode=False,
         source_clip_id_override=None,
+        engine=None,
     ):
         """
         Initialize application.
@@ -94,6 +99,7 @@ class VLMKafkaApp:
         self.nvinfer_config = nvinfer_config
         self.osd_output_path = osd_output_path
         self.seg_mode = seg_mode
+        self._engine = engine
         self._class_mapping = load_class_mapping(os.environ.get("VLM_DETECT_LABELFILE"))
 
         # Auto-derive source_map: stream_id → (source_clip_id, source_video_path).
@@ -216,8 +222,16 @@ class VLMKafkaApp:
 
         # Create streammux
         streammux = Gst.ElementFactory.make("nvstreammux", "stream-muxer")
-        streammux.set_property("width", 1920)
-        streammux.set_property("height", 1080)
+        # Size the muxer to source native resolution; a fixed W×H up/down-scales
+        # every input and wastes vision tokens. Multi-source -> max; fallback 1920x1080.
+        mux_w, mux_h = 1920, 1080
+        probed = [r for r in (get_video_resolution(u) for u in self.input_uris) if r]
+        if probed:
+            mux_w = max(w for w, _ in probed)
+            mux_h = max(h for _, h in probed)
+        streammux.set_property("width", mux_w)
+        streammux.set_property("height", mux_h)
+        print(f"  nvstreammux resolution: {mux_w}x{mux_h}")
         streammux.set_property("batch-size", self.num_sources)
         streammux.set_property("live-source", has_live)
         if not has_live:
@@ -332,6 +346,10 @@ class VLMKafkaApp:
 
         # VLM plugin
         nvvllm = Gst.ElementFactory.make("nvvllmvlm", "vlm-infer")
+
+        # Inject a shared engine for --warm reuse (element self-loads otherwise).
+        if self._engine is not None and hasattr(nvvllm, "set_engine"):
+            nvvllm.set_engine(self._engine)
 
         # Connect signal to Kafka publisher
         nvvllm.connect("vlm-result", self.kafka_publisher.on_vlm_result)
