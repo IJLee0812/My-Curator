@@ -5,7 +5,7 @@ decode into the ONNX graph so DeepStream nvinfer (network-type=3) can produce
 instance masks directly without post-processing.
 
 Usage (inside container):
-    python3 scripts/export_yoloe_seg.py \\
+    python3 scripts/export_yoloe-26-seg.py \\
         -w models/yoloe-26m-seg.pt \\
         --custom-classes "vehicle,person" \\
         --dynamic --simplify
@@ -17,6 +17,7 @@ Paired with ``configs/config_infer_yolo26e_seg.txt`` and
 
 import os
 import sys
+import types
 from copy import deepcopy
 
 import onnx
@@ -40,6 +41,28 @@ def _dist2bbox(distance, anchor_points, xywh=False, dim=-1):
 
 
 _m.dist2bbox.__code__ = _dist2bbox.__code__
+
+
+def forward_deepstream_seg(self, x):
+    """Emit DENSE seg predictions ``([B, 4+nc+mask_coeffs, 8400], proto)``, bypassing
+    the YOLO26/YOLOE NMS-free (end2end) head whose native output is
+    ``([B, max_det, attrs], proto)``. The downstream DeepStreamOutput expects the
+    dense per-anchor tensor as ``x[0]`` (it runs its own EfficientNMSX_TRT); without
+    this override the post-NMS tensor is fed instead and the anchor dim collapses.
+    Detection half mirrors export_yolo26.forward_deepstream; ``self.proto(x)`` adds
+    the mask prototypes as ``x[1]``."""
+    proto = self.proto(x)  # mask prototypes; proto module consumes the full feature list
+    x_detach = [xi.detach() for xi in x]
+    if hasattr(self, "inference"):
+        one2one = [
+            torch.cat((self.one2one_cv2[i](x_detach[i]), self.one2one_cv3[i](x_detach[i])), 1)
+            for i in range(self.nl)
+        ]
+        y = self.inference(one2one)
+    else:
+        one2one = self.forward_head(x_detach, **self.one2one)
+        y = self._inference(one2one)
+    return (y, proto)
 
 
 class RoiAlign(torch.autograd.Function):
@@ -217,7 +240,7 @@ def yoloe_seg_export(weights, device, custom_classes, fuse=False):
 
     # Skip Conv+BN fusion on modern Ultralytics (≥8.4.38): it re-triggers
     # ``YOLOEDetect.fuse(txt_feats=None)`` which nulls cv2/cv3/cv4. See
-    # ``export_yoloe.py`` for details.
+    # ``export_yoloe-26.py`` for details.
     if fuse:
         inner_model = inner_model.fuse()
 
@@ -226,7 +249,12 @@ def yoloe_seg_export(weights, device, custom_classes, fuse=False):
             m.dynamic = False
             m.export = True
             m.format = "onnx"
-            m.end2end = False
+            try:
+                m.end2end = False
+            except AttributeError:
+                pass  # read-only property on ultralytics>=8.4; already non-end2end
+            # Emit dense (preds, proto) instead of the NMS-free (end2end) output.
+            m.forward = types.MethodType(forward_deepstream_seg, m)
         elif isinstance(m, (C2f, C3k2)):
             m.forward = m.forward_split
 
@@ -275,7 +303,6 @@ def main(args):
         input_names=["input"],
         output_names=["output"],
         dynamic_axes=dynamic_axes if args.dynamic else None,
-        dynamo=False,  # Ultralytics models fail with dynamo exporter on torch>=2.5
     )
 
     if args.simplify:
