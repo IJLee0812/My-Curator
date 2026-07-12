@@ -17,9 +17,9 @@ model:
 
 segment:
   length_sec: 5
-  overlap_sec: 0
+  overlap_sec: 1
   subsample_interval: 1
-  selection_fps: 1
+  selection_fps: 2
 
 inference:
   max_tokens: 4096
