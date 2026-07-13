@@ -1,11 +1,8 @@
 """Judge quality metrics vs gold — CAR / FOR / nominal-pass-through (P4-6).
 
-- CAR (Correction Agreement Rate): of overridden clips that have a gold label, the
-      fraction where the Judge matches gold (pass-throughs excluded so the Judge cannot
-      game the metric by never correcting).
-- FOR (False-Override Rate): of clips where the Scout was already correct, the fraction
-      the Judge needlessly flipped.
-- nominal pass-through: of Scout-``nominal`` clips, the fraction left untouched.
+CAR: of overridden clips with a gold label, fraction where the Judge matches gold.
+FOR: of clips the Scout already got right, fraction the Judge needlessly flipped.
+nominal pass-through: of Scout-``nominal`` clips, fraction left untouched.
 """
 
 from __future__ import annotations

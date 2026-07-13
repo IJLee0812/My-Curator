@@ -1,13 +1,9 @@
-"""Offline Judge-critic pass orchestration (P4-6).
+"""Offline, non-blocking Judge-critic pass over stored v0.2 DNA (P4-6).
 
-For each stored v0.2 DNA record: build the critic prompt, fire N self-consistency
-samples **in parallel**, majority-vote the risk_level, apply any override to the DNA
-(risk_level + synced rationale, and report-only scene_description), log every override
-to ``judge_overrides``, flag safety_event inconsistencies (read-only), and stamp
-``provenance.judge_model`` / ``judge_prompt_hash``. Never blocks inline publish.
-
-Failed/timed-out samples are dropped; if every sample fails the clip falls back to
-Scout-only (KEEP) since ``decide([])`` returns a pass-through decision.
+Per record: fire N self-consistency samples in parallel, majority-vote risk_level, apply any
+override (risk_level + synced rationale, report-only scene_description), log to
+``judge_overrides``, flag safety_event inconsistencies, and stamp judge provenance. Failed
+samples are dropped; an all-fail clip falls back to Scout-only KEEP via ``decide([])``.
 """
 
 from __future__ import annotations
@@ -54,7 +50,6 @@ async def _sample_verdicts(
 
 
 def _s(value: Any) -> str | None:
-    """Coerce an override value to text for the audit log (None stays None)."""
     return None if value is None else str(value)
 
 
@@ -154,5 +149,5 @@ async def judge_pass(
 
 
 def clip_id_as_uuid(value: Any) -> UUID:
-    """Best-effort UUID coercion for clip_id values coming from PG or JSON."""
+    """Best-effort UUID coercion for clip_id values from PG or JSON."""
     return value if isinstance(value, UUID) else UUID(str(value))

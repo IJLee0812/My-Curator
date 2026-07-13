@@ -1,22 +1,9 @@
-"""Generate the gold-set Judge predictions file for the P4-6 performance gate.
+"""Generate tests/performance/judge_predictions_goldset.json for the P4-6 perf gate.
 
-Runs the Judge (N-sample majority vote, dry-run — no DB writes) over the gold clips'
-**v0.2** DNA and dumps ``[{clip_id, scout, final, gt}]`` to
-``tests/performance/judge_predictions_goldset.json``, which
-``tests/performance/test_judge_metrics_goldset.py`` then scores (CAR/FOR/pass-through).
-
-Two sources of v0.2 DNA (pick one):
-  * ``--from-pipeline-output DIR``: per-clip JSON produced by a Scout-v2 pipeline dry-run
-    (``run_pipeline ... --detect --dry-run --output DIR``). Segments are content-matched
-    to the gold set by (source_clip_id, start_s) — no Postgres needed, corpus untouched.
-  * default: read v0.2 rows for the gold clip_ids from Postgres (requires the corpus to
-    have been re-curated to v0.2).
-
-judge-critic must be running on GPU 0 (``docker compose ... --profile judge up -d judge-critic``).
-
-Usage:
-  python3 -m scripts.gen_judge_predictions --from-pipeline-output /tmp/gold_v02_out
-  python3 -m scripts.gen_judge_predictions              # Postgres source
+Runs the Judge (N-vote, dry-run) over the gold clips' v0.2 DNA and dumps
+``[{clip_id, scout, final, gt}]``. v0.2 DNA comes from either ``--from-pipeline-output DIR``
+(pipeline dry-run JSON, content-matched to gold — no Postgres) or Postgres v0.2 rows.
+judge-critic must be running on GPU 0 (compose ``--profile judge``).
 """
 
 from __future__ import annotations
@@ -76,11 +63,8 @@ def _parse_dna(result_text: str) -> dict | None:
 
 
 def records_from_pipeline_output(out_dir: str, gold_path: str) -> tuple[list[dict], list[str]]:
-    """Build judge records by content-matching pipeline segments to gold clips.
-
-    Match key: (source_clip_id == gold video stem) AND |start_time - gold.start_s| < tol.
-    Returns (records, unmatched_gold_clip_ids).
-    """
+    """Content-match pipeline segments to gold by (source_clip_id == video stem, start_s ± tol);
+    return (records, unmatched_gold_clip_ids)."""
     gold = [
         (Path(c["video"]).stem, float(c["start_s"]), c["clip_id"], c["risk_level"])
         for c in json.loads(Path(gold_path).read_text(encoding="utf-8"))["clips"]

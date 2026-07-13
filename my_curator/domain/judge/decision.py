@@ -1,9 +1,4 @@
-"""N-sample majority-vote override rule + safety_event consistency flag (P4-6).
-
-Conservatism is structural: KEEP is the default, and ``risk_level`` flips only when a
-majority of the N self-consistency samples agree on a label differing from the Scout's.
-The self-reported ``CONFIDENCE`` tag is carried through for audit logging only — never a gate.
-"""
+"""N-sample majority-vote override rule + safety_event consistency flag (P4-6)."""
 
 from __future__ import annotations
 
@@ -16,11 +11,7 @@ from my_curator.domain.judge.verdict import KEEP, Verdict, effective_risk
 
 @dataclass(frozen=True)
 class JudgeDecision:
-    """Aggregated decision over N critic samples for one clip.
-
-    ``final_risk`` == ``scout_risk`` unless ``flipped``. ``rationale`` is present only when
-    flipped; ``scene_override`` and ``confidence`` are report-only.
-    """
+    """Aggregated decision over N critic samples for one clip."""
 
     scout_risk: str
     final_risk: str
@@ -34,7 +25,6 @@ class JudgeDecision:
 
 
 def _majority_threshold(n: int) -> int:
-    """Votes required for a majority: ``n // 2 + 1`` (2 for N=3, 3 for N=5)."""
     return n // 2 + 1
 
 
@@ -44,12 +34,8 @@ def decide(
     *,
     majority: int | None = None,
 ) -> JudgeDecision:
-    """Aggregate N critic samples into one override decision.
-
-    Flip ``risk_level`` only when the modal effective risk differs from ``scout_risk`` AND
-    reaches the majority threshold; otherwise KEEP. ``scene_description`` is report-only.
-    With no verdicts a KEEP decision is returned.
-    """
+    """Flip risk_level only when the modal effective risk differs from ``scout_risk`` AND
+    reaches the majority threshold; otherwise KEEP. No verdicts → a KEEP decision."""
     n = len(verdicts)
     if n == 0:
         return JudgeDecision(
@@ -99,11 +85,8 @@ def decide(
 
 
 def safety_event_inconsistency(dna: dict[str, Any]) -> str | None:
-    """Read-only flag for ``event_type=collision`` with ``collision_type=null``.
-
-    The v0.2 schema permits this (a positively-indeterminate collision: off-screen /
-    occluded / partial frame), so it is surfaced for human review, not treated as an error.
-    """
+    """Flag ``event_type=collision`` with ``collision_type=null`` for review (schema-legal,
+    a positively-indeterminate collision — never mutated)."""
     if not isinstance(dna, dict):
         return None
     se = (

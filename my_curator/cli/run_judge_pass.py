@@ -1,11 +1,7 @@
 """CLI entrypoint for the offline Judge-critic pass (P4-6).
 
-Scope (validation-first default is --gold-set):
-  --gold-set [PATH]   judge the P4-3 gold set (measures CAR/FOR against gold labels)
-  --session SESSION   judge all v0.2 clips of one ingest session (production default)
-  --all-v0.2          judge every v0.2 DNA row (backfill / prompt-version re-run)
-
-The judge-critic vLLM server must be running on GPU 0 (compose ``--profile judge``).
+Scope is one of --gold-set (validation-first default), --session, or --all-v0.2. The
+judge-critic vLLM server must be running on GPU 0 (compose ``--profile judge``).
 """
 
 from __future__ import annotations

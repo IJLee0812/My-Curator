@@ -1,10 +1,4 @@
-"""Text-only LLM-as-Judge critic domain logic (P4-6).
-
-Pure and host-testable (no I/O/SDK at import):
-  - verdict.py  — parse the critic's raw text into a structured Verdict.
-  - decision.py — N-sample majority-vote override + safety_event consistency flag.
-  - metrics.py  — CAR / FOR / nominal-pass-through vs gold.
-  - prompt.py   — judge prompt loading, hashing, and user-prompt construction.
+"""Text-only LLM-as-Judge critic domain logic (P4-6): pure and host-testable.
 
 The Judge re-scores ONLY ``planner_logic.risk_level`` and ``scene_description``.
 """

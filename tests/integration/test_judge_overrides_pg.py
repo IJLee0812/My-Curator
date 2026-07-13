@@ -1,9 +1,5 @@
-"""Integration tests for the P4-6 judge_overrides table + DAL.
-
-Spins up postgres:17-alpine via testcontainers, applies 001_schema.sql, and
-exercises insert/get_judge_overrides, apply_judge_override_dna, list_v02_dna.
-Auto-skipped when Docker is unavailable.
-"""
+"""Integration tests for the P4-6 judge_overrides table + DAL (testcontainers postgres,
+applying 001_schema.sql; auto-skips without Docker)."""
 
 from __future__ import annotations
 

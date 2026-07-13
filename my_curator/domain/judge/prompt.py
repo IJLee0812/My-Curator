@@ -1,9 +1,7 @@
 """Judge prompt loading, hashing, and user-prompt construction (P4-6).
 
-The judge prompt is versioned independently of the Scout prompt: a judge-prompt change
-records a new ``judge_prompt_hash`` in ``scenario_dna.provenance`` but does **NOT** bump
-``dna_version`` (the Judge is additive over v0.2 DNA). Hashing mirrors the Scout
-convention — ``sha256(file_bytes)[:16]`` (see ``application/consumers/curation_consumer``).
+Versioned independently of the Scout prompt: a change records a new ``judge_prompt_hash``
+in provenance but does NOT bump ``dna_version`` (the Judge is additive over v0.2 DNA).
 """
 
 from __future__ import annotations
@@ -15,11 +13,10 @@ from typing import Any
 _PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "prompts"
 JUDGE_PROMPT_FILE = "judge_qwen3.v1.md"
 
-# Registered judge-prompt hashes (16 hex chars of sha256 over the file bytes).
-# Add the new hash here when the judge prompt changes — the prompt_regression suite
-# asserts the shipped file's hash is registered.
+# Registered judge-prompt hashes (sha256[:16] of the file bytes); the prompt_regression
+# suite asserts the shipped file's hash is listed. Add the new hash when the prompt changes.
 JUDGE_PROMPT_HASHES: set[str] = {
-    "d06aef8a3365f0b2",  # prompts/judge_qwen3.v1.md (P4-6: SOTIF rubric + N-vote critic)
+    "d06aef8a3365f0b2",  # judge_qwen3.v1.md (SOTIF rubric + N-vote critic)
 }
 
 
@@ -33,7 +30,7 @@ def judge_prompt_hash(filename: str = JUDGE_PROMPT_FILE) -> str:
 
 
 def load_system_prompt(filename: str = JUDGE_PROMPT_FILE) -> str:
-    """Return the judge system-prompt text (the file content, verbatim)."""
+    """Return the judge system-prompt text (file content, verbatim)."""
     return _prompt_path(filename).read_text(encoding="utf-8")
 
 
@@ -47,11 +44,8 @@ def assert_judge_prompt_registered(prompt_hash: str) -> None:
 
 
 def build_judge_user_prompt(dna: dict[str, Any]) -> str:
-    """Render the four judged/context fields of a v0.2 DNA as the critic user message.
-
-    Feeds ``scene_description`` + ``risk_level`` + ``risk_level_rationale`` +
-    ``safety_event`` (read-only context); the enums are never re-fed separately.
-    """
+    """Render scene_description + risk_level + rationale + safety_event as the critic message
+    (the enums are read-only context, never re-fed separately)."""
     pl = dna.get("planner_logic", {}) if isinstance(dna, dict) else {}
     se = pl.get("safety_event", {}) if isinstance(pl, dict) else {}
     return (

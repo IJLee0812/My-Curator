@@ -1,12 +1,8 @@
-"""vLLM OpenAI-compatible HTTP client for the Qwen3 text-only Judge critic (P4-6).
+"""Async vLLM OpenAI-compatible HTTP client for the Qwen3 text-only Judge critic (P4-6).
 
-Host-importable (httpx only — no torch/GStreamer). One ``critique()`` call issues one
-chat completion; the caller (``judge_pass``) fires N of them concurrently for the
-self-consistency vote. Thinking mode is Qwen3's chat-template default (left on); the
-``<think>…</think>`` block is stripped downstream in ``domain/judge/verdict.py``.
-
-Sampling defaults are the Qwen3 model-card values for a quantized thinking model
-(temp 0.6 / top_p 0.95 / top_k 20 / presence_penalty 1.5 — no greedy decoding).
+httpx-only (host-importable). One ``critique()`` is one chat completion; the caller fires N
+concurrently for the self-consistency vote. Sampling defaults are the Qwen3 card values for a
+quantized thinking model; the ``<think>…</think>`` block is stripped in ``domain/judge/verdict``.
 """
 
 from __future__ import annotations
@@ -59,8 +55,8 @@ class QwenTextCritic:
         self._model = model
         self._sampling = sampling or SamplingParams()
         self._retries = max(0, int(retries))
-        # An injected client is owned by the caller; a client we build (optionally over
-        # an injected transport, for tests) is owned and closed by aclose().
+        # An injected client is caller-owned; one we build (optionally over an injected
+        # transport, for tests) is owned and closed by aclose() so no event loop leaks.
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -69,11 +65,7 @@ class QwenTextCritic:
             self._owns_client = True
 
     async def critique(self, system_prompt: str, user_prompt: str) -> str:
-        """Return the raw assistant message for one (system, user) pair.
-
-        Retries ``retries`` times on transport/HTTP errors (timeouts included).
-        Raises :class:`JudgeCriticError` when every attempt fails.
-        """
+        """Return the raw assistant message for one (system, user) pair; retry then raise."""
         body = {
             "model": self._model,
             "messages": [

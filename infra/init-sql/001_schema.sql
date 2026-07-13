@@ -90,11 +90,8 @@ CREATE TABLE IF NOT EXISTS review_queue (
 CREATE INDEX IF NOT EXISTS idx_review_state ON review_queue(state);
 CREATE INDEX IF NOT EXISTS idx_review_clip  ON review_queue(clip_id);
 
--- ──────────────────────────────────────────────────────────────────────
--- judge_overrides — append-only audit of every Judge-vs-Scout override (P4-6)
--- One row per (clip, field) each time the Judge changes a Scout value; history
--- accumulates across re-runs, and callers take the latest per (clip_id, field).
--- ──────────────────────────────────────────────────────────────────────
+-- judge_overrides (P4-6) — append-only audit, one row per (clip, field) each time the
+-- Judge changes a Scout value; callers take the latest per (clip_id, field).
 CREATE TABLE IF NOT EXISTS judge_overrides (
     id          BIGSERIAL   PRIMARY KEY,
     clip_id     UUID        NOT NULL REFERENCES clips(clip_id) ON DELETE CASCADE,

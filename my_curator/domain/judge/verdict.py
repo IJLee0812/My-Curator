@@ -1,14 +1,4 @@
-"""Parse the Judge critic's raw text output into a structured Verdict (P4-6).
-
-The critic emits a trailing label block; parsing is line-anchored (``^KEY:`` under
-re.MULTILINE) so an empty field never bleeds into the next line, and the
-``<think>…</think>`` chain-of-thought is stripped before parsing:
-
-    VERDICT_RISK: <nominal|elevated|critical> | KEEP
-    RATIONALE:    <one line; only when risk_level changes>
-    VERDICT_SCENE: KEEP | <corrected scene_description>
-    CONFIDENCE:   high | medium | low
-"""
+"""Parse the Judge critic's raw text output into a structured Verdict (P4-6)."""
 
 from __future__ import annotations
 
@@ -30,11 +20,7 @@ def _field(body: str, key: str) -> str | None:
 
 @dataclass(frozen=True)
 class Verdict:
-    """One critic sample's parsed verdict.
-
-    ``risk`` is a RISK_LEVELS member, the ``"KEEP"`` sentinel, or None (absent/unparseable
-    → pass-through). ``confidence`` is logged only, never a gate.
-    """
+    """One critic sample; ``risk`` may be a RISK_LEVELS member, ``"KEEP"``, or None."""
 
     risk: str | None
     rationale: str | None
@@ -44,7 +30,7 @@ class Verdict:
 
 
 def strip_thinking(text: str) -> str:
-    """Remove ``<think>…</think>`` blocks and return the remaining text, trimmed."""
+    """Strip ``<think>…</think>`` blocks and return the remainder, trimmed."""
     return _THINK_RE.sub("", text or "").strip()
 
 
@@ -80,11 +66,7 @@ def parse_verdict(text: str) -> Verdict:
 
 
 def effective_risk(verdict: Verdict, scout_risk: str) -> str:
-    """Resolve a verdict to a concrete risk label.
-
-    ``KEEP`` and an absent/unparseable verdict both resolve to the Scout's label
-    (the conservative default); a stated level is returned as-is.
-    """
+    """Resolve a verdict to a concrete risk (``KEEP``/absent → the conservative Scout default)."""
     if verdict.risk in (None, KEEP):
         return scout_risk
     return verdict.risk

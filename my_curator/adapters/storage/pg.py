@@ -353,11 +353,7 @@ class PGRepository:
         *,
         latest_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """Return override-audit rows (newest first).
-
-        ``latest_only=True`` collapses to the most recent row per (clip_id, field);
-        the append-only log otherwise returns full history.
-        """
+        """Return override-audit rows, newest first (``latest_only`` collapses per clip+field)."""
         where = "WHERE clip_id = $1" if clip_id is not None else ""
         params: list[Any] = [clip_id] if clip_id is not None else []
         if latest_only:
@@ -385,12 +381,8 @@ class PGRepository:
         dna_json: dict[str, Any],
         judge_prompt_hash: str,
     ) -> None:
-        """Write Judge-updated DNA back without clobbering Scout provenance.
-
-        Targeted UPDATE of ``dna_json`` + ``judge_prompt_hash`` only;
-        ``scout_prompt_hash`` / ``pipeline_version`` / ``dna_version`` (stays
-        "0.2.0" — additive) are untouched.
-        """
+        """Targeted UPDATE of ``dna_json`` + ``judge_prompt_hash`` only; Scout provenance
+        (``scout_prompt_hash`` / ``pipeline_version`` / ``dna_version``) is left untouched."""
         await self._pool.execute(
             """
             UPDATE scenario_dna
@@ -409,12 +401,8 @@ class PGRepository:
         clip_ids: list[UUID] | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Return v0.2 ``scenario_dna`` rows to judge as ``[{clip_id, dna_json}]``.
-
-        Scope selectors compose (AND): ``clip_ids`` (explicit set, e.g. the gold
-        set), ``session_id`` (all v0.2 clips in a session), or neither (every v0.2
-        row). v0.1 rows are always excluded.
-        """
+        """Return v0.2 ``scenario_dna`` rows as ``[{clip_id, dna_json}]``; ``clip_ids`` and
+        ``session_id`` compose (AND), v0.1 rows are always excluded."""
         conditions = ["sd.dna_version = '0.2.0'"]
         params: list[Any] = []
         idx = 1

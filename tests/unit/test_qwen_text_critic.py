@@ -1,8 +1,7 @@
 """Unit tests for the Qwen text-critic HTTP client (P4-6) via httpx.MockTransport.
 
-Critics are built over an injected MockTransport (critic-owned) and closed by the
-``make_critic`` fixture teardown so no httpx client / event loop leaks — important
-because ``filterwarnings = error`` turns a stray ResourceWarning into a test failure.
+The make_critic fixture closes every critic on teardown so no client/event-loop leak
+trips filterwarnings=error.
 """
 
 from __future__ import annotations
