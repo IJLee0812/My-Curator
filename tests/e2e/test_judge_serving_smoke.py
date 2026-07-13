@@ -4,7 +4,7 @@ Formalises the 10-scenario stability check. Requires a running judge-critic
 (``docker compose ... --profile judge up -d judge-critic``); auto-skips when the
 server at ``JUDGE_CRITIC_URL`` (default http://localhost:8002) is unreachable.
 
-Run: ``pytest tests/gpu/test_judge_serving_smoke.py -m gpu``.
+Run: ``pytest tests/e2e/test_judge_serving_smoke.py -m gpu``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from my_curator.adapters.judge.qwen_text_critic import QwenTextCritic, base_url_
 from my_curator.domain.judge.prompt import build_judge_user_prompt, load_system_prompt
 from my_curator.domain.judge.verdict import CONFIDENCE_LEVELS, RISK_LEVELS, parse_verdict
 
-pytestmark = [pytest.mark.gpu, pytest.mark.slow]
+pytestmark = [pytest.mark.gpu, pytest.mark.e2e, pytest.mark.slow]
 
 _KEEP = "KEEP"
 
