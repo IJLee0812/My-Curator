@@ -322,6 +322,125 @@ class PGRepository:
             for r in rows
         ]
 
+    # ── judge overrides (P4-6) ───────────────────────────────────────────────
+
+    async def insert_judge_override(
+        self,
+        *,
+        clip_id: UUID,
+        field: str,
+        scout_value: str | None,
+        judge_value: str | None,
+        gt_value: str | None = None,
+    ) -> int:
+        """Append one override-audit row; return its BIGSERIAL id."""
+        return await self._pool.fetchval(
+            """
+            INSERT INTO judge_overrides (clip_id, field, scout_value, judge_value, gt_value)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            clip_id,
+            field,
+            scout_value,
+            judge_value,
+            gt_value,
+        )
+
+    async def get_judge_overrides(
+        self,
+        clip_id: UUID | None = None,
+        *,
+        latest_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return override-audit rows (newest first).
+
+        ``latest_only=True`` collapses to the most recent row per (clip_id, field);
+        the append-only log otherwise returns full history.
+        """
+        where = "WHERE clip_id = $1" if clip_id is not None else ""
+        params: list[Any] = [clip_id] if clip_id is not None else []
+        if latest_only:
+            sql = f"""
+                SELECT DISTINCT ON (clip_id, field)
+                       id, clip_id, field, scout_value, judge_value, gt_value, created_at
+                FROM judge_overrides
+                {where}
+                ORDER BY clip_id, field, created_at DESC
+            """
+        else:
+            sql = f"""
+                SELECT id, clip_id, field, scout_value, judge_value, gt_value, created_at
+                FROM judge_overrides
+                {where}
+                ORDER BY created_at DESC
+            """
+        rows = await self._pool.fetch(sql, *params)
+        return [dict(r) for r in rows]
+
+    async def apply_judge_override_dna(
+        self,
+        *,
+        clip_id: UUID,
+        dna_json: dict[str, Any],
+        judge_prompt_hash: str,
+    ) -> None:
+        """Write Judge-updated DNA back without clobbering Scout provenance.
+
+        Targeted UPDATE of ``dna_json`` + ``judge_prompt_hash`` only;
+        ``scout_prompt_hash`` / ``pipeline_version`` / ``dna_version`` (stays
+        "0.2.0" — additive) are untouched.
+        """
+        await self._pool.execute(
+            """
+            UPDATE scenario_dna
+            SET dna_json = $2, judge_prompt_hash = $3
+            WHERE clip_id = $1
+            """,
+            clip_id,
+            dna_json,
+            judge_prompt_hash,
+        )
+
+    async def list_v02_dna(
+        self,
+        *,
+        session_id: str | None = None,
+        clip_ids: list[UUID] | None = None,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return v0.2 ``scenario_dna`` rows to judge as ``[{clip_id, dna_json}]``.
+
+        Scope selectors compose (AND): ``clip_ids`` (explicit set, e.g. the gold
+        set), ``session_id`` (all v0.2 clips in a session), or neither (every v0.2
+        row). v0.1 rows are always excluded.
+        """
+        conditions = ["sd.dna_version = '0.2.0'"]
+        params: list[Any] = []
+        idx = 1
+        if clip_ids is not None:
+            conditions.append(f"sd.clip_id = ANY(${idx})")
+            params.append(clip_ids)
+            idx += 1
+        if session_id is not None:
+            conditions.append(f"c.session_id = ${idx}")
+            params.append(session_id)
+            idx += 1
+        where = " AND ".join(conditions)
+        params.append(int(limit))
+        rows = await self._pool.fetch(
+            f"""
+            SELECT sd.clip_id, sd.dna_json
+            FROM scenario_dna sd
+            JOIN clips c ON c.clip_id = sd.clip_id
+            WHERE {where}
+            ORDER BY c.created_at
+            LIMIT ${idx}
+            """,
+            *params,
+        )
+        return [{"clip_id": r["clip_id"], "dna_json": dict(r["dna_json"])} for r in rows]
+
     # ── reads ──────────────────────────────────────────────────────────────
 
     async def get_dna(self, clip_id: UUID) -> dict[str, Any] | None:

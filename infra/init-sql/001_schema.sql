@@ -9,6 +9,7 @@
 --   P3-1  clips.frames_blob_uri TEXT
 --   P3-4  clips.source_clip_id TEXT + idx_clips_source_clip_id
 --   P3-5  review_queue UNIQUE(clip_id) — review_status UPSERT
+--   P4-6  judge_overrides (append-only Judge-vs-Scout override audit log)
 
 BEGIN;
 
@@ -88,5 +89,22 @@ CREATE TABLE IF NOT EXISTS review_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_review_state ON review_queue(state);
 CREATE INDEX IF NOT EXISTS idx_review_clip  ON review_queue(clip_id);
+
+-- ──────────────────────────────────────────────────────────────────────
+-- judge_overrides — append-only audit of every Judge-vs-Scout override (P4-6)
+-- One row per (clip, field) each time the Judge changes a Scout value; history
+-- accumulates across re-runs, and callers take the latest per (clip_id, field).
+-- ──────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS judge_overrides (
+    id          BIGSERIAL   PRIMARY KEY,
+    clip_id     UUID        NOT NULL REFERENCES clips(clip_id) ON DELETE CASCADE,
+    field       TEXT        NOT NULL
+                CHECK (field IN ('risk_level', 'scene_description', 'safety_event_consistency')),
+    scout_value TEXT,
+    judge_value TEXT,
+    gt_value    TEXT,                                 -- nullable (gold may be absent)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_judge_overrides_clip ON judge_overrides(clip_id);
 
 COMMIT;
