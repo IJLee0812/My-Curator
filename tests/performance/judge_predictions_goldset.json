@@ -1,0 +1,296 @@
+[
+  {
+    "clip_id": "46c46784-a7f4-4809-92a9-61eacae8a2fc",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "cf6ab0ed-95de-44d6-a58f-f635ad96407a",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "5a901ebc-8470-454e-932b-28d193a6f0f3",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "8e2002fa-104d-4503-be3e-2144aa65e9d4",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "4374542a-d50d-44f3-b109-4d4a0bfdad5f",
+    "scout": null,
+    "final": null,
+    "gt": "critical"
+  },
+  {
+    "clip_id": "3a00fa46-faa8-4de4-97e2-0f3fecf69872",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "5226ba33-b45a-47ae-a6f0-255bf09a4d63",
+    "scout": "nominal",
+    "final": "elevated",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "b5619d24-b0b9-4d69-8057-bcf476f68356",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "0b25925e-1c06-465d-a800-e361af19577b",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "e8f7202a-c4e5-4896-b890-04fb0a0a18ef",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "ba81c3bf-8c85-425b-8401-feed20785ad9",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "f54723fb-4efb-49c6-9d02-3a7573aa54fe",
+    "scout": null,
+    "final": null,
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "d3645378-2963-41de-9523-c6c91ca064d1",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "1eab1a7e-84de-4e7d-8163-02de045c48ec",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "35469e2c-d30d-4680-bfc8-1b2f1d064e79",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "44bc2c0a-d735-44b9-bab2-fd409ff51cf1",
+    "scout": "nominal",
+    "final": "elevated",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "70d0af7e-38bc-442b-8ef3-66439c2c7a69",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "041dc99f-c918-4b25-b3eb-b02c8b60bf03",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "b091a2ff-ac9a-4f70-a281-462a31b0d38d",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "827ec7cd-3928-4993-8019-c72493c74113",
+    "scout": null,
+    "final": null,
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "8e18345f-558b-49c7-bf0e-8da662435356",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "18dfcb2b-9a5c-4031-b727-5f95147ca582",
+    "scout": "nominal",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "247b4032-2111-41db-b1cc-afbad1c5521a",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "3a6c673b-c882-4171-ab8e-7b34dde0bf2d",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "561ab626-3be8-43ff-b841-ed360596f3ce",
+    "scout": "nominal",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "1dcb2b4f-119d-445b-aff5-49ad32f3125d",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "8e5a5afa-b49a-4910-bda2-0be3dec983f1",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "b6429c77-b874-4474-810f-a04a6ff7f65f",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "614334a0-ddce-4d28-a326-0f9f3ca3d44f",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "df1b25d0-c71e-4ddb-8765-aeb535604a0f",
+    "scout": "nominal",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "8cc4cdb7-4647-4748-8020-01fb52d08e36",
+    "scout": null,
+    "final": null,
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "315ca2c4-008f-4489-8b69-1ba0c5eb11d8",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "4eea1c65-2d9c-478a-a558-093ac58d7cd4",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "b4ace752-1168-4adb-937b-8a37ab36b7c8",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "nominal"
+  },
+  {
+    "clip_id": "d39bd6e0-93ef-4182-b5a1-cdc22486d757",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "dab896e4-bf51-4ef5-8d60-1146033f590d",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "38425b73-ac8b-41ae-9c10-4939a9303244",
+    "scout": null,
+    "final": null,
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "62284538-0f9f-433d-8dbd-574769a8b4d4",
+    "scout": null,
+    "final": null,
+    "gt": "elevated"
+  },
+  {
+    "clip_id": "083f5bce-734a-4c96-9fd3-80edaaa181ca",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "1ff5b015-ebf0-433c-a965-f6357bcf200e",
+    "scout": "elevated",
+    "final": "critical",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "5992778c-1ae6-4f65-9c44-7d5e075fd1ff",
+    "scout": null,
+    "final": null,
+    "gt": "critical"
+  },
+  {
+    "clip_id": "41e69117-881b-49bf-829f-8a4c832e9c20",
+    "scout": "critical",
+    "final": "critical",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "bff61fa3-64ea-4be5-be77-6e94579b2baf",
+    "scout": "elevated",
+    "final": "critical",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "dddb3ca4-d33c-4a65-95f6-dac923643fea",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "028c8081-38f9-4e4d-8261-733a40bea187",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "0abb6039-c58f-4651-8a78-568d96037162",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "02dd3fbd-4e7b-4fb2-9a02-cc99196a424f",
+    "scout": null,
+    "final": null,
+    "gt": "critical"
+  },
+  {
+    "clip_id": "2905aac7-fdc0-4a74-970f-3c3638bab9b7",
+    "scout": "elevated",
+    "final": "elevated",
+    "gt": "critical"
+  },
+  {
+    "clip_id": "475b4abd-1cc8-4257-8b9f-1cd385b15476",
+    "scout": "nominal",
+    "final": "nominal",
+    "gt": "critical"
+  }
+]

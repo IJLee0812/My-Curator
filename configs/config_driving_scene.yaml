@@ -8,9 +8,9 @@
 
 model:
   path: "/workspace/models/hub/cosmos-reason2-8b_v1208-fp8-static-kv8"
-  max_model_len: 8192
+  max_model_len: 16384
   trust_remote_code: true
-  gpu_memory_utilization: 0.8
+  gpu_memory_utilization: 0.7
   enforce_eager: false
   video_mode: 1
   tensor_format: "pytorch"

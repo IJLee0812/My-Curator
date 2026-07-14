@@ -247,7 +247,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["has_event", "event_type", "collision_type", "severity_estimate"],
-          "$comment": "Generic curation-grade event channel (not accident-specific). Captures near-miss / hard-brake / evasive-swerve with the same fidelity as collision. Expected has_event=false and event_type=none on ~95% of routine clips. risk_level<->event_type semantic consistency is intentionally NOT enforced here (delegated to the P4-5 Judge critic); only the intra-object structural invariants below are enforced via if/then.",
+          "$comment": "Generic curation-grade event channel (not accident-specific). Captures near-miss / hard-brake / evasive-swerve with the same fidelity as collision. Expected has_event=false and event_type=none on ~95% of routine clips. risk_level<->event_type semantic consistency is intentionally NOT enforced here (delegated to the P4-6 Judge critic); only the intra-object structural invariants below are enforced via if/then.",
           "properties": {
             "has_event": {
               "type": "boolean"
@@ -342,7 +342,7 @@
         "judge_model": {
           "type": ["string", "null"],
           "default": null,
-          "$comment": "Populated by the P4-5 text-only Judge critic (qwen2.5-7b-instruct-awq). Null until the Judge re-scores the row."
+          "$comment": "Populated by the P4-6 text-only Judge critic (qwen3-8b-awq). Null until the Judge re-scores the row."
         },
         "judge_prompt_hash": {
           "type": ["string", "null"],

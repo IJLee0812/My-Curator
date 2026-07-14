@@ -233,6 +233,57 @@ services:
     networks:
       - curation-net
 
+  # ──────────────────────────────────────────────────────────────────────
+  # judge-critic — text-only LLM-as-Judge critic (P4-6), ON-DEMAND.
+  # Reuses the DS VLM image (my-curator-vlm:latest) → zero new build. Serves
+  # Qwen3-8B-AWQ via vLLM 0.14.0 on GPU 0, OpenAI-compatible on :8002.
+  # Guarded by `profiles: ["judge"]` so it is never in the default `up` — start
+  # it only for a judge pass, stop it after (no 24/7 reservation on GPU 0):
+  #   docker compose -f infra/compose.base.yml -f infra/compose.curate.yml \
+  #     --env-file .env --profile judge up -d judge-critic
+  # ──────────────────────────────────────────────────────────────────────
+  judge-critic:
+    image: my-curator-vlm:latest
+    container_name: my-curator-judge-critic
+    profiles: ["judge"]
+    restart: unless-stopped
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+    ports:
+      - "8002:8002"
+    volumes:
+      - "${REPO_ROOT:-..}/models:/models:ro"
+    command:
+      - "vllm"
+      - "serve"
+      - "/models/hub/qwen3-8b-awq"
+      - "--served-model-name"
+      - "qwen3-8b-awq"
+      - "--gpu-memory-utilization"
+      - "0.50"
+      - "--max-model-len"
+      - "4096"
+      - "--enforce-eager"
+      - "--port"
+      - "8002"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    networks:
+      - curation-net
+
 networks:
   curation-net:
     external: true
