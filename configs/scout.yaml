@@ -9,7 +9,7 @@ seeds:
   0.3: 42
   0.5: 43
   0.7: 44
-n: 3
+n: 1
 max_tokens: 1024
 top_p: 0.9
 top_k: 50
