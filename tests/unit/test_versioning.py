@@ -58,6 +58,31 @@ class TestResolvednaVersion:
 
 
 @pytest.mark.unit
+@pytest.mark.prompt_regression
+class TestLivePromptHashRegistered:
+    """Guard the fragile prompt-file <-> hash-map coupling: whenever the live
+    Scout prompt file changes, its new SHA-256[:16] must be registered here or
+    resolve_dna_version silently falls back to 0.1.0."""
+
+    def _hash(self, path):
+        import hashlib
+
+        return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+    def test_v2_prompt_hash_registered_as_v020(self):
+        import pathlib
+
+        repo_root = pathlib.Path(__file__).resolve().parents[2]
+        v2 = repo_root / "prompts" / "scout_cosmos_reason2.v2.md"
+        h = self._hash(v2)
+        assert h in PROMPT_VERSION_MAP, (
+            f"scout_cosmos_reason2.v2.md hash {h!r} not registered in "
+            "PROMPT_VERSION_MAP — register it before merging the prompt change."
+        )
+        assert resolve_dna_version(h) == "0.2.0"
+
+
+@pytest.mark.unit
 class TestAssertPromptRegistered:
     def test_known_hash_passes(self):
         assert_prompt_registered(_KNOWN_HASH)  # must not raise
