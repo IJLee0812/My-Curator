@@ -19,16 +19,21 @@ Reasoning: clear day, primary road, one vehicle_car tailing at mid range, ego cr
 
 ```json
 {
-  "dna_version": "0.1.0",
+  "dna_version": "0.2.0",
   "clip_id": "00000000-0000-0000-0000-000000000000",
   "timestamp_range": {"start_s": 0, "end_s": 5},
+  "scene_description": "Clear-day primary road with one car tailing at mid range. Ego cruises at steady speed with no lateral actors. Routine driving, no safety-relevant events.",
   "odd": {"weather": "clear", "lighting": "day", "sensor_fidelity": ["clean"]},
   "topology": {"road_type": "primary", "lane_event": "normal", "intersection_type": "none"},
   "actor_dynamics": [
     {"actor_class": "vehicle_car", "state": "tailing", "distance_bucket": "mid",
      "confidence": 0.9, "grounded_by_yolo26": false}
   ],
-  "planner_logic": {"ego_maneuver": "cruise", "risk_level": "nominal"},
+  "planner_logic": {
+    "ego_maneuver": "cruise", "risk_level": "nominal",
+    "risk_level_rationale": "No actor closing within 50 m and ego at steady cruise, so no harm is reachable.",
+    "safety_event": {"has_event": false, "event_type": "none", "collision_type": null, "severity_estimate": null}
+  },
   "confidence": {"overall": 0.9, "scout_agreement": 1.0, "hallucination_flags": []},
   "provenance": {
     "scout_models": ["cosmos-reason2-8b"], "scout_prompt_hash": "abcd1234",

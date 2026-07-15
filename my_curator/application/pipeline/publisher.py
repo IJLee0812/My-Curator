@@ -303,7 +303,8 @@ class VLMKafkaSignalPublisher:
                 needs_review = True
                 reason = "zero_grounding"
 
-        # Extract and schema-validate DNA JSON from CoT output (P2-6)
+        # Mirror the consumer's normalize+inject so json_valid == what gets stored.
+        from my_curator.domain.scout.dna_normalizer import ensure_managed_fields, normalize_dna
         from my_curator.domain.scout.dna_validator import DNAValidator
 
         _validator = DNAValidator()
@@ -313,6 +314,14 @@ class VLMKafkaSignalPublisher:
             reason = reason or "rejected_schema_invalid"
             json_valid = False
         else:
+            dna_dict = normalize_dna(dna_dict)
+            ensure_managed_fields(
+                dna_dict,
+                dna_version="0.2.0",
+                clip_id=clip_id,
+                start_s=start_time,
+                end_s=end_time,
+            )
             _dna_valid, _ = _validator.validate(dna_dict)
             if not _dna_valid:
                 needs_review = True

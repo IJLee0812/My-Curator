@@ -25,6 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from my_curator.domain.scout.dna_normalizer import ensure_managed_fields
 from my_curator.domain.scout.versioning import resolve_dna_version
 
 log = logging.getLogger(__name__)
@@ -67,8 +68,9 @@ def _run_faststart(path: Path) -> None:
         tmp.unlink(missing_ok=True)
         log.warning("faststart failed for %s — skipping", path.name, exc_info=True)
 
+
 _SCOUT_PROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
+    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v2.md"
 )
 PIPELINE_VERSION = "p2-6"
 
@@ -86,12 +88,15 @@ def _parse_dna_json(result_text: str, curation_meta: dict) -> tuple[dict, dict]:
     returned separately for storage in the curation_meta column —
     it is never merged into dna_json.
     """
+    from my_curator.domain.scout.dna_normalizer import normalize_dna
     from my_curator.domain.scout.dna_validator import DNAValidator
 
     validator = DNAValidator()
     dna = validator.extract_json(result_text)
     if dna is None:
         dna = {"raw_text": result_text}
+    else:
+        dna = normalize_dna(dna)
     return dna, curation_meta
 
 
@@ -161,7 +166,16 @@ class CurationConsumer:
         # when the publisher provides one.  Stays NULL otherwise (column is nullable).
         source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
-        dna_json["clip_id"] = str(clip_id)
+        resolved_version = resolve_dna_version(self._scout_prompt_hash)
+        ensure_managed_fields(
+            dna_json,
+            dna_version=resolved_version,
+            clip_id=clip_id,
+            start_s=start_s,
+            end_s=end_s,
+            scout_prompt_hash=self._scout_prompt_hash,
+            pipeline_version=PIPELINE_VERSION,
+        )
 
         # Ensure session row exists — the startup upsert may have been wiped by a
         # DB reset while this consumer was running.  ON CONFLICT DO NOTHING is a no-op.
@@ -187,7 +201,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=resolve_dna_version(self._scout_prompt_hash),
+                dna_version=resolved_version,
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
@@ -286,7 +300,16 @@ class CurationConsumer:
         frames_blob_uri = data.get("frames_blob_uri")
         source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
-        dna_json["clip_id"] = str(clip_id)
+        resolved_version = resolve_dna_version(self._scout_prompt_hash)
+        ensure_managed_fields(
+            dna_json,
+            dna_version=resolved_version,
+            clip_id=clip_id,
+            start_s=start_s,
+            end_s=end_s,
+            scout_prompt_hash=self._scout_prompt_hash,
+            pipeline_version=PIPELINE_VERSION,
+        )
 
         try:
             await self._pg.write_clip_with_dna(
@@ -295,7 +318,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=resolve_dna_version(self._scout_prompt_hash),
+                dna_version=resolved_version,
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
