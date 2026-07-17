@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from my_curator.domain.scout.dna_normalizer import ensure_managed_fields
+from my_curator.domain.scout.dna_validator import DNAValidator
 from my_curator.domain.scout.versioning import resolve_dna_version
 
 log = logging.getLogger(__name__)
@@ -130,6 +131,7 @@ class CurationConsumer:
         self._source_kind = source_kind
         self._topic_scouted = topic_scouted
         self._topic_needs_review = topic_needs_review
+        self._validator = DNAValidator()  # schema-validate scouted DNA before marking pending
         self.processed = 0
         self.errors = 0
 
@@ -214,20 +216,22 @@ class CurationConsumer:
             self.errors += 1
             return
 
+        # Schema-validate the normalized DNA before marking it clean. A degenerate/
+        # truncated VLM output can parse as JSON yet miss required nested fields
+        # (odd, planner_logic, …); such rows must be flagged for review, not stored
+        # as pending. json_valid (publisher metadata) is only JSON-parse validity.
+        schema_ok, schema_errs = self._validator.validate(dna_json)
         if not data.get("metadata", {}).get("json_valid", True):
-            try:
-                await self._pg.insert_review_queue(
-                    clip_id=clip_id,
-                    state="rejected_schema_invalid",
-                    reason="json_valid=False in publisher metadata",
-                )
-            except Exception:
-                log.warning("review_queue INSERT failed for schema-invalid clip %s", clip_id)
+            state, reason = "rejected_schema_invalid", "json_valid=False in publisher metadata"
+        elif not schema_ok:
+            state = "rejected_schema_invalid"
+            reason = ("schema: " + (schema_errs[0] if schema_errs else "invalid"))[:200]
         else:
-            try:
-                await self._pg.insert_review_queue(clip_id=clip_id, state="pending")
-            except Exception:
-                log.warning("review_queue INSERT failed for scouted clip %s", clip_id)
+            state, reason = "pending", None
+        try:
+            await self._pg.insert_review_queue(clip_id=clip_id, state=state, reason=reason)
+        except Exception:
+            log.warning("review_queue INSERT failed for scouted clip %s (state=%s)", clip_id, state)
 
         log.debug(
             "Scouted clip %s written (stream %s, %.2f–%.2f s)", clip_id, stream_id, start_s, end_s
