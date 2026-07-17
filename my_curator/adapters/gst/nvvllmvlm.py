@@ -785,6 +785,12 @@ class NvVllmVLM(GstBase.BaseTransform):
                 # Identify which stream this frame belongs to
                 stream_id = frame_meta.pad_index  # or frame_meta.source_id
 
+                # Skip the keepalive source (persistent-pipeline path): its dummy
+                # frames keep nvstreammux batching so real clips added at runtime
+                # don't hit a 0-source stall — but they must never be curated.
+                if stream_id == getattr(self, "_keepalive_stream_id", None):
+                    continue
+
                 # Get or create context for this stream
                 ctx = self._get_or_create_stream_context(stream_id)
 
@@ -1271,6 +1277,75 @@ class NvVllmVLM(GstBase.BaseTransform):
 
             traceback.print_exc()
             return None
+
+    def flush_stream(self, stream_id: int) -> None:
+        """Finalize + drain ONE stream's segments while the pipeline stays PLAYING.
+
+        Runtime source add/delete (persistent-pipeline path): the app calls this when
+        a source's per-stream EOS ('stream-eos') arrives, so that clip's last partial
+        segment is submitted and fully processed/published BEFORE the source is
+        released — the inference worker + vLLM engine keep running for the next clip
+        (do_stop, which tears the worker down, is only used for full pipeline stop).
+        """
+        import time
+
+        with self.stream_contexts_lock:
+            ctx = self.stream_contexts.get(stream_id)
+        if ctx is None:
+            return
+
+        # Submit this stream's remaining open segments (mirrors do_stop's finalize).
+        with self.stream_contexts_lock:
+            for seg in ctx.open_segments[:]:
+                if not seg.frames:
+                    continue
+                prompt_config = {
+                    "user_prompt": self.user_prompt,
+                    "system_prompt": self._system_prompt,
+                    "max_tokens": self.max_tokens,
+                    "temperature": self.temperature,
+                }
+                if self.top_p is not None:
+                    prompt_config["top_p"] = self.top_p
+                if self.top_k is not None:
+                    prompt_config["top_k"] = self.top_k
+                if self.repetition_penalty is not None:
+                    prompt_config["repetition_penalty"] = self.repetition_penalty
+                inv = dict(ctx.yolo_inventory)
+                ctx.yolo_inventory.clear()
+                try:
+                    self._infer_queue.put(
+                        SegmentRequest(stream_id, seg, prompt_config, inventory=inv),
+                        block=True,
+                        timeout=self.max_wait_timeout,
+                    )
+                    ctx.segments_submitted += 1
+                    ctx.total_frames_in_segments += len(seg.frames)
+                except Exception:
+                    ctx.segments_dropped += 1
+            ctx.open_segments.clear()
+
+        # Drain until this stream's submitted segments are processed (queue empty +
+        # no pending). Serial inference → scale the budget to the backlog.
+        pending0 = max(0, ctx.segments_submitted - ctx.segments_completed - ctx.segments_dropped)
+        max_wait = min(3600.0, max(self.max_wait_timeout, pending0 * 40.0))
+        elapsed = 0.0
+        while elapsed < max_wait:
+            with self.stream_contexts_lock:
+                pending = ctx.segments_submitted - ctx.segments_completed - ctx.segments_dropped
+            if self._infer_queue.empty() and pending <= 0:
+                break
+            time.sleep(0.5)
+            elapsed += 0.5
+        print(
+            f"{GST_PLUGIN_NAME}[Stream {stream_id}]: flushed "
+            f"({ctx.segments_completed} completed, {ctx.segments_dropped} dropped)"
+        )
+
+        # Drop this stream's context so it does not accumulate across clips and a
+        # reused stream_id starts fresh.
+        with self.stream_contexts_lock:
+            self.stream_contexts.pop(stream_id, None)
 
     def do_stop(self) -> bool:
         """Stop processing and finalize all streams"""

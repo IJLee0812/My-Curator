@@ -348,31 +348,15 @@ Examples:
             engine = None
         if engine is not None:
             single = len(input_uris) == 1
-            if args.output and not single:
-                print(
-                    "Warning: --output is ignored for multi-source warm runs "
-                    "(per-clip JSON not written)"
-                )
             try:
-                total = len(input_uris)
-                for i, uri in enumerate(input_uris):
-                    print(f"\n[warm {i + 1}/{total}] {uri}")
-                    app = None
-                    try:
-                        app = _make_app(
-                            [uri],
-                            engine=engine,
-                            output_path=args.output if single else None,
-                            src_override=args.source_clip_id if single else None,
-                        )
-                        app.run()
-                    except Exception as e:
-                        print(f"[warm] clip failed ({uri}): {e}")
-                    finally:
-                        # del app releases the per-clip GStreamer pipeline (NVMM);
-                        # _reclaim_vram trims torch cache and logs device VRAM.
-                        del app
-                        _reclaim_vram(f"[warm {i + 1}/{total}]")
+                # Persistent pipeline: ONE app processes all clips via DeepStream
+                # runtime source add/delete (engine loaded once, NVMM reused).
+                _make_app(
+                    input_uris,
+                    engine=engine,
+                    output_path=args.output,
+                    src_override=args.source_clip_id if single else None,
+                ).run()
             finally:
                 engine.shutdown()
             return
