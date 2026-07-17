@@ -75,6 +75,49 @@ def _make_scouted_msg(json_valid: bool = True, source_clip_id: str | None = None
     return msg
 
 
+# A schema-complete v0.2 DNA. _V2_PROMPT_HASH resolves to dna_version 0.2.0 so the
+# consumer's schema gate validates against scenario_dna_v0_2.schema.json.
+_V2_PROMPT_HASH = "82e083d75bf378b8"
+_VALID_DNA_V02: dict = {
+    "dna_version": "0.2.0",
+    "clip_id": "12345678-1234-5678-1234-567812345678",
+    "timestamp_range": {"start_s": 0.0, "end_s": 5.0},
+    "scene_description": (
+        "Clear-day cruise on a two-lane primary road with no active intersection. "
+        "Ego maintains a steady following gap with no notable actor interactions."
+    ),
+    "odd": {"weather": "clear", "lighting": "day", "sensor_fidelity": ["clean"]},
+    "topology": {"road_type": "primary", "lane_event": "normal", "intersection_type": "none"},
+    "actor_dynamics": [],
+    "planner_logic": {
+        "ego_maneuver": "cruise",
+        "risk_level": "nominal",
+        "risk_level_rationale": "Clear primary road, no actors within 50 m, ego cruise within limit.",
+        "safety_event": {
+            "has_event": False,
+            "event_type": "none",
+            "collision_type": None,
+            "severity_estimate": None,
+        },
+    },
+    "confidence": {"overall": 0.9, "scout_agreement": 1.0, "hallucination_flags": []},
+    "provenance": {
+        "scout_models": ["cosmos-reason2-8b"],
+        "scout_prompt_hash": "abcd1234ef567890",
+        "pipeline_version": "p2-6",
+        "is_synthetic": False,
+        "reference_standards": ["ASAM OSI v3.x", "OpenDRIVE v1.5M"],
+    },
+}
+
+
+def _make_scouted_msg_v2() -> dict:
+    """Scouted message carrying a schema-complete v0.2 DNA (validates clean)."""
+    msg = _make_scouted_msg(json_valid=True)
+    msg["result"] = json.dumps(_VALID_DNA_V02)
+    return msg
+
+
 def _make_ingest_msg(session_id: str = "ingest-session-001") -> dict:
     """Simulate a /v1/ingest Kafka payload (P3-2 format)."""
     import uuid as _uuid
@@ -214,11 +257,23 @@ class TestCurationConsumerMocked:
         assert kwargs["state"] == "rejected_schema_invalid"
 
     async def test_scouted_json_valid_inserts_pending(self):
+        # Schema-complete v0.2 DNA under a hash resolving to 0.2.0 → passes the
+        # consumer schema gate → pending.
         pg = AsyncMock()
-        consumer = _mock_consumer(pg=pg)
-        await consumer.handle("curation.clip.scouted", _make_scouted_msg(json_valid=True))
+        consumer = _mock_consumer(pg=pg, prompt_hash=_V2_PROMPT_HASH)
+        await consumer.handle("curation.clip.scouted", _make_scouted_msg_v2())
         pg.insert_review_queue.assert_awaited_once()
         assert pg.insert_review_queue.call_args.kwargs["state"] == "pending"
+
+    async def test_scouted_json_valid_but_schema_incomplete_inserts_rejected(self):
+        # Parses as JSON (json_valid=True) but misses required nested fields
+        # (odd, planner_logic, …). The schema gate must flag it as
+        # rejected_schema_invalid rather than storing it as pending.
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg, prompt_hash=_V2_PROMPT_HASH)
+        await consumer.handle("curation.clip.scouted", _make_scouted_msg(json_valid=True))
+        pg.insert_review_queue.assert_awaited_once()
+        assert pg.insert_review_queue.call_args.kwargs["state"] == "rejected_schema_invalid"
 
     async def test_needs_review_calls_write_clip_with_dna(self):
         pg = AsyncMock()

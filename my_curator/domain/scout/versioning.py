@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 PROMPT_VERSION_MAP: dict[str, str] = {
     "f823defb040481ce": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-4 baseline, pre-P2-6)
     "223892aa4a72b577": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-6: DNA v0.1 CoT prompt)
-    "6dfb9ccc8e7f0150": "0.2.0",  # prompts/scout_cosmos_reason2.v2.md (P4-2: DNA v0.2 SOTIF C×S prompt)
+    "6dfb9ccc8e7f0150": "0.2.0",  # prompts/scout_cosmos_reason2.v2.md (P4-2: DNA v0.2 SOTIF C×S prompt; superseded)
+    "82e083d75bf378b8": "0.2.0",  # prompts/scout_cosmos_reason2.v2.md (hotfix: nested-JSON exemplar + enum-discipline notes)
 }
 
 

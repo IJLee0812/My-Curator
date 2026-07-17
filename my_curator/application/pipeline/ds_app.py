@@ -175,18 +175,30 @@ class VLMKafkaApp:
         )
 
     def bus_call(self, bus, message, loop):
-        """Handle GStreamer bus messages"""
+        """Handle GStreamer bus messages (runtime source add/delete)."""
         t = message.type
 
         if t == Gst.MessageType.EOS:
-            print("End-of-stream")
+            print("End-of-stream (all sources)")
             loop.quit()
+        elif t == Gst.MessageType.ELEMENT:
+            # nvstreammux posts a per-source "stream-eos" ELEMENT message on the bus,
+            # but bus messages are async and can be delivered late — a clip's stream-eos
+            # can surface at the START of the NEXT clip's loop.run() and quit it before
+            # any frame arrives (every other clip comes up empty). We IGNORE it and rely
+            # solely on the synchronous, self-removing mux-sink EOS probe in _add_source.
+            struct = message.get_structure()
+            if struct is not None and struct.get_name() == "stream-eos":
+                ok, stream_id = struct.get_uint("stream-id")
+                if ok:
+                    print(f"Per-source EOS: stream {stream_id} (bus, ignored)")
         elif t == Gst.MessageType.WARNING:
             err, debug = message.parse_warning()
             print(f"Warning: {err}: {debug}")
         elif t == Gst.MessageType.ERROR:
             err, debug = message.parse_error()
             print(f"Error: {err}: {debug}")
+            self._pipeline_error = True
             loop.quit()
 
         return True
@@ -213,74 +225,57 @@ class VLMKafkaApp:
         """
         print(f"Building pipeline for {self.num_sources} source(s)...")
 
-        has_live = any(
-            uri.startswith("rtsp://") or uri.startswith("rtsps://") for uri in self.input_uris
-        )
-
         # Create pipeline
         self.pipeline = Gst.Pipeline.new("vlm-kafka-signal-pipeline")
 
-        # Create streammux
-        streammux = Gst.ElementFactory.make("nvstreammux", "stream-muxer")
-        # Size the muxer to source native resolution; a fixed W×H up/down-scales
-        # every input and wastes vision tokens. Multi-source -> max; fallback 1920x1080.
+        # nvstreammux — PERSISTENT. A keepalive source holds sink_0 for the whole
+        # session so the muxer never hits a 0-source stall; real clips are added/
+        # removed at runtime on sink_1 (add_source / stop_release_source). The vLLM
+        # engine loads once per session and NVMM pools are reused across clips.
         mux_w, mux_h = 1920, 1080
         probed = [r for r in (get_video_resolution(u) for u in self.input_uris) if r]
         if probed:
             mux_w = max(w for w, _ in probed)
             mux_h = max(h for _, h in probed)
+        streammux = Gst.ElementFactory.make("nvstreammux", "stream-muxer")
         streammux.set_property("width", mux_w)
         streammux.set_property("height", mux_h)
-        print(f"  nvstreammux resolution: {mux_w}x{mux_h}")
-        streammux.set_property("batch-size", self.num_sources)
-        streammux.set_property("live-source", has_live)
-        if not has_live:
-            streammux.set_property("batched-push-timeout", 4000000)
-
-        # Add to pipeline
+        print(f"  nvstreammux resolution (persistent, max-of-corpus): {mux_w}x{mux_h}")
+        streammux.set_property("batch-size", 2)  # keepalive (sink_0) + 1 real slot (sink_1)
+        streammux.set_property("live-source", 1)  # required for runtime source add/remove
+        streammux.set_property("batched-push-timeout", 4000000)
+        streammux.set_property(
+            "drop-pipeline-eos", 1
+        )  # per-source EOS -> stream-eos, not pipeline EOS
         self.pipeline.add(streammux)
+        self._streammux = streammux
 
-        # Pre-request mux sink pads so pad-added callbacks can link into them
-        mux_sink_pads = []
-        for i in range(self.num_sources):
-            sink_pad = streammux.request_pad_simple(f"sink_{i}")
-            if not sink_pad:
-                print(f"Error: Could not get sink pad {i} from streammux")
-                return None
-            sink_pad.add_probe(Gst.PadProbeType.BUFFER, self.pad_probe_callback, i)
-            mux_sink_pads.append(sink_pad)
+        # Keepalive source on sink_0 (permanent): a tiny solid-black live feed that
+        # keeps the muxer batching so a clip added to sink_1 at runtime is delivered
+        # cleanly (no cold-add frame drop). nvvllmvlm skips this stream_id.
+        ks = Gst.ElementFactory.make("videotestsrc", "keepalive-src")
+        ks.set_property("pattern", 2)
+        ks.set_property("is-live", True)
+        ks.set_property("do-timestamp", True)
+        kc = Gst.ElementFactory.make("nvvideoconvert", "keepalive-conv")
+        kf = Gst.ElementFactory.make("capsfilter", "keepalive-caps")
+        kf.set_property(
+            "caps",
+            Gst.Caps.from_string(
+                "video/x-raw(memory:NVMM),format=NV12,width=320,height=240,framerate=5/1"
+            ),
+        )
+        for _e in (ks, kc, kf):
+            self.pipeline.add(_e)
+        ks.link(kc)
+        kc.link(kf)
+        kf.get_static_pad("src").link(streammux.request_pad_simple("sink_0"))
+        self._keepalive_stream_id = 0
+        self._real_slot = 1
 
-        # Create one uridecodebin per source
-        for i, uri in enumerate(self.input_uris):
-            print(f"  Source {i}: {uri}")
-
-            uri_decode_bin = Gst.ElementFactory.make("uridecodebin", f"uri-decode-bin-{i}")
-            if not uri_decode_bin:
-                print(f"Error: Could not create uridecodebin for stream {i}")
-                return None
-
-            uri_decode_bin.set_property("uri", uri)
-            self.pipeline.add(uri_decode_bin)
-
-            # Capture loop variables via default args
-            def on_pad_added(
-                element,
-                pad,
-                mux_sinkpad=mux_sink_pads[i],
-                stream_id=i,
-            ):
-                caps = pad.get_current_caps()
-                if not caps:
-                    caps = pad.query_caps()
-                if not caps:
-                    return
-                structure = caps.get_structure(0)
-                if "video" in structure.get_name():
-                    if not mux_sinkpad.is_linked():
-                        if pad.link(mux_sinkpad) == Gst.PadLinkReturn.OK:
-                            print(f"  Linked uridecodebin → streammux.sink_{stream_id}")
-
-            uri_decode_bin.connect("pad-added", on_pad_added)
+        # Runtime source-management state for the real slot (populated in add_source).
+        self._source_bins: dict[int, object] = {}
+        self._source_pads: dict[int, object] = {}
 
         # Object detection via nvinfer (--detect mode)
         nvinfer = None
@@ -354,6 +349,8 @@ class VLMKafkaApp:
         # Connect signal to Kafka publisher
         nvvllm.connect("vlm-result", self.kafka_publisher.on_vlm_result)
         print("✓ Connected vlm-result signal to Kafka publisher")
+        self._nvvllm = nvvllm  # for per-clip flush_stream() during runtime source swap
+        nvvllm._keepalive_stream_id = self._keepalive_stream_id  # never curate the keepalive feed
 
         # Fakesink
         sink = Gst.ElementFactory.make("fakesink", "fake-sink")
@@ -416,32 +413,102 @@ class VLMKafkaApp:
         class_mapping = getattr(self, "_class_mapping", {})
         return build_osd_branch(self.pipeline, class_mapping, output_path, seg_mode)
 
-    def run(self):
-        """Run the application"""
-        # Build pipeline
-        pipeline = self.build_pipeline()
+    def _update_source_map(self, index: int) -> None:
+        """Point the publisher's source_map at the current clip (real stream_id = _real_slot)."""
+        self.kafka_publisher._source_map = {
+            self._real_slot: self._source_map.get(index, (None, None))
+        }
 
-        # Set up bus
+    def _add_source(self, uri: str) -> None:
+        """Attach a uridecodebin for *uri* to streammux.sink_<real_slot> at runtime
+        (pipeline stays PLAYING). The mux sink pad is requested inside pad-added
+        (NVIDIA reference pattern), and a one-shot EOS probe on it quits the loop so
+        run() advances to flush + release."""
+        slot = self._real_slot
+        src = Gst.ElementFactory.make("uridecodebin", f"uri-decode-bin-{slot}")
+        src.set_property("uri", uri)
+
+        def on_pad_added(element, pad):
+            caps = pad.get_current_caps() or pad.query_caps()
+            if not caps or "video" not in caps.get_structure(0).get_name():
+                return
+            if self._streammux.get_static_pad(f"sink_{slot}"):
+                return  # guard against a second video pad re-requesting the sink
+            mux_sink = self._streammux.request_pad_simple(f"sink_{slot}")
+            if not mux_sink or pad.link(mux_sink) != Gst.PadLinkReturn.OK:
+                return
+            self._source_pads[slot] = mux_sink
+
+            def _eos_probe(_pad, info, _u):
+                if info.type & Gst.PadProbeType.EVENT_DOWNSTREAM:
+                    ev = info.get_event()
+                    if ev and ev.type == Gst.EventType.EOS:
+                        GLib.idle_add(self.loop.quit)
+                        return Gst.PadProbeReturn.REMOVE
+                return Gst.PadProbeReturn.OK
+
+            mux_sink.add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, _eos_probe, None)
+
+        src.connect("pad-added", on_pad_added)
+        self._source_bins[slot] = src
+        self.pipeline.add(src)
+        src.sync_state_with_parent()
+
+    def _stop_release_source(self) -> None:
+        """Full source teardown: flush-stop → release request pad → NULL → remove."""
+        slot = self._real_slot
+        src = self._source_bins.pop(slot, None)
+        sink_pad = self._source_pads.pop(slot, None)
+        if src is not None:
+            src.set_state(Gst.State.NULL)
+        if sink_pad is not None:
+            # flush-stop resets this sink pad's flushing state before release; the next
+            # clip's uridecodebin supplies its own fresh segment. (Per-source EOS is
+            # handled by the synchronous mux-sink probe, so no in-flight EOS races here.)
+            sink_pad.send_event(Gst.Event.new_flush_stop(False))
+            self._streammux.release_request_pad(sink_pad)
+        if src is not None:
+            self.pipeline.remove(src)
+
+    def run(self):
+        """Run the app — ONE persistent pipeline kept PLAYING; a keepalive feed holds
+        sink_0 while clips are added/removed on sink_<real_slot> (DeepStream runtime
+        source add/delete). Each clip's last segment is flushed via
+        nvvllmvlm.flush_stream(real_slot) on its per-source EOS, so the vLLM engine +
+        NVMM pools are allocated once for the whole session (no per-clip rebuild)."""
+        pipeline = self.build_pipeline()
+        self._pipeline_error = False
+
         bus = pipeline.get_bus()
         bus.add_signal_watch()
-
-        # Create main loop
         self.loop = GLib.MainLoop()
         bus.connect("message", self.bus_call, self.loop)
 
-        # Start pipeline
-        print("Starting pipeline...")
+        print("Starting persistent pipeline...")
         pipeline.set_state(Gst.State.PLAYING)
 
+        total = len(self.input_uris)
         try:
-            print("Running... (Press Ctrl+C to stop)\n")
-            self.loop.run()
-        except KeyboardInterrupt:
-            print("\nInterrupted by user")
-
-        # Cleanup
-        print("\nStopping pipeline...")
-        pipeline.set_state(Gst.State.NULL)
+            for i, uri in enumerate(self.input_uris):
+                print(f"\n[persistent {i + 1}/{total}] {uri}")
+                self._update_source_map(i)
+                self._add_source(uri)
+                try:
+                    self.loop.run()  # blocks until this source's EOS probe quits it (or error)
+                except KeyboardInterrupt:
+                    print("\nInterrupted by user")
+                    self._stop_release_source()
+                    break
+                if self._pipeline_error:
+                    print(f"[persistent] pipeline error on clip {i} — stopping")
+                    break
+                # Flush this clip's segments (worker + engine stay up), then release
+                # the source; the pipeline keeps PLAYING for the next clip.
+                self._nvvllm.flush_stream(self._real_slot)
+                self._stop_release_source()
+        finally:
+            print("\nStopping pipeline...")
+            pipeline.set_state(Gst.State.NULL)
 
         # Engine auto-detect: nvinfer builds engine with pattern
         # model_b*_gpu*_fp*.engine in CWD. Rename to the path in config

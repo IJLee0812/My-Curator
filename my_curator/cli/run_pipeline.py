@@ -30,6 +30,52 @@ import os
 import sys
 
 
+def _device_vram_used_mib() -> int | None:
+    """Used MiB on the visible GPU, read at the device level via nvidia-smi.
+
+    Device-level on purpose: vLLM 0.14.0 runs its engine (weights/KV/graphs) in a
+    separate EngineCore process, so this process's torch stats would miss it. The
+    DS container exposes a single GPU, so the first row is the pipeline's GPU.
+    """
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return int(r.stdout.strip().splitlines()[0])
+    except Exception:
+        pass
+    return None
+
+
+def _reclaim_vram(label: str) -> None:
+    """Between warm clips: trim this process's torch cache and log device VRAM.
+
+    The real per-clip reclaim is the caller's ``del app``, which releases the
+    GStreamer pipeline (NVMM decoder/mux buffers). ``empty_cache`` only returns
+    this process's unused torch blocks — cheap and harmless, but it cannot touch
+    the separate EngineCore process, so it never disturbs the warm engine.
+    """
+    import gc
+
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+    used = _device_vram_used_mib()
+    if used is not None:
+        print(f"{label} device VRAM in use: {used} MiB")
+
+
 def main() -> None:
     """Main entry point — orchestrates the DS pipeline run."""
 
@@ -57,8 +103,11 @@ URIs can be:
   RTSP streams: rtsp://user:pass@host:port/stream
 
 Examples:
-  # Single file with dry-run (console output)
-  python3 -m my_curator.cli.run_pipeline video1.mp4 --dry-run
+  # --detect (YOLO26 hints) is ON by default; add --no-detect for a pure-VLM
+  # run that needs no YOLO ONNX/engine.
+
+  # Single file with dry-run (console output), pure VLM
+  python3 -m my_curator.cli.run_pipeline video1.mp4 --no-detect --dry-run
 
   # RTSP stream with dry-run
   python3 -m my_curator.cli.run_pipeline rtsp://192.168.1.100:8554/stream \\
@@ -110,8 +159,11 @@ Examples:
     )
     parser.add_argument(
         "--detect",
-        action="store_true",
-        help="Enable object detection (nvinfer) before VLM for detection hint injection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Object detection (nvinfer) before VLM for detection-hint injection. "
+        "Default: on (every production/re-curation run uses it). "
+        "Pass --no-detect for a pure-VLM run.",
     )
     parser.add_argument(
         "--detect-config",
@@ -239,10 +291,16 @@ Examples:
 
     for src in args.sources:
         if not src.startswith("rtsp://") and os.path.isdir(src):
-            found = sorted(pathlib.Path(src).glob("*/video/*.mp4"))
+            # Recursive so flat dataset layouts match, not only {clip_id}/video/*.mp4.
+            found = sorted(pathlib.Path(src).rglob("*.mp4"))
+            # Don't re-ingest an OSD output (--detect-output) left inside the tree.
+            if args.detect_output:
+                _out = pathlib.Path(args.detect_output).resolve()
+                found = [m for m in found if m.resolve() != _out]
             if not found:
-                print(f"Error: No */video/*.mp4 files found under session dir: {src}")
+                print(f"Error: No *.mp4 files found under session dir: {src}")
                 sys.exit(1)
+            print(f"  Discovered {len(found)} .mp4 file(s) under {src}")
             for mp4 in found:
                 input_uris.append(f"file://{mp4.resolve()}")
         else:
@@ -290,24 +348,15 @@ Examples:
             engine = None
         if engine is not None:
             single = len(input_uris) == 1
-            if args.output and not single:
-                print(
-                    "Warning: --output is ignored for multi-source warm runs "
-                    "(per-clip JSON not written)"
-                )
             try:
-                total = len(input_uris)
-                for i, uri in enumerate(input_uris):
-                    print(f"\n[warm {i + 1}/{total}] {uri}")
-                    try:
-                        _make_app(
-                            [uri],
-                            engine=engine,
-                            output_path=args.output if single else None,
-                            src_override=args.source_clip_id if single else None,
-                        ).run()
-                    except Exception as e:
-                        print(f"[warm] clip failed ({uri}): {e}")
+                # Persistent pipeline: ONE app processes all clips via DeepStream
+                # runtime source add/delete (engine loaded once, NVMM reused).
+                _make_app(
+                    input_uris,
+                    engine=engine,
+                    output_path=args.output,
+                    src_override=args.source_clip_id if single else None,
+                ).run()
             finally:
                 engine.shutdown()
             return

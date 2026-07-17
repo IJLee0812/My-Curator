@@ -51,7 +51,7 @@ class TestMainArgParser:
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("-c", "--config", default=None)
         parser.add_argument("--output", default=None)
-        parser.add_argument("--detect", action="store_true")
+        parser.add_argument("--detect", action=argparse.BooleanOptionalAction, default=True)
         parser.add_argument("--detect-config", default=None)
         parser.add_argument("--detect-output", default=None)
         parser.add_argument("--source-clip-id", default=None)
@@ -73,13 +73,18 @@ class TestMainArgParser:
         args = self._parse(["video.mp4", "--dry-run"])
         assert args.dry_run is True
 
-    def test_detect_default_false(self):
+    def test_detect_default_true(self):
+        # Hotfix: --detect defaults ON (every production/re-curation run uses it).
         args = self._parse(["video.mp4"])
-        assert args.detect is False
+        assert args.detect is True
 
     def test_detect_flag_sets_true(self):
         args = self._parse(["video.mp4", "--detect"])
         assert args.detect is True
+
+    def test_no_detect_flag_sets_false(self):
+        args = self._parse(["video.mp4", "--no-detect"])
+        assert args.detect is False
 
     def test_detect_output_default_none(self):
         args = self._parse(["video.mp4"])

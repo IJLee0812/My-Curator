@@ -32,6 +32,38 @@ code fence. The JSON must conform exactly to Scenario DNA v0.2.
 Use ONLY the enum values listed below. The last code fence in your
 response is taken as the final answer.
 
+## Required output structure — copy this EXACT nested shape
+Emit these keys and ONLY these keys, nested EXACTLY as shown. Never
+flatten a nested field into a dotted key: emit
+"odd": {"weather": ...}, NEVER "odd.weather". Emit the actor array as
+"actor_dynamics": [ {...} ], NEVER "actor_dynamics[]". Include the
+pipeline-managed fields (dna_version, clip_id, timestamp_range,
+provenance) verbatim. Add NO key that is not shown here. Populate every
+value from what you observe — do NOT copy these example values verbatim.
+```json
+{
+  "dna_version": "0.2.0",
+  "clip_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp_range": {"start_s": 0, "end_s": 0},
+  "scene_description": "Clear-day motorway; ego cruises the center lane behind traffic at a safe gap. No lateral actors and steady speed throughout. Routine highway driving with no safety-relevant events.",
+  "odd": {"weather": "clear", "lighting": "day", "sensor_fidelity": ["clean"]},
+  "topology": {"road_type": "motorway", "lane_event": "normal", "intersection_type": "none"},
+  "actor_dynamics": [
+    {"actor_class": "vehicle_car", "state": "tailing", "distance_bucket": "mid", "confidence": 0.92, "grounded_by_yolo26": true}
+  ],
+  "planner_logic": {
+    "ego_maneuver": "cruise",
+    "risk_level": "nominal",
+    "risk_level_rationale": "Controllable with no actor closing within 50 m and ego at steady cruise, so no harm is reachable in this window.",
+    "safety_event": {"has_event": false, "event_type": "none", "collision_type": null, "severity_estimate": null}
+  },
+  "confidence": {"overall": 0.9, "scout_agreement": 1.0, "hallucination_flags": []},
+  "provenance": {"scout_models": ["cosmos-reason2-8b"], "scout_prompt_hash": "", "pipeline_version": "", "is_synthetic": false, "reference_standards": ["ASAM OSI v3.x", "OpenDRIVE v1.5M", "WOD-E2E", "ISO 21448:2022", "NVIDIA CDS (2025-Q4)", "VLM-AutoDrive (arXiv:2603.18178)"]}
+}
+```
+"actor_dynamics" may be an empty array [] when no actors are present;
+every other key is always required and must be present.
+
 ## Field contract
 
 **scene_description** — string, ≤ 500 chars, AV-safety-expert persona:
@@ -48,12 +80,15 @@ response is taken as the final answer.
 
 **odd.lighting** — one of:
   day | dawn | dusk | night | tunnel | overcast_day
+  (overcast daytime is "overcast_day"; there is no bare "overcast")
 
 **odd.sensor_fidelity** — array, each item from:
   clean | lens_flare | droplets_on_lens | motion_blur | low_contrast | overexposed
 
 **topology.road_type** — one of:
   motorway | trunk | primary | secondary | residential | service | rural | parking | walkway | cycling
+  (there is NO "urban": use "primary" for a major/arterial urban road,
+   "secondary" for a minor/local urban road)
 
 **topology.lane_event** — one of:
   normal | construction_divert | lane_closed | merge | split | unmarked
@@ -66,6 +101,8 @@ response is taken as the final answer.
                vehicle_truck | vehicle_bus | vehicle_emergency | vehicle_construction |
                animal | debris | construction_object | obstacle | standup_scooter_rider |
                e_bike_rider | delivery_motorcycle | wheelchair_user
+               (use "pedestrian" not "person", "cyclist" not "bicycle",
+                "vehicle_bus"/"vehicle_truck" not "bus"/"truck")
   state: crossing | hesitating | jaywalking | cutin | cutout | stopped |
          emerging | tailing | oncoming | parked | static
   distance_bucket: near | mid | far

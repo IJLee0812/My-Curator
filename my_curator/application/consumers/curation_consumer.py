@@ -25,6 +25,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from my_curator.domain.scout.dna_normalizer import ensure_managed_fields
+from my_curator.domain.scout.dna_validator import DNAValidator
 from my_curator.domain.scout.versioning import resolve_dna_version
 
 log = logging.getLogger(__name__)
@@ -67,8 +69,9 @@ def _run_faststart(path: Path) -> None:
         tmp.unlink(missing_ok=True)
         log.warning("faststart failed for %s — skipping", path.name, exc_info=True)
 
+
 _SCOUT_PROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v1.md"
+    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v2.md"
 )
 PIPELINE_VERSION = "p2-6"
 
@@ -86,12 +89,15 @@ def _parse_dna_json(result_text: str, curation_meta: dict) -> tuple[dict, dict]:
     returned separately for storage in the curation_meta column —
     it is never merged into dna_json.
     """
+    from my_curator.domain.scout.dna_normalizer import normalize_dna
     from my_curator.domain.scout.dna_validator import DNAValidator
 
     validator = DNAValidator()
     dna = validator.extract_json(result_text)
     if dna is None:
         dna = {"raw_text": result_text}
+    else:
+        dna = normalize_dna(dna)
     return dna, curation_meta
 
 
@@ -125,6 +131,7 @@ class CurationConsumer:
         self._source_kind = source_kind
         self._topic_scouted = topic_scouted
         self._topic_needs_review = topic_needs_review
+        self._validator = DNAValidator()  # schema-validate scouted DNA before marking pending
         self.processed = 0
         self.errors = 0
 
@@ -161,7 +168,16 @@ class CurationConsumer:
         # when the publisher provides one.  Stays NULL otherwise (column is nullable).
         source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
-        dna_json["clip_id"] = str(clip_id)
+        resolved_version = resolve_dna_version(self._scout_prompt_hash)
+        ensure_managed_fields(
+            dna_json,
+            dna_version=resolved_version,
+            clip_id=clip_id,
+            start_s=start_s,
+            end_s=end_s,
+            scout_prompt_hash=self._scout_prompt_hash,
+            pipeline_version=PIPELINE_VERSION,
+        )
 
         # Ensure session row exists — the startup upsert may have been wiped by a
         # DB reset while this consumer was running.  ON CONFLICT DO NOTHING is a no-op.
@@ -187,7 +203,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=resolve_dna_version(self._scout_prompt_hash),
+                dna_version=resolved_version,
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,
@@ -200,20 +216,22 @@ class CurationConsumer:
             self.errors += 1
             return
 
+        # Schema-validate the normalized DNA before marking it clean. A degenerate/
+        # truncated VLM output can parse as JSON yet miss required nested fields
+        # (odd, planner_logic, …); such rows must be flagged for review, not stored
+        # as pending. json_valid (publisher metadata) is only JSON-parse validity.
+        schema_ok, schema_errs = self._validator.validate(dna_json)
         if not data.get("metadata", {}).get("json_valid", True):
-            try:
-                await self._pg.insert_review_queue(
-                    clip_id=clip_id,
-                    state="rejected_schema_invalid",
-                    reason="json_valid=False in publisher metadata",
-                )
-            except Exception:
-                log.warning("review_queue INSERT failed for schema-invalid clip %s", clip_id)
+            state, reason = "rejected_schema_invalid", "json_valid=False in publisher metadata"
+        elif not schema_ok:
+            state = "rejected_schema_invalid"
+            reason = ("schema: " + (schema_errs[0] if schema_errs else "invalid"))[:200]
         else:
-            try:
-                await self._pg.insert_review_queue(clip_id=clip_id, state="pending")
-            except Exception:
-                log.warning("review_queue INSERT failed for scouted clip %s", clip_id)
+            state, reason = "pending", None
+        try:
+            await self._pg.insert_review_queue(clip_id=clip_id, state=state, reason=reason)
+        except Exception:
+            log.warning("review_queue INSERT failed for scouted clip %s (state=%s)", clip_id, state)
 
         log.debug(
             "Scouted clip %s written (stream %s, %.2f–%.2f s)", clip_id, stream_id, start_s, end_s
@@ -286,7 +304,16 @@ class CurationConsumer:
         frames_blob_uri = data.get("frames_blob_uri")
         source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))
-        dna_json["clip_id"] = str(clip_id)
+        resolved_version = resolve_dna_version(self._scout_prompt_hash)
+        ensure_managed_fields(
+            dna_json,
+            dna_version=resolved_version,
+            clip_id=clip_id,
+            start_s=start_s,
+            end_s=end_s,
+            scout_prompt_hash=self._scout_prompt_hash,
+            pipeline_version=PIPELINE_VERSION,
+        )
 
         try:
             await self._pg.write_clip_with_dna(
@@ -295,7 +322,7 @@ class CurationConsumer:
                 blob_uri=blob_uri,
                 start_s=start_s,
                 end_s=end_s,
-                dna_version=resolve_dna_version(self._scout_prompt_hash),
+                dna_version=resolved_version,
                 dna_json=dna_json,
                 scout_prompt_hash=self._scout_prompt_hash,
                 pipeline_version=PIPELINE_VERSION,

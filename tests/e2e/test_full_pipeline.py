@@ -103,6 +103,7 @@ class TestPureVLMPipeline:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             "--output",
             str(tmp_path / "output.json"),
             "--dry-run",
@@ -116,6 +117,7 @@ class TestPureVLMPipeline:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             "--output",
             str(out),
             "--dry-run",
@@ -129,6 +131,7 @@ class TestPureVLMPipeline:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             "--output",
             str(out),
             "--dry-run",
@@ -242,6 +245,7 @@ class TestDNARoundTripSmoke:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             timeout=self.PIPELINE_TIMEOUT_SEC,
         )
         assert pipeline_result.returncode == 0, pipeline_result.stderr
@@ -295,6 +299,7 @@ class TestDNARoundTripSmoke:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             timeout=self.PIPELINE_TIMEOUT_SEC,
         )
         assert pipeline_result.returncode == 0, pipeline_result.stderr
@@ -359,6 +364,7 @@ class TestEmbedderWorkerE2E:
             str(SAMPLE_MP4),
             "-c",
             str(CONFIG_DRIVING),
+            "--no-detect",
             timeout=self.PIPELINE_TIMEOUT_SEC,
         )
         assert pipeline_result.returncode == 0, pipeline_result.stderr
