@@ -133,11 +133,12 @@ export function PlannerBadge({
 // v0.2 safety_event card — rendered only when has_event is true (the nominal
 // majority has no event).  Colour-coded by severity_estimate; collision_type is
 // null across the current corpus (no collisions), so it renders as "—".
+// Keys match schema severity_estimate enum: no_harm / minor / major / fatal.
 const SEVERITY_STYLE: Record<string, string> = {
-  minor:    "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  moderate: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  severe:   "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
-  fatal:    "border-red-600/40 bg-red-600/15 text-red-700 dark:text-red-300",
+  no_harm: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
+  minor:   "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  major:   "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  fatal:   "border-red-600/40 bg-red-600/15 text-red-700 dark:text-red-300",
 };
 
 function collisionLabel(collision: string | null): string {

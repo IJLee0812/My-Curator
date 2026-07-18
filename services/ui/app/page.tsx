@@ -141,7 +141,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="t-title text-ink">Dashboard</h1>
           <p className="text-sm text-muted mt-0.5">
-            Scenario DNA v0.1 · corpus: {totalClips} clip{totalClips === 1 ? "" : "s"} ·
+            Scenario DNA v0.2 · corpus: {totalClips} clip{totalClips === 1 ? "" : "s"} ·
             DNA rows: {stats?.scenario_dna_count ?? 0}
           </p>
         </div>

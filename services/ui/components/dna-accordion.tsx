@@ -55,7 +55,7 @@ function KV({ k, v }: { k: string; v: React.ReactNode }) {
 /**
  * 4-Layer DNA accordion (P3-4).
  *
- * Renders the full Scenario DNA v0.1 structure.  Pass `dna={null}` when the
+ * Renders the full Scenario DNA v0.2 structure.  Pass `dna={null}` when the
  * underlying clip has no DNA row yet (the accordion shows a single empty
  * section instead of crashing on field access).
  */
@@ -231,7 +231,7 @@ export default function DnaAccordion({ dna }: { dna: ScenarioDNA | null }) {
               k="judge_model"
               v={
                 provenance.judge_model ?? (
-                  <span className="text-faint">null (post-v0.1)</span>
+                  <span className="text-faint">null (report-only Judge)</span>
                 )
               }
             />
