@@ -212,12 +212,25 @@ const PLANNER_FIELDS_EN: FieldDef[] = [
   {
     name: "risk_level",
     type: "enum · required",
-    description: "Scenario risk classification per ISO 21448 SOTIF. Drives the Review Queue priority — 'critical' clips surface first. The DNA pass rate metric counts approved / (approved + rejected), excluding pending and schema_invalid.",
+    description: "Scenario risk classification per ISO 21448 SOTIF. Drives the Review Queue priority — 'critical' clips surface first. The DNA pass rate metric counts approved / (approved + rejected), excluding pending and schema_invalid. In v0.2 it is paired with risk_level_rationale — a one-sentence free-text justification anchored to the ISO 21448 C×S (controllability × severity) decision, capped at 300 chars (the UI marks a truncated value with an ellipsis).",
     source: "ISO 21448:2022 SOTIF",
     rows: [
       { value: "nominal",  desc: "No safety concern — absence of unreasonable risk (normal operation)" },
       { value: "elevated", desc: "Tolerable risk — hazard present but mitigation is in place" },
       { value: "critical", desc: "Unreasonable risk (SOTIF trigger) — intervention or override required" },
+    ],
+  },
+  {
+    name: "safety_event",
+    type: "object · required (v0.2)",
+    description: "Generic safety-event channel added in v0.2. has_event (bool) gates the record; when true the clip-detail view renders a Safety Event card. collision_type is one of head_on / rear_end / t_bone / sideswipe / single_vehicle / vru_struck / none (null unless event_type is 'collision'). severity_estimate is no_harm / minor / major / fatal (null when there is no event). event_type enumerates the channel:",
+    source: "ISO 21448:2022 SOTIF + Abbreviated Injury Scale (AIS) severity proxy",
+    rows: [
+      { value: "none",           desc: "No safety-relevant event in the clip (the nominal majority)" },
+      { value: "near_miss",      desc: "Near-collision — conflict resolved without physical contact" },
+      { value: "hard_brake",     desc: "Hard braking event indicating a safety-relevant situation" },
+      { value: "evasive_swerve", desc: "Evasive steering maneuver to avoid a hazard" },
+      { value: "collision",      desc: "Physical contact occurred — collision_type is then populated" },
     ],
   },
 ];
@@ -251,14 +264,15 @@ const REVIEW_STATES_EN = [
 
 const GLOSSARY_EN = [
   { term: "Verify-by-Exception (VBE)", def: "A curation strategy where clips pass through automatically unless flagged. Reviewers focus effort only on uncertain or high-risk cases, dramatically reducing manual load on nominal clips." },
-  { term: "Scenario DNA", def: "A 4-layer structured descriptor (ODD + Topology + Actor Dynamics + Planner Logic) attached to every clip. Stored as JSONB in PostgreSQL and indexed in Milvus. Schema version: v0.1.0 (frozen)." },
+  { term: "Scenario DNA", def: "A 4-layer structured descriptor (ODD + Topology + Actor Dynamics + Planner Logic) attached to every clip. Stored as JSONB in PostgreSQL and indexed in Milvus. Schema version: v0.2.0 — adds a free-text scene_description plus planner_logic.risk_level_rationale and a safety_event channel over v0.1." },
+  { term: "scene_description", def: "v0.2 free-text VLM narrative (a few sentences, AV-safety-expert voice) authored by the Scout from the video — not derived from the structured fields. Shown at the top of the clip-detail view and used as a high-signal input to the text embedding. Capped at 500 chars." },
   { term: "ODD (Operational Design Domain)", def: "The specific conditions under which an AV system is designed to operate safely (ISO 22736). In My-Curator, ODD covers weather, lighting, and sensor fidelity." },
   { term: "Scout", def: "The VLM that generates Scenario DNA from video frames. Current model: Cosmos-Reason2-8B FP8. Multiple Scout samples per clip are aggregated by BestOfN Aggregator using a symbolic reward signal." },
   { term: "Hybrid Search", def: "Retrieval combining Milvus ANN vector search (Cosmos-Embed1-336p, 768-dim, cosine / inner product on L2-normalised vectors) with PostgreSQL JSONB GIN filter on DNA fields. ANN top-1000 candidates are re-ranked by exact filter matching." },
   { term: "DNA Pass Rate", def: "Approved / (Approved + Rejected). Excludes pending and schema_invalid states. Shown on the Dashboard as a percentage." },
   { term: "SOTIF (ISO 21448)", def: "Safety of the Intended Functionality — ISO standard defining risk categories for AV systems. My-Curator's risk_level enum maps directly: nominal → no unreasonable risk, elevated → tolerable risk, critical → unreasonable risk trigger." },
-  { term: "dna_version", def: "Schema version lock ('0.1.0'). Any schema change bumps this value and triggers a full prompt_regression + schema test run." },
-  { term: "causal_trigger_actor_index", def: "Index into actor_dynamics[] identifying which actor caused the ego maneuver. Reserved for post-v0.1 Judge model (Qwen2.5-14B-AWQ); null in current v0.1.0 single-Scout deployments." },
+  { term: "dna_version", def: "Schema version lock ('0.2.0'). Any schema change bumps this value and triggers a full prompt_regression + schema test run." },
+  { term: "causal_trigger_actor_index", def: "Index into actor_dynamics[] identifying which actor caused the ego maneuver. Null in current single-Scout deployments — the P4-6 Judge (Qwen3-8B-AWQ) is report-only and does not populate it." },
   { term: "grounded_by_yolo26", def: "Boolean per actor. True if YOLO26 object detection independently confirmed the actor's presence, reducing hallucination risk for that actor entry." },
   { term: "hallucination_flags", def: "Array of field-name strings in the confidence block flagging fields where the Scout may have fabricated values. Used to surface low-confidence DNA regions for reviewer attention." },
 ];
@@ -457,12 +471,25 @@ const PLANNER_FIELDS_KO: FieldDef[] = [
   {
     name: "risk_level",
     type: "enum · 필수",
-    description: "ISO 21448 SOTIF 기반 시나리오 위험 분류. Review Queue 우선순위를 결정 — 'critical' 클립이 먼저 표시됨. DNA 합격률은 approved / (approved + rejected)로 계산하며 pending 및 schema_invalid 제외.",
+    description: "ISO 21448 SOTIF 기반 시나리오 위험 분류. Review Queue 우선순위를 결정 — 'critical' 클립이 먼저 표시됨. DNA 합격률은 approved / (approved + rejected)로 계산하며 pending 및 schema_invalid 제외. v0.2에서는 risk_level_rationale과 짝을 이룸 — ISO 21448 C×S(제어가능성 × 심각도) 판단에 근거한 한 문장 자유서술 근거로, 최대 300자(초과 시 UI가 말줄임표로 표시).",
     source: "ISO 21448:2022 SOTIF",
     rows: [
       { value: "nominal",  desc: "안전 우려 없음 — 불합리한 위험 없음 (정상 운행)" },
       { value: "elevated", desc: "허용 가능한 위험 — 위험 요소 존재하나 완화 조치 있음" },
       { value: "critical", desc: "불합리한 위험 (SOTIF 트리거) — 개입 또는 제어권 회수 필요" },
+    ],
+  },
+  {
+    name: "safety_event",
+    type: "object · 필수 (v0.2)",
+    description: "v0.2에서 추가된 범용 안전 이벤트 채널. has_event(bool)가 기록 여부를 결정하며, true일 때 클립 상세에 Safety Event 카드가 표시됨. collision_type은 head_on / rear_end / t_bone / sideswipe / single_vehicle / vru_struck / none 중 하나(event_type이 'collision'이 아니면 null). severity_estimate은 no_harm / minor / major / fatal(이벤트 없으면 null). event_type은 다음 채널을 열거함:",
+    source: "ISO 21448:2022 SOTIF + Abbreviated Injury Scale (AIS) 심각도 프록시",
+    rows: [
+      { value: "none",           desc: "클립에 안전 관련 이벤트 없음 (nominal 다수)" },
+      { value: "near_miss",      desc: "니어미스 — 물리적 접촉 없이 충돌 상황 해소" },
+      { value: "hard_brake",     desc: "안전 관련 상황을 나타내는 급제동 이벤트" },
+      { value: "evasive_swerve", desc: "위험 회피를 위한 급조향 조작" },
+      { value: "collision",      desc: "물리적 접촉 발생 — 이때 collision_type이 채워짐" },
     ],
   },
 ];
@@ -496,14 +523,15 @@ const REVIEW_STATES_KO = [
 
 const GLOSSARY_KO = [
   { term: "Verify-by-Exception (VBE)", def: "예외 기반 검증 전략. 클립이 플래그되지 않으면 자동으로 통과하며, 검토자는 불확실하거나 고위험 케이스에만 집중하여 일반 클립의 수동 작업량을 크게 줄임." },
-  { term: "Scenario DNA", def: "모든 클립에 부착된 4계층 구조 설명자 (ODD + 토폴로지 + 액터 다이내믹스 + 플래너 로직). PostgreSQL에 JSONB로 저장되고 Milvus에 인덱싱됨. 스키마 버전: v0.1.0 (고정)." },
+  { term: "Scenario DNA", def: "모든 클립에 부착된 4계층 구조 설명자 (ODD + 토폴로지 + 액터 다이내믹스 + 플래너 로직). PostgreSQL에 JSONB로 저장되고 Milvus에 인덱싱됨. 스키마 버전: v0.2.0 — v0.1 대비 자유서술 scene_description과 planner_logic.risk_level_rationale, safety_event 채널이 추가됨." },
+  { term: "scene_description", def: "v0.2 자유서술 VLM 내러티브(AV 안전 전문가 어조의 몇 문장)로, 구조화 필드에서 파생되지 않고 Scout이 영상에서 직접 작성함. 클립 상세 상단에 표시되며 텍스트 임베딩의 고신호 입력으로 사용됨. 최대 500자." },
   { term: "ODD (Operational Design Domain)", def: "AV 시스템이 안전하게 작동하도록 설계된 특정 조건 (ISO 22736). My-Curator에서 ODD는 날씨, 조도, 센서 피델리티를 다룸." },
   { term: "Scout", def: "비디오 프레임에서 Scenario DNA를 생성하는 VLM. 현재 모델: Cosmos-Reason2-8B FP8. 클립당 여러 Scout 샘플이 심볼릭 보상 신호를 사용하는 BestOfN Aggregator에 의해 집계됨." },
   { term: "Hybrid Search", def: "Milvus ANN 벡터 검색 (Cosmos-Embed1-336p, 768차원, L2 정규화 벡터의 코사인/내적)과 PostgreSQL JSONB GIN 필터를 결합한 검색. ANN 상위 1,000개 후보가 정확한 필터 매칭으로 재순위 결정됨." },
   { term: "DNA Pass Rate", def: "Approved / (Approved + Rejected). pending 및 schema_invalid 상태 제외. 대시보드에 백분율로 표시됨." },
   { term: "SOTIF (ISO 21448)", def: "의도 기능 안전성 — AV 시스템의 위험 범주를 정의하는 ISO 표준. My-Curator의 risk_level 열거형이 직접 매핑: nominal → 불합리한 위험 없음, elevated → 허용 가능한 위험, critical → 불합리한 위험 트리거." },
-  { term: "dna_version", def: "스키마 버전 잠금 ('0.1.0'). 스키마 변경 시 이 값을 올리고 전체 prompt_regression + schema 테스트를 실행함." },
-  { term: "causal_trigger_actor_index", def: "자차 조작을 유발한 액터를 actor_dynamics[]에서 식별하는 인덱스. v0.1 이후 Judge 모델 (Qwen2.5-14B-AWQ)을 위해 예약됨; 현재 v0.1.0 단일 Scout 배포에서는 null." },
+  { term: "dna_version", def: "스키마 버전 잠금 ('0.2.0'). 스키마 변경 시 이 값을 올리고 전체 prompt_regression + schema 테스트를 실행함." },
+  { term: "causal_trigger_actor_index", def: "자차 조작을 유발한 액터를 actor_dynamics[]에서 식별하는 인덱스. 현재 단일 Scout 배포에서는 null — P4-6 Judge (Qwen3-8B-AWQ)는 report-only라 이 값을 채우지 않음." },
   { term: "grounded_by_yolo26", def: "액터별 불리언. YOLO26 객체 감지가 해당 액터의 존재를 독립적으로 확인하면 true — 해당 액터 항목의 환각 위험 감소." },
   { term: "hallucination_flags", def: "Scout이 값을 임의로 생성했을 수 있는 필드 이름 문자열 배열 (confidence 블록). 검토자 주의가 필요한 낮은 신뢰도 DNA 영역을 표시하는 데 사용됨." },
 ];
@@ -630,8 +658,8 @@ export default function HelpPage() {
           </h1>
           <p className="text-sm text-muted mt-0.5">
             {isKo
-              ? "My-Curator · Scenario DNA v0.1 레퍼런스 가이드"
-              : "My-Curator · Scenario DNA v0.1 Reference Guide"}
+              ? "My-Curator · Scenario DNA v0.2 레퍼런스 가이드"
+              : "My-Curator · Scenario DNA v0.2 Reference Guide"}
           </p>
         </div>
         {/* lang toggle */}
@@ -711,8 +739,12 @@ export default function HelpPage() {
                   <p className="text-sm text-muted leading-relaxed">
                     각 클립은 <strong className="text-ink">4계층 DNA 설명자</strong>를 가집니다:
                     ODD(환경), 토폴로지(도로 인프라), 액터 다이내믹스(도로 사용자),
-                    플래너 로직(자차 의도 + 위험). DNA는 PostgreSQL(JSONB + GIN 인덱스)과
-                    Milvus(768차원 Cosmos-Embed1-336p 임베딩)에 저장되어 하이브리드 검색을 지원합니다.
+                    플래너 로직(자차 의도 + 위험). v0.2는 4계층 위에 자유서술{" "}
+                    <strong className="text-ink">scene_description</strong> 내러티브와
+                    planner_logic 내 <strong className="text-ink">risk_level_rationale</strong> ·{" "}
+                    <strong className="text-ink">safety_event</strong> 채널을 추가합니다. DNA는
+                    PostgreSQL(JSONB + GIN 인덱스)과 Milvus(768차원 Cosmos-Embed1-336p 임베딩)에
+                    저장되어 하이브리드 검색을 지원합니다.
                   </p>
                 </>
               ) : (
@@ -728,7 +760,11 @@ export default function HelpPage() {
                   <p className="text-sm text-muted leading-relaxed">
                     Each clip carries a <strong className="text-ink">4-layer DNA descriptor</strong>:
                     ODD (environment), Topology (road infrastructure), Actor Dynamics (road users), and
-                    Planner Logic (ego intent + risk). DNA is stored in PostgreSQL (JSONB + GIN index)
+                    Planner Logic (ego intent + risk). v0.2 adds a free-text{" "}
+                    <strong className="text-ink">scene_description</strong> narrative plus{" "}
+                    <strong className="text-ink">risk_level_rationale</strong> and a{" "}
+                    <strong className="text-ink">safety_event</strong> channel in planner_logic on top
+                    of the four layers. DNA is stored in PostgreSQL (JSONB + GIN index)
                     and in Milvus (768-dim Cosmos-Embed1-336p embeddings) for hybrid search.
                   </p>
                 </>

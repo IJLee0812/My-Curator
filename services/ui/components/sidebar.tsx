@@ -111,7 +111,7 @@ export default function Sidebar() {
             <span className={`text-xs ${textClass}`}>{detail}</span>
           </div>
           <div className="text-[10px] text-faint font-mono">
-            DNA v0.1
+            DNA v0.2
           </div>
         </div>
       </div>
