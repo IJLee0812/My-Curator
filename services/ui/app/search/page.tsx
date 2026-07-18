@@ -108,6 +108,7 @@ function SearchPageInner() {
   const [road, setRoad] = useState<Set<string>>(new Set());
   const [risk, setRisk] = useState<Set<string>>(new Set());
   const [maneuver, setManeuver] = useState<Set<string>>(new Set());
+  const [groupBySource, setGroupBySource] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
 
   const [allResults, setAllResults] = useState<ClipResult[]>([]);
@@ -167,7 +168,7 @@ function SearchPageInner() {
         risk_level: risk,
         ego_maneuver: maneuver,
       });
-      const data = await searchClips(query, filters, query.trim() ? 20 : 500);
+      const data = await searchClips(query, filters, query.trim() ? 20 : 500, groupBySource);
       setAllResults(data.results);
       // Sync filter state to URL so router.back() can restore it
       const params = new URLSearchParams();
@@ -177,6 +178,8 @@ function SearchPageInner() {
       [...road].forEach((v) => params.append("road_type", v));
       [...risk].forEach((v) => params.append("risk_level", v));
       [...maneuver].forEach((v) => params.append("ego_maneuver", v));
+      // Grouping defaults on; only record the opt-out to keep the URL clean.
+      if (!groupBySource) params.set("group", "0");
       const qs = params.toString();
       router.replace(qs ? `/search?${qs}` : "/search");
     } catch (e) {
@@ -198,7 +201,7 @@ function SearchPageInner() {
     }, 300);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weather, lighting, road, risk, maneuver]);
+  }, [weather, lighting, road, risk, maneuver, groupBySource]);
 
   // Restore filter state from URL params on mount (e.g., after router.back()).
   useEffect(() => {
@@ -208,13 +211,15 @@ function SearchPageInner() {
     const ro = new Set(searchParams.getAll("road_type"));
     const ri = new Set(searchParams.getAll("risk_level"));
     const m = new Set(searchParams.getAll("ego_maneuver"));
-    if (q || w.size || l.size || ro.size || ri.size || m.size) {
+    const grouped = searchParams.get("group") !== "0"; // default on
+    if (q || w.size || l.size || ro.size || ri.size || m.size || searchParams.has("group")) {
       setQuery(q);
       setWeather(w);
       setLighting(l);
       setRoad(ro);
       setRisk(ri);
       setManeuver(m);
+      setGroupBySource(grouped);
       setInitialized(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,6 +259,20 @@ function SearchPageInner() {
               </button>
             )}
           </div>
+          <label className="flex items-start gap-2 mb-4 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={groupBySource}
+              onChange={(e) => setGroupBySource(e.target.checked)}
+              className="mt-0.5 accent-cyan-500 shrink-0"
+            />
+            <span className="text-xs text-slate-400 group-hover:text-slate-200 leading-snug">
+              Group adjacent windows
+              <span className="block text-[10px] text-slate-600">
+                collapse near-duplicate windows of the same source clip
+              </span>
+            </span>
+          </label>
           <FilterGroup label="Weather" options={WEATHER_OPTIONS} selected={weather} onToggle={toggle(setWeather)} color="blue" />
           <FilterGroup label="Lighting" options={LIGHTING_OPTIONS} selected={lighting} onToggle={toggle(setLighting)} color="blue" />
           <FilterGroup label="Road Type" options={ROAD_OPTIONS} selected={road} onToggle={toggle(setRoad)} color="purple" />

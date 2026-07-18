@@ -232,12 +232,14 @@ export async function searchClips(
   query: string,
   filters: Record<string, string[]>,
   limit = 20,
+  dedupBySource = true,
 ): Promise<SearchResponse> {
   return postJSON<SearchResponse>("/v1/search", {
     query,
     filters,
     limit,
     top_k: 1000,
+    dedup_by_source: dedupBySource,
   });
 }
 
