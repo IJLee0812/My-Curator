@@ -12,6 +12,7 @@ to a different loop" errors.
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
 import shutil
 import uuid
@@ -401,6 +402,45 @@ async def test_get_stats_counts_review_states(repo: PGRepository):
     assert stats["review"]["approved"] == 1
     assert stats["review"]["rejected"] == 1
     assert stats["dna_pass_rate"] == pytest.approx(0.5)
+
+
+async def test_review_queue_pagination_and_count(repo: PGRepository):
+    """count_review_queue is the tab total; get_review_queue pages by limit/offset.
+
+    Three clips (2 pending + 1 approved) are inserted with a real time gap so
+    ``created_at DESC`` is a stable total order (no OFFSET tie ambiguity).
+    """
+    clips = [uuid.uuid4() for _ in range(3)]
+    for i, cid in enumerate(clips):
+        await repo.write_clip_with_dna(
+            session_id=SESSION_ID,
+            clip_id=cid,
+            blob_uri=f"s3://clips/test/pg_{i}.mp4",
+            start_s=float(i),
+            end_s=float(i) + 5.0,
+            dna_version="0.1.0",
+            dna_json={**_BASE_DNA, "clip_id": str(cid)},
+            scout_prompt_hash="deadbeef",
+            pipeline_version="0.1.0",
+        )
+        state = "approved" if i == 2 else "pending"
+        await repo.insert_review_queue(clip_id=cid, state=state)
+        await asyncio.sleep(0.01)  # distinct created_at → deterministic ordering
+
+    # tab totals
+    assert await repo.count_review_queue(status="pending") == 2
+    assert await repo.count_review_queue(status="approved") == 1
+    assert await repo.count_review_queue(status=None) == 3
+
+    # page through the pending tab one row at a time; every row reachable, no dup
+    p0 = await repo.get_review_queue(status="pending", limit=1, offset=0)
+    p1 = await repo.get_review_queue(status="pending", limit=1, offset=1)
+    p2 = await repo.get_review_queue(status="pending", limit=1, offset=2)
+    assert len(p0) == 1 and len(p1) == 1 and p2 == []
+    seen = {p0[0]["clip_id"], p1[0]["clip_id"]}
+    assert seen == {clips[0], clips[1]}  # both pending clips, no overlap
+    # newest-first: clip[1] was inserted after clip[0]
+    assert p0[0]["clip_id"] == clips[1]
 
 
 async def test_get_clip_with_no_review_queue_row_returns_null_status(repo: PGRepository):

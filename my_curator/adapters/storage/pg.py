@@ -259,12 +259,9 @@ class PGRepository:
             state,
         )
 
-    async def get_review_queue(
-        self,
-        status: str | None = None,
-        limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        """Return review_queue rows joined with clip + DNA data.
+    @staticmethod
+    def _review_state_filter(status: str | None) -> tuple[str, list[Any]]:
+        """Map a UI status tab to a SQL predicate + bind params.
 
         status filter:
           None / "all"     → all states
@@ -273,18 +270,40 @@ class PGRepository:
           "rejected"       → state = 'rejected'
           "schema_invalid" → state = 'rejected_schema_invalid'
         """
-        capped = max(1, min(int(limit), 200))
         if status in (None, "all"):
-            where = ""
-            params: list[Any] = [capped]
-        elif status == "schema_invalid":
-            where = "WHERE rq.state = 'rejected_schema_invalid'"
-            params = [capped]
-        else:
-            where = "WHERE rq.state = $1"
-            params = [status, capped]
+            return "", []
+        if status == "schema_invalid":
+            return "WHERE state = 'rejected_schema_invalid'", []
+        return "WHERE state = $1", [status]
 
+    async def count_review_queue(self, status: str | None = None) -> int:
+        """Total review_queue rows matching the status tab (drives pagination)."""
+        where, params = self._review_state_filter(status)
+        row = await self._pool.fetchrow(f"SELECT COUNT(*) AS n FROM review_queue {where}", *params)
+        return int(row["n"]) if row else 0
+
+    async def get_review_queue(
+        self,
+        status: str | None = None,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Return a page of review_queue rows joined with clip + DNA data.
+
+        Ordered by ``created_at DESC``; ``limit``/``offset`` page within the
+        status tab.  See :meth:`count_review_queue` for the tab total.
+        """
+        capped = max(1, min(int(limit), 200))
+        off = max(0, int(offset))
+        where, params = self._review_state_filter(status)
+        # rq.state is the same predicate as the count query; the filter helper
+        # uses an unqualified column name, so re-qualify it for the JOIN query.
+        where = where.replace("state =", "rq.state =")
+        params.append(capped)
         limit_param = f"${len(params)}"
+        params.append(off)
+        offset_param = f"${len(params)}"
         rows = await self._pool.fetch(
             f"""
             SELECT rq.queue_id, rq.clip_id, rq.state, rq.reviewed_at,
@@ -296,7 +315,7 @@ class PGRepository:
             LEFT JOIN scenario_dna sd ON sd.clip_id = rq.clip_id
             {where}
             ORDER BY rq.created_at DESC
-            LIMIT {limit_param}
+            LIMIT {limit_param} OFFSET {offset_param}
             """,
             *params,
         )

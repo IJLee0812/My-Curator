@@ -40,15 +40,20 @@ class ReviewQueueItem(BaseModel):
 class ReviewQueueResponse(BaseModel):
     items: list[ReviewQueueItem]
     total: int
+    page: int
+    size: int
 
 
 @router.get("/v1/review", response_model=ReviewQueueResponse)
 async def list_review_queue(
     status: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=30, ge=1, le=100),
     pg: PGRepository = Depends(get_pg),
 ) -> ReviewQueueResponse:
-    rows = await pg.get_review_queue(status=status, limit=limit)
+    offset = (page - 1) * size
+    rows = await pg.get_review_queue(status=status, limit=size, offset=offset)
+    total = await pg.count_review_queue(status=status)
     items = [
         ReviewQueueItem(
             queue_id=r["queue_id"],
@@ -65,7 +70,7 @@ async def list_review_queue(
         )
         for r in rows
     ]
-    return ReviewQueueResponse(items=items, total=len(items))
+    return ReviewQueueResponse(items=items, total=total, page=page, size=size)
 
 
 @router.patch("/v1/clips/{clip_id}/review")

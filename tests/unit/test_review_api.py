@@ -52,31 +52,40 @@ def client(pg_mock):
 
 def test_list_review_queue_empty(client, pg_mock):
     pg_mock.get_review_queue.return_value = []
+    pg_mock.count_review_queue.return_value = 0
     resp = client.get("/v1/review")
     assert resp.status_code == 200
     body = resp.json()
     assert body["items"] == []
     assert body["total"] == 0
+    assert body["page"] == 1
+    assert body["size"] == 30
 
 
 def test_list_review_queue_returns_items(client, pg_mock):
     clip_id = str(uuid.uuid4())
     pg_mock.get_review_queue.return_value = [_make_queue_row(clip_id, "pending")]
-    resp = client.get("/v1/review?status=pending&limit=10")
+    pg_mock.count_review_queue.return_value = 42
+    resp = client.get("/v1/review?status=pending&page=2&size=50")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 1
+    assert body["total"] == 42  # tab total, not the page length
+    assert body["page"] == 2
+    assert body["size"] == 50
     item = body["items"][0]
     assert item["clip_id"] == clip_id
     assert item["state"] == "pending"
     assert item["reviewed_at"] is None
-    pg_mock.get_review_queue.assert_awaited_once_with(status="pending", limit=10)
+    # page 2 @ size 50 → offset 50
+    pg_mock.get_review_queue.assert_awaited_once_with(status="pending", limit=50, offset=50)
+    pg_mock.count_review_queue.assert_awaited_once_with(status="pending")
 
 
 def test_list_review_queue_no_status_filter(client, pg_mock):
     pg_mock.get_review_queue.return_value = []
+    pg_mock.count_review_queue.return_value = 0
     client.get("/v1/review")
-    pg_mock.get_review_queue.assert_awaited_once_with(status=None, limit=50)
+    pg_mock.get_review_queue.assert_awaited_once_with(status=None, limit=30, offset=0)
 
 
 # ── PATCH /v1/clips/{id}/review ────────────────────────────────────────────────

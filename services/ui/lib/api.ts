@@ -210,6 +210,8 @@ export interface ReviewQueueItem {
 export interface ReviewQueueResponse {
   items: ReviewQueueItem[];
   total: number;
+  page: number;
+  size: number;
 }
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
@@ -282,9 +284,10 @@ export async function reviewClip(
 
 export async function getReviewQueue(
   status?: string,
-  limit = 50,
+  page = 1,
+  size = 30,
 ): Promise<ReviewQueueResponse> {
-  const params = new URLSearchParams({ limit: String(limit) });
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (status) params.set("status", status);
   return getJSON<ReviewQueueResponse>(`/v1/review?${params}`);
 }

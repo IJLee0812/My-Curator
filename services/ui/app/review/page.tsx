@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Clock,
   Filter,
   Loader2,
   XCircle,
 } from "lucide-react";
-import { getReviewQueue, reviewClip } from "@/lib/api";
+import { getReviewQueue, getStats, reviewClip } from "@/lib/api";
 import type { ReviewQueueItem } from "@/lib/api";
 import { OddbBadges, RiskBadge } from "@/components/dna-badges";
 
@@ -23,16 +25,52 @@ const TAB_CONFIG: Record<Tab, { label: string; color: string; dot: string }> = {
   schema_invalid: { label: "Schema Invalid", color: "text-slate-400", dot: "bg-slate-500" },
 };
 
-function tabMatches(state: string, tab: Tab) {
-  if (tab === "schema_invalid") return state === "rejected_schema_invalid";
-  if (tab === "rejected") return state === "rejected";
-  return state === tab;
+const PAGE_SIZES = [30, 50, 100] as const;
+
+const ZERO_COUNTS: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, schema_invalid: 0 };
+
+const TABS: Tab[] = ["pending", "approved", "rejected", "schema_invalid"];
+
+/** Windowed page list: first, last, current ±1, ellipses ("…") in the gaps. */
+function pageWindow(current: number, totalPages: number): (number | "…")[] {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const out: (number | "…")[] = [1];
+  const lo = Math.max(2, current - 1);
+  const hi = Math.min(totalPages - 1, current + 1);
+  if (lo > 2) out.push("…");
+  for (let p = lo; p <= hi; p++) out.push(p);
+  if (hi < totalPages - 1) out.push("…");
+  out.push(totalPages);
+  return out;
 }
 
-export default function ReviewQueuePage() {
+function ReviewQueuePage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("pending");
+  const searchParams = useSearchParams();
+  // Seed pagination state from the URL so a card → detail → Back round-trip
+  // restores the tab/page/size the user was on (state alone resets on remount).
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get("tab") as Tab | null;
+    return t && TABS.includes(t) ? t : "pending";
+  });
+  const [page, setPage] = useState(() => {
+    const p = parseInt(searchParams.get("page") ?? "1", 10);
+    return Number.isFinite(p) && p >= 1 ? p : 1;
+  });
+  const [size, setSize] = useState<number>(() => {
+    const s = Number(searchParams.get("size"));
+    return (PAGE_SIZES as readonly number[]).includes(s) ? s : 30;
+  });
+
+  // Mirror pagination state into the URL (replace: no extra history entries for
+  // in-page navigation; the card click still pushes a fresh entry to return to).
+  useEffect(() => {
+    const params = new URLSearchParams({ tab, page: String(page), size: String(size) });
+    router.replace(`/review?${params}`, { scroll: false });
+  }, [tab, page, size, router]);
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<Record<Tab, number>>(ZERO_COUNTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<Set<string>>(new Set());
@@ -42,28 +80,43 @@ export default function ReviewQueuePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getReviewQueue(undefined, 200);
+      const [res, stats] = await Promise.all([
+        getReviewQueue(tab, page, size),
+        getStats(),
+      ]);
       setItems(res.items);
+      setTotal(res.total);
+      setCounts({
+        pending: stats.review.pending,
+        approved: stats.review.approved,
+        rejected: stats.review.rejected,
+        schema_invalid: stats.review.rejected_schema_invalid,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load review queue");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tab, page, size]);
 
   useEffect(() => { load(); }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(total / size));
+
+  const changeTab = (next: Tab) => { setTab(next); setPage(1); };
+  const changeSize = (next: number) => { setSize(next); setPage(1); };
 
   const act = async (clipId: string, action: "approve" | "reject") => {
     setActing((s) => new Set(s).add(clipId));
     try {
-      const res = await reviewClip(clipId, action);
-      // Start exit animation, then commit state change after transition completes.
+      await reviewClip(clipId, action);
+      // Play the exit animation, then re-fetch so the reviewed clip leaves the
+      // tab and the page backfills from the server (totals stay accurate).
       setDismissing((s) => new Set(s).add(clipId));
       setTimeout(() => {
-        setItems((prev) =>
-          prev.map((i) => (i.clip_id === clipId ? { ...i, state: res.state } : i))
-        );
         setDismissing((s) => { const n = new Set(s); n.delete(clipId); return n; });
+        if (items.length === 1 && page > 1) setPage((p) => p - 1);
+        else load();
       }, 320);
     } catch (e) {
       console.error("review action failed", e);
@@ -76,15 +129,6 @@ export default function ReviewQueuePage() {
     }
   };
 
-  const counts: Record<Tab, number> = {
-    pending:        items.filter((i) => i.state === "pending").length,
-    approved:       items.filter((i) => i.state === "approved").length,
-    rejected:       items.filter((i) => i.state === "rejected").length,
-    schema_invalid: items.filter((i) => i.state === "rejected_schema_invalid").length,
-  };
-
-  const visible = items.filter((i) => tabMatches(i.state, tab));
-
   return (
     <div className="p-6 space-y-5">
       {/* header */}
@@ -95,7 +139,7 @@ export default function ReviewQueuePage() {
             Review Queue
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Verify-by-Exception curation workflow · {items.length} items
+            Verify-by-Exception curation workflow · {counts[tab]} in {TAB_CONFIG[tab].label}
           </p>
           <p className="text-xs text-slate-600 mt-0.5">
             Click any clip card to open the detail review page
@@ -114,7 +158,7 @@ export default function ReviewQueuePage() {
         {(["pending", "approved", "rejected", "schema_invalid"] as Tab[]).map((key) => (
           <button
             key={key}
-            onClick={() => setTab(key)}
+            onClick={() => changeTab(key)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === key
                 ? "border-cyan-500 text-cyan-400"
@@ -131,6 +175,31 @@ export default function ReviewQueuePage() {
         ))}
       </div>
 
+      {/* page-size selector */}
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <span>
+          {total === 0
+            ? "No items"
+            : `Showing ${(page - 1) * size + 1}–${Math.min(page * size, total)} of ${total}`}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-slate-600">Per page</span>
+          {PAGE_SIZES.map((s) => (
+            <button
+              key={s}
+              onClick={() => changeSize(s)}
+              className={`px-2.5 py-1 rounded border text-xs font-mono transition-colors ${
+                size === s
+                  ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
+                  : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* body */}
       {loading ? (
         <div className="card p-12 text-center text-slate-500">
@@ -141,13 +210,13 @@ export default function ReviewQueuePage() {
         <div className="card p-6 text-center text-red-400 border-red-500/40">{error}</div>
       ) : (
         <div className="space-y-2">
-          {visible.length === 0 ? (
+          {items.length === 0 ? (
             <div className="card p-12 text-center text-slate-600">
               <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm">No items in this category</p>
             </div>
           ) : (
-            visible.map((item) => {
+            items.map((item) => {
               const stateKey: Tab = item.state === "rejected_schema_invalid" ? "schema_invalid" : (item.state as Tab);
               const cfg = TAB_CONFIG[stateKey] ?? TAB_CONFIG.pending;
               const isPending = item.state === "pending";
@@ -263,6 +332,54 @@ export default function ReviewQueuePage() {
           )}
         </div>
       )}
+
+      {/* pagination */}
+      {!loading && !error && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1.5 pt-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          {pageWindow(page, totalPages).map((p, i) =>
+            p === "…" ? (
+              <span key={`gap-${i}`} className="px-2 text-slate-600 text-xs">…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`min-w-[32px] px-2 py-1 rounded border text-xs font-mono transition-colors ${
+                  page === p
+                    ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
+                    : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {p}
+              </button>
+            )
+          )}
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Next page"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+// useSearchParams() must sit under a Suspense boundary (Next.js app router).
+export default function ReviewQueuePageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <ReviewQueuePage />
+    </Suspense>
   );
 }
