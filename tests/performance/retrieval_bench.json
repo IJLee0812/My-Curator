@@ -1,0 +1,66 @@
+{
+  "metric": "recall_at_5",
+  "k": 5,
+  "note": "P4-7 held-out 3-way (video/text/hybrid) retrieval benchmark. Ground truth is a structured DNA predicate per query (corpus-independent, no gaming), resolved against the live corpus at run time. recall@5 = |top5 ∩ relevant| / min(5, |relevant|), averaged over queries; gate avg >= 0.85.",
+  "queries": [
+    {
+      "id": "q1_highway_cruise",
+      "tier": "nominal",
+      "query": "highway daytime cruise on a motorway",
+      "relevant": {
+        "all": [
+          {"path": ["topology", "road_type"], "in": ["motorway"]},
+          {"path": ["planner_logic", "ego_maneuver"], "in": ["cruise", "accelerate"]},
+          {"path": ["odd", "lighting"], "in": ["day", "overcast_day"]}
+        ]
+      }
+    },
+    {
+      "id": "q2_signalized_intersection",
+      "tier": "nominal",
+      "query": "urban approach to a signalized intersection",
+      "relevant": {
+        "all": [
+          {"path": ["topology", "intersection_type"], "in": ["signalized"]}
+        ]
+      }
+    },
+    {
+      "id": "q3_parking_low_speed",
+      "tier": "nominal",
+      "query": "low-speed maneuver in a parking lot",
+      "relevant": {
+        "all": [
+          {"path": ["topology", "road_type"], "in": ["parking"]}
+        ]
+      }
+    },
+    {
+      "id": "q4_cyclist_near_ego",
+      "tier": "elevated",
+      "query": "a cyclist near the ego vehicle",
+      "relevant": {
+        "all": [
+          {"path": ["planner_logic", "risk_level"], "in": ["elevated"]},
+          {"path": ["scene_description"], "ilike_any": ["cyclist", "bicycle", "bike"]}
+        ]
+      }
+    },
+    {
+      "id": "q5_near_miss_hard_brake",
+      "tier": "near_miss",
+      "query": "a near-miss requiring hard braking",
+      "relevant": {
+        "all": [
+          {
+            "any": [
+              {"path": ["planner_logic", "safety_event", "event_type"], "in": ["near_miss"]},
+              {"path": ["planner_logic", "ego_maneuver"], "in": ["brake_hard"]}
+            ]
+          },
+          {"path": ["planner_logic", "risk_level"], "in": ["elevated", "critical"]}
+        ]
+      }
+    }
+  ]
+}

@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from my_curator.adapters.embed.text_tower import CosmosEmbed1Encoder
 from my_curator.adapters.storage.milvus import MilvusRepository
+from my_curator.domain.scout.dna_text import dna_to_text
 
 from ..deps import get_embedder, get_milvus
 
@@ -44,24 +45,9 @@ def _get_producer():
     )
 
 
-def _dna_to_text(dna: dict) -> str:
-    parts: list[str] = []
-    odd = dna.get("odd", {})
-    if weather := odd.get("weather"):
-        parts.append(weather)
-    if lighting := odd.get("lighting"):
-        parts.append(lighting)
-    topo = dna.get("topology", {})
-    if road := topo.get("road_type"):
-        parts.append(road)
-    if lane := topo.get("lane_event"):
-        parts.append(lane)
-    plan = dna.get("planner_logic", {})
-    if maneuver := plan.get("ego_maneuver"):
-        parts.append(maneuver)
-    if summary := dna.get("scene_summary"):
-        parts.append(summary)
-    return " ".join(parts) if parts else "driving scene"
+# P4-7: DNA→text moved to my_curator.domain.scout.dna_text so the /v1/ingest
+# text path and scripts/reembed_corpus.py share one implementation (v0.2 fields).
+_dna_to_text = dna_to_text
 
 
 class IngestRequest(BaseModel):

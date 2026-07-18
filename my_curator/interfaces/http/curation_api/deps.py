@@ -10,13 +10,17 @@ from __future__ import annotations
 from fastapi import Request
 
 from my_curator.adapters.embed.text_tower import CosmosEmbed1Encoder
-from my_curator.adapters.storage.milvus import MilvusRepository
+from my_curator.adapters.storage.milvus import MilvusHybridRepository, MilvusRepository
 from my_curator.adapters.storage.minio import MinIORepository
 from my_curator.adapters.storage.pg import PGRepository
 
 
 def get_milvus(request: Request) -> MilvusRepository:
     return request.app.state.milvus
+
+
+def get_hybrid(request: Request) -> MilvusHybridRepository:
+    return request.app.state.hybrid
 
 
 def get_pg(request: Request) -> PGRepository:

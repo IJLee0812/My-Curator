@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from my_curator.adapters.embed.text_tower import CosmosEmbed1Encoder
-from my_curator.adapters.storage.milvus import MilvusRepository
+from my_curator.adapters.storage.milvus import MilvusHybridRepository, MilvusRepository
 from my_curator.adapters.storage.minio import MinIORepository
 from my_curator.adapters.storage.pg import PGRepository, dsn_from_env
 
@@ -49,6 +49,8 @@ async def lifespan(app: FastAPI):
 
     app.state.pg = await PGRepository.create(dsn_from_env())
     app.state.milvus = await MilvusRepository.create(milvus_uri)
+    # P4-7: dual-vector (video + narrative-text) collection for hybrid search.
+    app.state.hybrid = await MilvusHybridRepository.create(milvus_uri)
     app.state.minio = await MinIORepository.create(minio_endpoint, minio_user, minio_password)
 
     encoder = await asyncio.to_thread(CosmosEmbed1Encoder)
@@ -60,6 +62,7 @@ async def lifespan(app: FastAPI):
 
     await app.state.pg.close()
     await app.state.milvus.close()
+    await app.state.hybrid.close()
 
 
 app = FastAPI(title="curation-api", version="0.1.0", lifespan=lifespan)

@@ -5,9 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from my_curator.adapters.storage.milvus import COLLECTION_NAME, DIM, MilvusRepository
+from my_curator.adapters.storage.milvus import DIM, HYBRID_COLLECTION_NAME, MilvusHybridRepository
 
-from ..deps import get_milvus
+from ..deps import get_hybrid
 
 router = APIRouter()
 
@@ -26,11 +26,11 @@ class CollectionsResponse(BaseModel):
 
 @router.get("/v1/collections", response_model=CollectionsResponse)
 async def list_collections(
-    milvus: MilvusRepository = Depends(get_milvus),
+    hybrid: MilvusHybridRepository = Depends(get_hybrid),
 ) -> CollectionsResponse:
-    count = await milvus.count()
+    count = await hybrid.count()
     info = CollectionInfo(
-        collection_name=COLLECTION_NAME,
+        collection_name=HYBRID_COLLECTION_NAME,
         vector_count=count,
         dim=DIM,
         index_type="GPU_CAGRA",

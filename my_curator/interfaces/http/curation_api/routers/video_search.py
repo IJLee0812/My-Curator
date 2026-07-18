@@ -1,13 +1,10 @@
-"""POST /v1/search/video — video-to-video similarity search (P3-2).
+"""POST /v1/search/video — find clips similar to a reference clip (P3-2 / P4-7).
 
-Loads 8 frames from the MinIO frames bucket for the referenced clip_id,
-encodes them via the Cosmos-Embed1-336p video tower, and returns the
-nearest-neighbour clips from Milvus.
-
-The frames key prefix is read from ``clips.frames_blob_uri`` in PG (set by
-CurationConsumer when the DS pipeline message carries a frames blob URI).
-Clips ingested via ``/v1/ingest`` (no frames upload) have NULL here and
-return 422 — video-search only applies to DS-pipeline-originated clips.
+Given a clip_id, builds the reference clip's narrative-text vector (from its DNA)
+and, when frames exist, its video vector (Cosmos-Embed1 video tower), then runs
+hybrid similarity over the dual-vector collection.  Clips without frames fall
+back to text-only similarity (they used to 422).  The reference clip is excluded
+from its own results.
 """
 
 from __future__ import annotations
@@ -20,11 +17,12 @@ from pydantic import BaseModel, Field
 
 from my_curator.adapters.embed.text_tower import CosmosEmbed1Encoder
 from my_curator.adapters.storage.frame_loader import load_frames
-from my_curator.adapters.storage.milvus import MilvusRepository
+from my_curator.adapters.storage.milvus import MilvusHybridRepository
 from my_curator.adapters.storage.minio import MinIORepository
 from my_curator.adapters.storage.pg import PGRepository
+from my_curator.domain.scout.dna_text import dna_to_text
 
-from ..deps import get_embedder, get_milvus, get_minio, get_pg
+from ..deps import get_embedder, get_hybrid, get_minio, get_pg
 from .search import ClipResult, SearchResponse
 
 router = APIRouter()
@@ -39,7 +37,7 @@ class VideoSearchRequest(BaseModel):
 @router.post("/v1/search/video", response_model=SearchResponse)
 async def search_video(
     req: VideoSearchRequest,
-    milvus: MilvusRepository = Depends(get_milvus),
+    hybrid: MilvusHybridRepository = Depends(get_hybrid),
     minio: MinIORepository = Depends(get_minio),
     pg: PGRepository = Depends(get_pg),
     embedder: CosmosEmbed1Encoder = Depends(get_embedder),
@@ -53,27 +51,25 @@ async def search_video(
     if row is None:
         raise HTTPException(status_code=404, detail=f"Clip {req.clip_id} not found")
 
+    text_vec = await asyncio.to_thread(embedder.encode_text, dna_to_text(row.get("dna_json") or {}))
+
+    video_vec = None
     key_prefix = row.get("frames_blob_uri")
-    if not key_prefix:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Clip {req.clip_id} has no frames_blob_uri — video-search "
-                "is only supported for DS pipeline clips with captured frames."
-            ),
+    if key_prefix:
+        try:
+            frames_tensor = await load_frames(minio, "frames", key_prefix)
+            video_vec = await asyncio.to_thread(embedder.encode_video, frames_tensor)
+        except Exception:
+            video_vec = None  # fall back to text-only similarity
+
+    if video_vec is not None:
+        milvus_results = await hybrid.hybrid_search(
+            text_vec=text_vec, video_vec=video_vec, top_k=req.top_k, require_video=False
         )
+    else:
+        milvus_results = await hybrid.search_text(text_vec, top_k=req.top_k)
 
-    try:
-        frames_tensor = await load_frames(minio, "frames", key_prefix)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Frames not found at {key_prefix} for clip {req.clip_id}: {exc}",
-        ) from exc
-
-    query_vec = await asyncio.to_thread(embedder.encode_video, frames_tensor)
-    milvus_results = await milvus.search(query_vec, top_k=req.top_k)
-
+    milvus_results = [r for r in milvus_results if r["clip_id"] != clip_uuid]
     if not milvus_results:
         return SearchResponse(results=[], total=0)
 
