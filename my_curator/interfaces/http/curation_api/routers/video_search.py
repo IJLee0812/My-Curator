@@ -88,7 +88,6 @@ async def search_video(
             start_s=r.get("start_s"),
             end_s=r.get("end_s"),
             blob_uri=r.get("blob_uri"),
-            is_gold=r.get("is_gold"),
             source_clip_id=r.get("source_clip_id"),
         )
         for r in ranked

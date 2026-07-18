@@ -34,7 +34,6 @@ class ReviewQueueItem(BaseModel):
     frames_blob_uri: str | None
     start_s: float
     end_s: float
-    is_gold: bool
     dna_json: dict[str, Any] | None
 
 
@@ -62,7 +61,6 @@ async def list_review_queue(
             frames_blob_uri=r.get("frames_blob_uri"),
             start_s=r["start_s"],
             end_s=r["end_s"],
-            is_gold=bool(r.get("is_gold", False)),
             dna_json=r.get("dna_json"),
         )
         for r in rows

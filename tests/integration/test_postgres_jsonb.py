@@ -286,7 +286,7 @@ async def test_source_clip_id_nullable_default(repo: PGRepository):
 
 
 async def test_filter_dna_by_ids_returns_clip_metadata(repo: PGRepository):
-    """filter_dna_by_ids JOINs clips and returns start_s/end_s/blob_uri/is_gold/source_clip_id (P3-4)."""
+    """filter_dna_by_ids JOINs clips and returns start_s/end_s/blob_uri/source_clip_id (P3-4)."""
     dna_b = {**_BASE_DNA, "clip_id": str(CLIP_B)}
     await repo.write_clip_with_dna(
         session_id=SESSION_ID,
@@ -298,7 +298,6 @@ async def test_filter_dna_by_ids_returns_clip_metadata(repo: PGRepository):
         dna_json=dna_b,
         scout_prompt_hash="cafebabe",
         pipeline_version="0.1.0",
-        is_gold=True,
         source_clip_id="00077",
     )
     rows = await repo.filter_dna_by_ids([CLIP_B], {}, limit=10)
@@ -308,7 +307,6 @@ async def test_filter_dna_by_ids_returns_clip_metadata(repo: PGRepository):
     assert r["start_s"] == 10.0
     assert r["end_s"] == 20.0
     assert r["blob_uri"] == "s3://clips/test/clip_b.mp4"
-    assert r["is_gold"] is True
     assert r["source_clip_id"] == "00077"
     assert r["dna_json"]["odd"]["weather"] == "clear"
 

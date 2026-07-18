@@ -121,7 +121,6 @@ export interface ClipResult {
   start_s: number | null;
   end_s: number | null;
   blob_uri: string | null;
-  is_gold: boolean | null;
   source_clip_id: string | null;
 }
 
@@ -139,7 +138,6 @@ export interface ClipDetail {
   end_s: number;
   precise_start_s: number;
   precise_end_s: number;
-  is_gold: boolean;
   source_clip_id: string | null;
   dna_version: string | null;
   dna_json: ScenarioDNA | null;
@@ -154,7 +152,6 @@ export interface ClipSummary {
   frames_blob_uri: string | null;
   start_s: number;
   end_s: number;
-  is_gold: boolean;
   source_clip_id: string | null;
   dna_version: string | null;
   dna_json: ScenarioDNA | null;
@@ -207,7 +204,6 @@ export interface ReviewQueueItem {
   frames_blob_uri: string | null;
   start_s: number;
   end_s: number;
-  is_gold: boolean;
   dna_json: ScenarioDNA | null;
 }
 

@@ -44,11 +44,6 @@ export default async function ClipDetailPage({ params, searchParams }: PageProps
             <h1 className="text-sm sm:text-base font-bold text-slate-100 font-mono truncate">
               {clip.clip_id}
             </h1>
-            {clip.is_gold && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 shrink-0">
-                gold set
-              </span>
-            )}
             <RiskBadge level={risk} />
           </div>
           <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-1.5">

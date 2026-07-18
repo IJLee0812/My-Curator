@@ -30,7 +30,6 @@ def _make_queue_row(clip_id: str, state: str = "pending") -> dict:
         "frames_blob_uri": None,
         "start_s": 0.0,
         "end_s": 5.0,
-        "is_gold": False,
         "dna_json": None,
     }
 

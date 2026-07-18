@@ -179,11 +179,6 @@ export default function ReviewQueuePage() {
                         <div className="text-xs font-mono text-slate-300 truncate">{item.clip_id}</div>
                         <div className="text-xs text-slate-500 mt-0.5">
                           {item.start_s.toFixed(1)}–{item.end_s.toFixed(1)}s
-                          {item.is_gold && (
-                            <span className="ml-2 px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-[10px]">
-                              gold
-                            </span>
-                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

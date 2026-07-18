@@ -398,11 +398,6 @@ function SearchPageInner() {
                         </div>
                         <div className="w-24 h-[4.5rem] sm:w-48 sm:h-36 md:w-64 md:h-48 bg-[#0a1120] rounded border border-[#1e3a5f] flex items-center justify-center relative overflow-hidden">
                           <ClipThumbnail clipId={clip.clip_id} iconSize="sm" />
-                          {clip.is_gold && (
-                            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-yellow-500/80 flex items-center justify-center">
-                              <span className="text-[8px] text-gray-950 font-bold">G</span>
-                            </div>
-                          )}
                         </div>
                         <div className="text-xs font-mono text-slate-600 text-center leading-tight">
                           {clip.start_s !== null && clip.end_s !== null

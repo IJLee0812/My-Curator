@@ -127,13 +127,6 @@ export default function RecentClipsSection({
                     <div className="absolute top-2 right-2">
                       <RiskBadge level={risk} />
                     </div>
-                    {clip.is_gold && (
-                      <div className="absolute top-2 left-2">
-                        <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                          gold
-                        </span>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
