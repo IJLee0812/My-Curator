@@ -16,7 +16,7 @@ export function ClipThumbnail({
 }) {
   const [error, setError] = useState(false);
   const iconClass =
-    iconSize === "sm" ? "w-5 h-5 text-slate-700" : "w-8 h-8 text-slate-700";
+    iconSize === "sm" ? "w-5 h-5 text-faint" : "w-8 h-8 text-faint";
   if (error) return <Film className={iconClass} />;
   return (
     <img

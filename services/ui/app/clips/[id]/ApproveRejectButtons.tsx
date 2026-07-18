@@ -60,11 +60,11 @@ export default function ApproveRejectButtons({
   return (
     <div className="card p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-300">Curation Decision</h3>
+        <h3 className="text-sm font-semibold text-ink">Curation Decision</h3>
         <button
           type="button"
           onClick={copyId}
-          className="text-xs text-slate-500 hover:text-cyan-400"
+          className="text-xs text-muted hover:text-accent"
         >
           {copied ? "copied" : "copy clip_id"}
         </button>
@@ -75,8 +75,8 @@ export default function ApproveRejectButtons({
           onClick={() => act("approve")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
             status === "approved"
-              ? "bg-green-500 text-gray-950 border-green-500"
-              : "border-green-500/30 text-green-400 hover:bg-green-500/10"
+              ? "bg-green-500 text-on-accent border-green-500"
+              : "border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500/10"
           }`}
         >
           {loading === "approve" ? (
@@ -91,8 +91,8 @@ export default function ApproveRejectButtons({
           onClick={() => act("reject")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors disabled:opacity-60 ${
             status === "rejected"
-              ? "bg-red-500 text-gray-950 border-red-500"
-              : "border-red-500/30 text-red-400 hover:bg-red-500/10"
+              ? "bg-red-500 text-on-accent border-red-500"
+              : "border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10"
           }`}
         >
           {loading === "reject" ? (
@@ -104,13 +104,13 @@ export default function ApproveRejectButtons({
         </button>
       </div>
       {(status || reverted) && (
-        <div className="text-xs text-slate-400 bg-[#0a1120] rounded-lg p-2 border border-[#1e3a5f]">
+        <div className="text-xs text-muted bg-surface-2 rounded-lg p-2 border border-line">
           {status === "approved" && "✓ Clip approved — persisted to review_queue."}
           {status === "rejected" && "✗ Clip rejected — persisted to review_queue."}
           {reverted && !status && "↩ Reverted to pending."}
         </div>
       )}
-      <div className="text-xs text-slate-600">DNA v{dnaVersion ?? "—"}</div>
+      <div className="text-xs text-faint">DNA v{dnaVersion ?? "—"}</div>
     </div>
   );
 }

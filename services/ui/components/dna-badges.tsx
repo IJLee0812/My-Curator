@@ -48,7 +48,7 @@ export function OddbBadges({ odd }: { odd: Partial<ScenarioDNA["odd"]> | undefin
   const weather = odd?.weather;
   const lighting = odd?.lighting;
   if (!weather && !lighting) {
-    return <span className="text-xs text-slate-600">no ODD</span>;
+    return <span className="text-xs text-faint">no ODD</span>;
   }
   return (
     <div className="flex flex-wrap gap-1">
@@ -73,7 +73,7 @@ export function TopologyBadges({
   const lane = topology?.lane_event;
   const intersection = topology?.intersection_type;
   if (!road && !lane && !intersection) {
-    return <span className="text-xs text-slate-600">no topology</span>;
+    return <span className="text-xs text-faint">no topology</span>;
   }
   return (
     <div className="flex flex-wrap gap-1">
@@ -100,7 +100,7 @@ export function ActorBadges({
   actors,
 }: { actors: ScenarioDNA["actor_dynamics"] | undefined | null }) {
   const list = actors ?? [];
-  if (list.length === 0) return <span className="text-xs text-slate-600">no actors</span>;
+  if (list.length === 0) return <span className="text-xs text-faint">no actors</span>;
   const topActors = list.slice(0, 3);
   return (
     <div className="flex flex-wrap gap-1">
@@ -109,11 +109,11 @@ export function ActorBadges({
           {a.actor_class.replace(/vehicle_|_/g, (m) => m === "vehicle_" ? "" : " ").trim()}
           <span className="opacity-60">·</span>
           <span className="opacity-80">{a.state}</span>
-          {a.grounded_by_yolo26 && <span title="YOLO26 grounded" className="text-green-400">✓</span>}
+          {a.grounded_by_yolo26 && <span title="YOLO26 grounded" className="text-green-600 dark:text-green-400">✓</span>}
         </span>
       ))}
       {list.length > 3 && (
-        <span className="text-xs text-slate-500">+{list.length - 3}</span>
+        <span className="text-xs text-muted">+{list.length - 3}</span>
       )}
     </div>
   );
@@ -135,9 +135,9 @@ export function PlannerBadge({
 // null across the current corpus (no collisions), so it renders as "—".
 const SEVERITY_STYLE: Record<string, string> = {
   minor:    "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  moderate: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  severe:   "border-red-500/30 bg-red-500/10 text-red-300",
-  fatal:    "border-red-600/40 bg-red-600/15 text-red-300",
+  moderate: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  severe:   "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+  fatal:    "border-red-600/40 bg-red-600/15 text-red-700 dark:text-red-300",
 };
 
 function collisionLabel(collision: string | null): string {
@@ -149,7 +149,7 @@ function collisionLabel(collision: string | null): string {
 export function SafetyEventCard({ event }: { event: SafetyEvent | null | undefined }) {
   if (!event?.has_event) return null;
   const sev = event.severity_estimate ?? "";
-  const style = SEVERITY_STYLE[sev] ?? "border-slate-500/30 bg-slate-500/10 text-slate-300";
+  const style = SEVERITY_STYLE[sev] ?? "border-line/30 bg-faint/10 text-ink";
   return (
     <div className={`rounded-xl border p-3 ${style}`}>
       <div className="flex items-center gap-2 mb-2">
@@ -179,10 +179,10 @@ export function ConfidenceBar({ value }: { value: number }) {
   const color = value >= 0.9 ? "bg-green-500" : value >= 0.75 ? "bg-amber-500" : "bg-red-500";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-[#1e3a5f] rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-surface-2 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-slate-400 font-mono w-8 text-right">{pct}%</span>
+      <span className="text-xs text-muted font-mono w-8 text-right">{pct}%</span>
     </div>
   );
 }

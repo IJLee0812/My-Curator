@@ -62,21 +62,21 @@ function FilterGroup({
 }) {
   const [open, setOpen] = useState(true);
   const colorMap: Record<string, string> = {
-    blue: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-    purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-    red: "bg-red-500/20 text-red-300 border-red-500/30",
-    pink: "bg-pink-500/20 text-pink-300 border-pink-500/30",
+    blue: "bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/30",
+    purple: "bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30",
+    red: "bg-red-500/20 text-red-700 dark:text-red-300 border-red-500/30",
+    pink: "bg-pink-500/20 text-pink-700 dark:text-pink-300 border-pink-500/30",
   };
   const active = colorMap[color] ?? colorMap.blue;
   return (
     <div className="mb-4">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 hover:text-slate-200"
+        className="flex items-center justify-between w-full text-xs font-semibold text-muted uppercase tracking-wider mb-2 hover:text-ink"
       >
         {label}
         {selected.size > 0 && (
-          <span className="text-cyan-400 normal-case font-normal">({selected.size})</span>
+          <span className="text-accent normal-case font-normal">({selected.size})</span>
         )}
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? "" : "-rotate-90"}`} />
       </button>
@@ -89,7 +89,7 @@ function FilterGroup({
               className={`text-xs px-2 py-1 rounded-full border transition-colors ${
                 selected.has(opt)
                   ? active
-                  : "border-[#1e3a5f] text-slate-500 hover:text-slate-300 hover:border-slate-500"
+                  : "border-line text-muted hover:text-ink hover:border-line"
               }`}
             >
               {opt.replace(/_/g, " ")}
@@ -245,15 +245,15 @@ function SearchPageInner() {
     <div className="flex h-screen overflow-hidden">
       {/* filter sidebar */}
       {showFilters && (
-        <aside className="w-44 sm:w-48 lg:w-56 shrink-0 border-r border-[#1e3a5f] overflow-y-auto p-4 bg-[#0a1120]">
+        <aside className="w-44 sm:w-48 lg:w-56 shrink-0 border-r border-line overflow-y-auto p-4 bg-surface-2">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" /> DNA Filters
+            <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-accent" /> DNA Filters
             </span>
             {activeFilterCount > 0 && (
               <button
                 onClick={clearAll}
-                className="text-xs text-slate-500 hover:text-red-400 flex items-center gap-1"
+                className="text-xs text-muted hover:text-red-600 dark:text-red-400 flex items-center gap-1"
               >
                 <X className="w-3 h-3" /> clear
               </button>
@@ -264,11 +264,11 @@ function SearchPageInner() {
               type="checkbox"
               checked={groupBySource}
               onChange={(e) => setGroupBySource(e.target.checked)}
-              className="mt-0.5 accent-cyan-500 shrink-0"
+              className="mt-0.5 accent-accent shrink-0"
             />
-            <span className="text-xs text-slate-400 group-hover:text-slate-200 leading-snug">
+            <span className="text-xs text-muted group-hover:text-ink leading-snug">
               Group adjacent windows
-              <span className="block text-[10px] text-slate-600">
+              <span className="block text-[10px] text-faint">
                 collapse near-duplicate windows of the same source clip
               </span>
             </span>
@@ -284,24 +284,24 @@ function SearchPageInner() {
       {/* main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* search bar */}
-        <form onSubmit={onSubmit} className="p-4 border-b border-[#1e3a5f] bg-[#070d1a]">
+        <form onSubmit={onSubmit} className="p-4 border-b border-line bg-canvas">
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
               className={`btn-ghost px-3 flex items-center gap-1.5 text-sm shrink-0 ${
-                showFilters ? "border-cyan-500/40 text-cyan-400" : ""
+                showFilters ? "border-accent/40 text-accent" : ""
               }`}
             >
               <SlidersHorizontal className="w-4 h-4" />
               {activeFilterCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-cyan-500 text-gray-950 text-[10px] font-bold flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-accent text-on-accent text-[10px] font-bold flex items-center justify-center">
                   {activeFilterCount}
                 </span>
               )}
             </button>
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
               <input
                 type="text"
                 placeholder="rainy night cut-in, pedestrian crossing, emergency brake…"
@@ -315,7 +315,7 @@ function SearchPageInner() {
                   onClick={() => setQuery("")}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
-                  <X className="w-4 h-4 text-slate-500 hover:text-slate-300" />
+                  <X className="w-4 h-4 text-muted hover:text-ink" />
                 </button>
               )}
             </div>
@@ -328,7 +328,7 @@ function SearchPageInner() {
               Search
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 text-sm text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 text-sm text-muted">
             <span className="shrink-0">
               {submitted
                 ? allResults.length > 0
@@ -339,15 +339,15 @@ function SearchPageInner() {
             {activeFilterCount > 0 && (
               <>
                 <span>·</span>
-                <span className="text-cyan-400 shrink-0">
+                <span className="text-accent shrink-0">
                   {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active
                 </span>
               </>
             )}
-            <span className="hidden lg:inline ml-auto text-slate-600">Hybrid: Milvus ANN → PG JSONB filter</span>
+            <span className="hidden lg:inline ml-auto text-faint">Hybrid: Milvus ANN → PG JSONB filter</span>
             {/* per-page selector */}
             <div className="flex items-center gap-2 ml-auto lg:ml-4 shrink-0">
-              <span className="text-slate-600 hidden sm:inline">per page</span>
+              <span className="text-faint hidden sm:inline">per page</span>
               <div className="flex gap-1.5">
                 {PAGE_SIZE_OPTIONS.map((n) => (
                   <button
@@ -356,8 +356,8 @@ function SearchPageInner() {
                     onClick={() => setPerPage(n)}
                     className={`px-3 py-1 rounded text-sm border transition-colors ${
                       perPage === n
-                        ? "border-cyan-500/60 text-cyan-400 bg-cyan-500/10"
-                        : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+                        ? "border-accent/60 text-accent bg-accent/10"
+                        : "border-line text-muted hover:text-ink"
                     }`}
                   >
                     {n}
@@ -371,17 +371,17 @@ function SearchPageInner() {
         {/* results */}
         <div className="flex-1 overflow-y-auto p-4">
           {error && (
-            <div className="card p-4 mb-3 text-sm text-red-300 border-red-500/40">
+            <div className="card p-4 mb-3 text-sm text-red-700 dark:text-red-300 border-red-500/40">
               <strong className="font-semibold">Search failed:</strong> {error}
             </div>
           )}
           {loading ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+            <div className="flex flex-col items-center justify-center h-full text-muted">
               <Loader2 className="w-8 h-8 animate-spin mb-2" />
               <p className="text-sm">Querying curation-api…</p>
             </div>
           ) : pageResults.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-600">
+            <div className="flex flex-col items-center justify-center h-full text-faint">
               <Search className="w-12 h-12 mb-3 opacity-30" />
               <p className="text-sm">
                 {submitted
@@ -391,7 +391,7 @@ function SearchPageInner() {
               {submitted && activeFilterCount > 0 && (
                 <button
                   onClick={clearAll}
-                  className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+                  className="mt-2 text-xs text-accent hover:text-accent"
                 >
                   Clear all filters
                 </button>
@@ -412,18 +412,18 @@ function SearchPageInner() {
                     >
                       {/* rank + thumbnail */}
                       <div className="shrink-0 flex flex-col items-center gap-2">
-                        <div className="w-7 h-7 rounded bg-[#0a1120] flex items-center justify-center text-xs text-slate-500 font-mono border border-[#1e3a5f]">
+                        <div className="w-7 h-7 rounded bg-surface-2 flex items-center justify-center text-xs text-muted font-mono border border-line">
                           {globalIdx + 1}
                         </div>
-                        <div className="w-24 h-[4.5rem] sm:w-48 sm:h-36 md:w-64 md:h-48 bg-[#0a1120] rounded border border-[#1e3a5f] flex items-center justify-center relative overflow-hidden">
+                        <div className="w-24 h-[4.5rem] sm:w-48 sm:h-36 md:w-64 md:h-48 bg-surface-2 rounded border border-line flex items-center justify-center relative overflow-hidden">
                           <ClipThumbnail clipId={clip.clip_id} iconSize="sm" />
                         </div>
-                        <div className="text-xs font-mono text-slate-600 text-center leading-tight">
+                        <div className="text-xs font-mono text-faint text-center leading-tight">
                           {clip.start_s !== null && clip.end_s !== null
                             ? `${clip.start_s.toFixed(1)}–${clip.end_s.toFixed(1)}s`
                             : "—"}
                         </div>
-                        <div className="text-xs font-mono text-cyan-400 text-center leading-tight">
+                        <div className="text-xs font-mono text-accent text-center leading-tight">
                           {clip.score.toFixed(3)}
                         </div>
                       </div>
@@ -432,10 +432,10 @@ function SearchPageInner() {
                       <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="text-xs font-mono text-slate-400 truncate">
+                            <div className="text-xs font-mono text-muted truncate">
                               {clip.clip_id}
                             </div>
-                            <div className="text-xs text-slate-600 mt-0.5">
+                            <div className="text-xs text-faint mt-0.5">
                               {clip.source_clip_id
                                 ? `source: ${clip.source_clip_id}`
                                 : (clip.blob_uri ?? "")}
@@ -444,7 +444,7 @@ function SearchPageInner() {
                           <RiskBadge level={risk} rationale={dna?.planner_logic?.risk_level_rationale} />
                         </div>
                         {dna?.scene_description && (
-                          <p className="text-xs text-slate-400 leading-snug line-clamp-2">
+                          <p className="text-xs text-muted leading-snug line-clamp-2">
                             {dna.scene_description}
                           </p>
                         )}
@@ -465,11 +465,11 @@ function SearchPageInner() {
 
               {/* pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-[#1e3a5f]">
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-line">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded border border-line text-muted hover:text-ink hover:border-line disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -483,15 +483,15 @@ function SearchPageInner() {
                     }, [])
                     .map((p, i) =>
                       p === "…" ? (
-                        <span key={`ellipsis-${i}`} className="text-slate-600 text-xs px-1">…</span>
+                        <span key={`ellipsis-${i}`} className="text-faint text-xs px-1">…</span>
                       ) : (
                         <button
                           key={p}
                           onClick={() => setPage(p as number)}
                           className={`min-w-[2rem] h-8 rounded border text-xs font-mono transition-colors ${
                             page === p
-                              ? "border-cyan-500/60 text-cyan-400 bg-cyan-500/10"
-                              : "border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500"
+                              ? "border-accent/60 text-accent bg-accent/10"
+                              : "border-line text-muted hover:text-ink hover:border-line"
                           }`}
                         >
                           {p}
@@ -502,7 +502,7 @@ function SearchPageInner() {
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded border border-line text-muted hover:text-ink hover:border-line disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>

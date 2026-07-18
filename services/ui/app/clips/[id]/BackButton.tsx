@@ -14,9 +14,9 @@ export default function BackButton({ fallback }: { fallback: string }) {
           router.push(fallback);
         }
       }}
-      className="p-2 rounded-lg hover:bg-[#111f36] transition-colors shrink-0"
+      className="p-2 rounded-lg hover:bg-surface-hover transition-colors shrink-0"
     >
-      <ArrowLeft className="w-4 h-4 text-slate-400" />
+      <ArrowLeft className="w-4 h-4 text-muted" />
     </button>
   );
 }

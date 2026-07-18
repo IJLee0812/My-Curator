@@ -226,25 +226,25 @@ const REVIEW_STATES_EN = [
   {
     value: "pending",
     dot: "bg-amber-400 animate-pulse",
-    badge: "text-amber-400 bg-amber-500/10 border-amber-500/25",
+    badge: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
     desc: "Awaiting human review. All newly ingested clips start in this state.",
   },
   {
     value: "approved",
     dot: "bg-green-400",
-    badge: "text-green-400 bg-green-500/10 border-green-500/25",
+    badge: "text-green-600 dark:text-green-400 bg-green-500/10 border-green-500/25",
     desc: "Accepted into the curated corpus. DNA payload has been verified by a reviewer.",
   },
   {
     value: "rejected",
     dot: "bg-red-400",
-    badge: "text-red-400 bg-red-500/10 border-red-500/25",
+    badge: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/25",
     desc: "Manually rejected by a human reviewer. Excluded from the training corpus.",
   },
   {
     value: "rejected_schema_invalid",
-    dot: "bg-slate-500",
-    badge: "text-slate-400 bg-slate-500/10 border-slate-600/40",
+    dot: "bg-faint",
+    badge: "text-muted bg-faint/10 border-line/40",
     desc: "Automatically rejected at ingestion time — the DNA payload failed JSON Schema validation. Displayed as 'Schema Invalid' in the UI.",
   },
 ];
@@ -471,25 +471,25 @@ const REVIEW_STATES_KO = [
   {
     value: "pending",
     dot: "bg-amber-400 animate-pulse",
-    badge: "text-amber-400 bg-amber-500/10 border-amber-500/25",
+    badge: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
     desc: "사람의 검토 대기 중. 새로 수집된 모든 클립의 초기 상태.",
   },
   {
     value: "approved",
     dot: "bg-green-400",
-    badge: "text-green-400 bg-green-500/10 border-green-500/25",
+    badge: "text-green-600 dark:text-green-400 bg-green-500/10 border-green-500/25",
     desc: "큐레이션 코퍼스에 승인됨. 검토자가 DNA 페이로드를 확인함.",
   },
   {
     value: "rejected",
     dot: "bg-red-400",
-    badge: "text-red-400 bg-red-500/10 border-red-500/25",
+    badge: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/25",
     desc: "검토자가 수동으로 거부함. 학습 코퍼스에서 제외됨.",
   },
   {
     value: "rejected_schema_invalid",
-    dot: "bg-slate-500",
-    badge: "text-slate-400 bg-slate-500/10 border-slate-600/40",
+    dot: "bg-faint",
+    badge: "text-muted bg-faint/10 border-line/40",
     desc: "수집 시 자동 거부 — DNA 페이로드가 JSON Schema 검증에 실패함. UI에서 'Schema Invalid'로 표시됨.",
   },
 ];
@@ -512,7 +512,7 @@ const GLOSSARY_KO = [
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-mono text-[11px] bg-[#1e3a5f] text-cyan-300 px-2 py-0.5 rounded shrink-0">
+    <span className="font-mono text-[11px] bg-surface-2 text-accent px-2 py-0.5 rounded shrink-0">
       {children}
     </span>
   );
@@ -535,21 +535,21 @@ function LayerHeader({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="shrink-0 w-9 h-9 rounded-lg bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
+      <div className="shrink-0 w-9 h-9 rounded-lg bg-accent/15 border border-accent/25 flex items-center justify-center">
         {layerNum ? (
-          <span className="text-xs font-bold text-cyan-400">{layerNum}</span>
+          <span className="text-xs font-bold text-accent">{layerNum}</span>
         ) : (
-          <Icon className="w-4 h-4 text-cyan-400" />
+          <Icon className="w-4 h-4 text-accent" />
         )}
       </div>
       <div>
         {layerLabel && (
-          <div className="text-[10px] text-cyan-500 uppercase tracking-widest mb-0.5">{layerLabel}</div>
+          <div className="text-[10px] text-accent uppercase tracking-widest mb-0.5">{layerLabel}</div>
         )}
-        <h2 className="text-base font-bold text-slate-100">{title}</h2>
-        <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+        <h2 className="text-base font-bold text-ink">{title}</h2>
+        <p className="text-sm text-muted mt-0.5">{description}</p>
         {source && (
-          <p className="text-[10px] text-slate-600 mt-1 font-mono">Source: {source}</p>
+          <p className="text-[10px] text-faint mt-1 font-mono">Source: {source}</p>
         )}
       </div>
     </div>
@@ -561,22 +561,22 @@ function FieldCard({ field }: { field: FieldDef }) {
     <div className="card p-4 space-y-3">
       <div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-sm font-semibold text-slate-100">{field.name}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 border border-slate-600/40">
+          <span className="font-mono text-sm font-semibold text-ink">{field.name}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-line/50 text-muted border border-line/40">
             {field.type}
           </span>
         </div>
-        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{field.description}</p>
+        <p className="text-xs text-muted mt-1.5 leading-relaxed">{field.description}</p>
         {field.source && (
-          <p className="text-[10px] text-slate-600 mt-1 font-mono">↳ {field.source}</p>
+          <p className="text-[10px] text-faint mt-1 font-mono">↳ {field.source}</p>
         )}
       </div>
-      <div className="border-t border-[#1e3a5f]" />
+      <div className="border-t border-line" />
       <div className="space-y-2">
         {field.rows.map(({ value, desc }) => (
           <div key={value} className="flex gap-3 items-baseline">
             <Tag>{value}</Tag>
-            <span className="text-xs text-slate-400 leading-relaxed">{desc}</span>
+            <span className="text-xs text-muted leading-relaxed">{desc}</span>
           </div>
         ))}
       </div>
@@ -620,28 +620,28 @@ export default function HelpPage() {
   }, [TOC_ITEMS]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-8 space-y-8">
       {/* page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-cyan-400" />
+          <h1 className="t-title text-ink flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-accent" />
             {isKo ? "도움말 & 레퍼런스" : "Help & Reference"}
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-muted mt-0.5">
             {isKo
               ? "My-Curator · Scenario DNA v0.1 레퍼런스 가이드"
               : "My-Curator · Scenario DNA v0.1 Reference Guide"}
           </p>
         </div>
         {/* lang toggle */}
-        <div className="flex items-center gap-1 bg-[#0a1120] border border-[#1e3a5f] rounded-lg p-1 shrink-0">
+        <div className="flex items-center gap-1 bg-surface-2 border border-line rounded-lg p-1 shrink-0">
           <button
             onClick={() => setLang("en")}
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
               !isKo
-                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                : "text-slate-500 hover:text-slate-300"
+                ? "bg-accent/20 text-accent border border-accent/30"
+                : "text-muted hover:text-ink"
             }`}
           >
             EN
@@ -650,8 +650,8 @@ export default function HelpPage() {
             onClick={() => setLang("ko")}
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
               isKo
-                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                : "text-slate-500 hover:text-slate-300"
+                ? "bg-accent/20 text-accent border border-accent/30"
+                : "text-muted hover:text-ink"
             }`}
           >
             KO
@@ -665,7 +665,7 @@ export default function HelpPage() {
         {/* sticky TOC */}
         <aside className="hidden md:block w-48 shrink-0">
           <div className="sticky top-6 card p-3 space-y-0.5">
-            <p className="text-[10px] text-slate-600 uppercase tracking-widest px-2 pb-2">
+            <p className="text-[10px] text-faint uppercase tracking-widest px-2 pb-2">
               {isKo ? "목차" : "Contents"}
             </p>
             {TOC_ITEMS.map(({ id, label }) => (
@@ -675,8 +675,8 @@ export default function HelpPage() {
                 onClick={() => setActiveId(id)}
                 className={`block px-2 py-1.5 rounded text-xs transition-colors ${
                   activeId === id
-                    ? "text-cyan-400 bg-cyan-500/10"
-                    : "text-slate-500 hover:text-slate-300 hover:bg-[#111f36]"
+                    ? "text-accent bg-accent/10"
+                    : "text-muted hover:text-ink hover:bg-surface-hover"
                 }`}
               >
                 {label}
@@ -700,16 +700,16 @@ export default function HelpPage() {
             <div className="card p-5 space-y-3">
               {isKo ? (
                 <>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    <strong className="text-slate-100">My-Curator</strong>는 자율주행 차량 주행 클립을 위한{" "}
-                    <strong className="text-slate-100">Verify-by-Exception (VBE)</strong> 큐레이션 플랫폼입니다.
+                  <p className="text-sm text-ink leading-relaxed">
+                    <strong className="text-ink">My-Curator</strong>는 자율주행 차량 주행 클립을 위한{" "}
+                    <strong className="text-ink">Verify-by-Exception (VBE)</strong> 큐레이션 플랫폼입니다.
                     NVIDIA DeepStream 9.0 파이프라인이 원본 영상을 수집하고, Scout VLM(Cosmos-Reason2-8B FP8)이
                     각 클립에 대한 구조화된{" "}
-                    <strong className="text-slate-100">Scenario DNA</strong>를 생성하며,
+                    <strong className="text-ink">Scenario DNA</strong>를 생성하며,
                     검토자는 예외 클립 — elevated 또는 critical 위험으로 플래그된 클립 — 만 큐레이션합니다.
                   </p>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    각 클립은 <strong className="text-slate-200">4계층 DNA 설명자</strong>를 가집니다:
+                  <p className="text-sm text-muted leading-relaxed">
+                    각 클립은 <strong className="text-ink">4계층 DNA 설명자</strong>를 가집니다:
                     ODD(환경), 토폴로지(도로 인프라), 액터 다이내믹스(도로 사용자),
                     플래너 로직(자차 의도 + 위험). DNA는 PostgreSQL(JSONB + GIN 인덱스)과
                     Milvus(768차원 Cosmos-Embed1-336p 임베딩)에 저장되어 하이브리드 검색을 지원합니다.
@@ -717,16 +717,16 @@ export default function HelpPage() {
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    <strong className="text-slate-100">My-Curator</strong> is a{" "}
-                    <strong className="text-slate-100">Verify-by-Exception (VBE)</strong> curation
+                  <p className="text-sm text-ink leading-relaxed">
+                    <strong className="text-ink">My-Curator</strong> is a{" "}
+                    <strong className="text-ink">Verify-by-Exception (VBE)</strong> curation
                     platform for autonomous-vehicle driving clips. A NVIDIA DeepStream 9.0 pipeline ingests raw
                     video, a Scout VLM (Cosmos-Reason2-8B FP8) generates structured{" "}
-                    <strong className="text-slate-100">Scenario DNA</strong> for each clip, and
+                    <strong className="text-ink">Scenario DNA</strong> for each clip, and
                     reviewers curate only the exceptions — clips flagged as elevated or critical risk.
                   </p>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    Each clip carries a <strong className="text-slate-200">4-layer DNA descriptor</strong>:
+                  <p className="text-sm text-muted leading-relaxed">
+                    Each clip carries a <strong className="text-ink">4-layer DNA descriptor</strong>:
                     ODD (environment), Topology (road infrastructure), Actor Dynamics (road users), and
                     Planner Logic (ego intent + risk). DNA is stored in PostgreSQL (JSONB + GIN index)
                     and in Milvus (768-dim Cosmos-Embed1-336p embeddings) for hybrid search.
@@ -735,7 +735,7 @@ export default function HelpPage() {
               )}
               <div className="flex flex-wrap gap-2 pt-1">
                 {["Verify-by-Exception", "4-Layer DNA", "Hybrid Vector + Filter Search", "ISO 21448 SOTIF", "ASAM OSI / OpenDRIVE Taxonomy"].map((t) => (
-                  <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
                     {t}
                   </span>
                 ))}
@@ -766,13 +766,13 @@ export default function HelpPage() {
               ]).map(({ step, label, icon: Icon, desc }) => (
                 <div key={step} className="card p-4 space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0">
+                    <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs font-bold flex items-center justify-center shrink-0">
                       {step}
                     </span>
-                    <Icon className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span className="text-sm font-semibold text-slate-200">{label}</span>
+                    <Icon className="w-4 h-4 text-accent shrink-0" />
+                    <span className="text-sm font-semibold text-ink">{label}</span>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                  <p className="text-xs text-muted leading-relaxed">{desc}</p>
                 </div>
               ))}
             </div>
@@ -863,7 +863,7 @@ export default function HelpPage() {
                     <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded border ${badge}`}>
                       {value}
                     </span>
-                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{desc}</p>
+                    <p className="text-xs text-muted mt-1.5 leading-relaxed">{desc}</p>
                   </div>
                 </div>
               ))}
@@ -882,8 +882,8 @@ export default function HelpPage() {
             <div className="card p-4 divide-y divide-[#1e3a5f]">
               {GLOSSARY.map(({ term, def }) => (
                 <div key={term} className="py-3 first:pt-0 last:pb-0">
-                  <div className="text-xs font-semibold text-slate-200 mb-1">{term}</div>
-                  <p className="text-xs text-slate-500 leading-relaxed">{def}</p>
+                  <div className="text-xs font-semibold text-ink mb-1">{term}</div>
+                  <p className="text-xs text-muted leading-relaxed">{def}</p>
                 </div>
               ))}
             </div>

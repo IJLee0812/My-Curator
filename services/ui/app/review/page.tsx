@@ -19,10 +19,10 @@ import { OddbBadges, RiskBadge } from "@/components/dna-badges";
 type Tab = "pending" | "approved" | "rejected" | "schema_invalid";
 
 const TAB_CONFIG: Record<Tab, { label: string; color: string; dot: string }> = {
-  pending:        { label: "Pending",        color: "text-amber-400", dot: "bg-amber-400" },
-  approved:       { label: "Approved",       color: "text-green-400", dot: "bg-green-400" },
-  rejected:       { label: "Rejected",       color: "text-red-400",   dot: "bg-red-400"   },
-  schema_invalid: { label: "Schema Invalid", color: "text-slate-400", dot: "bg-slate-500" },
+  pending:        { label: "Pending",        color: "text-amber-600 dark:text-amber-400", dot: "bg-amber-400" },
+  approved:       { label: "Approved",       color: "text-green-600 dark:text-green-400", dot: "bg-green-400" },
+  rejected:       { label: "Rejected",       color: "text-red-600 dark:text-red-400",   dot: "bg-red-400"   },
+  schema_invalid: { label: "Schema Invalid", color: "text-muted", dot: "bg-faint" },
 };
 
 const PAGE_SIZES = [30, 50, 100] as const;
@@ -130,23 +130,23 @@ function ReviewQueuePage() {
   };
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-8 space-y-8">
       {/* header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-cyan-400" />
+          <h1 className="t-title text-ink flex items-center gap-2">
+            <ClipboardCheck className="w-5 h-5 text-accent" />
             Review Queue
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-muted mt-0.5">
             Verify-by-Exception curation workflow · {counts[tab]} in {TAB_CONFIG[tab].label}
           </p>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-faint mt-0.5">
             Click any clip card to open the detail review page
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg">
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg">
             <Clock className="w-3.5 h-3.5" />
             {counts.pending} pending
           </div>
@@ -154,20 +154,20 @@ function ReviewQueuePage() {
       </div>
 
       {/* tabs */}
-      <div className="flex gap-1 border-b border-[#1e3a5f]">
+      <div className="flex gap-1 border-b border-line">
         {(["pending", "approved", "rejected", "schema_invalid"] as Tab[]).map((key) => (
           <button
             key={key}
             onClick={() => changeTab(key)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === key
-                ? "border-cyan-500 text-cyan-400"
-                : "border-transparent text-slate-500 hover:text-slate-300"
+                ? "border-accent text-accent"
+                : "border-transparent text-muted hover:text-ink"
             }`}
           >
             {TAB_CONFIG[key].label}
             <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${
-              tab === key ? "bg-cyan-500/20 text-cyan-400" : "bg-[#1e3a5f] text-slate-500"
+              tab === key ? "bg-accent/20 text-accent" : "bg-surface-2 text-muted"
             }`}>
               {counts[key]}
             </span>
@@ -176,22 +176,22 @@ function ReviewQueuePage() {
       </div>
 
       {/* page-size selector */}
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between text-xs text-muted">
         <span>
           {total === 0
             ? "No items"
             : `Showing ${(page - 1) * size + 1}–${Math.min(page * size, total)} of ${total}`}
         </span>
         <div className="flex items-center gap-1.5">
-          <span className="text-slate-600">Per page</span>
+          <span className="text-faint">Per page</span>
           {PAGE_SIZES.map((s) => (
             <button
               key={s}
               onClick={() => changeSize(s)}
               className={`px-2.5 py-1 rounded border text-xs font-mono transition-colors ${
                 size === s
-                  ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
-                  : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+                  ? "border-accent text-accent bg-accent/10"
+                  : "border-line text-muted hover:text-ink"
               }`}
             >
               {s}
@@ -202,16 +202,16 @@ function ReviewQueuePage() {
 
       {/* body */}
       {loading ? (
-        <div className="card p-12 text-center text-slate-500">
+        <div className="card p-12 text-center text-muted">
           <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
           <p className="text-sm">Loading review queue…</p>
         </div>
       ) : error ? (
-        <div className="card p-6 text-center text-red-400 border-red-500/40">{error}</div>
+        <div className="card p-6 text-center text-red-600 dark:text-red-400 border-red-500/40">{error}</div>
       ) : (
         <div className="space-y-2">
           {items.length === 0 ? (
-            <div className="card p-12 text-center text-slate-600">
+            <div className="card p-12 text-center text-faint">
               <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm">No items in this category</p>
             </div>
@@ -227,14 +227,14 @@ function ReviewQueuePage() {
               return (
                 <div
                   key={item.queue_id}
-                  className={`card p-4 flex gap-4 items-start cursor-pointer hover:border-slate-600 transition-all duration-300 ${
+                  className={`card p-4 flex gap-4 items-start cursor-pointer hover:border-line transition-all duration-300 ${
                     isDismissing ? "opacity-0 translate-x-8 pointer-events-none" : "opacity-100 translate-x-0"
                   }`}
                   onClick={() => router.push(`/clips/${item.clip_id}?from=review`)}
                 >
                   {/* queue id + state */}
                   <div className="shrink-0 flex flex-col items-center gap-2 w-20">
-                    <div className="text-xs font-mono text-slate-600">#{item.queue_id}</div>
+                    <div className="text-xs font-mono text-faint">#{item.queue_id}</div>
                     <div className={`flex flex-col items-center gap-1 text-xs ${cfg.color}`}>
                       <div className={`w-2 h-2 rounded-full ${cfg.dot} ${isPending ? "animate-pulse" : ""}`} />
                       <span className="text-center leading-tight">{cfg.label}</span>
@@ -245,8 +245,8 @@ function ReviewQueuePage() {
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-xs font-mono text-slate-300 truncate">{item.clip_id}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">
+                        <div className="text-xs font-mono text-ink truncate">{item.clip_id}</div>
+                        <div className="text-xs text-muted mt-0.5">
                           {item.start_s.toFixed(1)}–{item.end_s.toFixed(1)}s
                         </div>
                       </div>
@@ -258,12 +258,12 @@ function ReviewQueuePage() {
                     <OddbBadges odd={item.dna_json?.odd} />
 
                     {item.reason && (
-                      <div className="text-xs bg-[#0a1120] border border-[#1e3a5f] rounded px-2 py-1.5 text-slate-400">
-                        <span className="text-slate-600">reason: </span>{item.reason}
+                      <div className="text-xs bg-surface-2 border border-line rounded px-2 py-1.5 text-muted">
+                        <span className="text-faint">reason: </span>{item.reason}
                       </div>
                     )}
 
-                    <div className="flex items-center gap-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-3 text-xs text-faint">
                       <span>
                         Created:{" "}
                         {new Date(item.created_at).toLocaleString("en-US", {
@@ -294,7 +294,7 @@ function ReviewQueuePage() {
                       <button
                         disabled={isActing}
                         onClick={(e) => { e.stopPropagation(); act(item.clip_id, "approve"); }}
-                        className="flex items-center justify-center gap-1.5 min-w-[90px] px-3 py-1.5 rounded-lg border border-green-500/30 text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors disabled:opacity-40"
+                        className="flex items-center justify-center gap-1.5 min-w-[90px] px-3 py-1.5 rounded-lg border border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500/10 text-xs font-medium transition-colors disabled:opacity-40"
                       >
                         {isActing ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -306,7 +306,7 @@ function ReviewQueuePage() {
                       <button
                         disabled={isActing}
                         onClick={(e) => { e.stopPropagation(); act(item.clip_id, "reject"); }}
-                        className="flex items-center justify-center gap-1.5 min-w-[90px] px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors disabled:opacity-40"
+                        className="flex items-center justify-center gap-1.5 min-w-[90px] px-3 py-1.5 rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 text-xs font-medium transition-colors disabled:opacity-40"
                       >
                         {isActing ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -339,22 +339,22 @@ function ReviewQueuePage() {
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-1.5 rounded border border-line text-muted hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Previous page"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           {pageWindow(page, totalPages).map((p, i) =>
             p === "…" ? (
-              <span key={`gap-${i}`} className="px-2 text-slate-600 text-xs">…</span>
+              <span key={`gap-${i}`} className="px-2 text-faint text-xs">…</span>
             ) : (
               <button
                 key={p}
                 onClick={() => setPage(p)}
                 className={`min-w-[32px] px-2 py-1 rounded border text-xs font-mono transition-colors ${
                   page === p
-                    ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
-                    : "border-[#1e3a5f] text-slate-500 hover:text-slate-300"
+                    ? "border-accent text-accent bg-accent/10"
+                    : "border-line text-muted hover:text-ink"
                 }`}
               >
                 {p}
@@ -364,7 +364,7 @@ function ReviewQueuePage() {
           <button
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="p-1.5 rounded border border-[#1e3a5f] text-slate-400 hover:text-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-1.5 rounded border border-line text-muted hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Next page"
           >
             <ChevronRight className="w-4 h-4" />

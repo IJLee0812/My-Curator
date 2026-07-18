@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { getHealth } from "@/lib/api";
+import ThemeToggle from "@/components/theme-toggle";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -57,10 +58,10 @@ export default function Sidebar() {
         : "bg-red-400";
   const textClass =
     health === "ok"
-      ? "text-slate-500"
+      ? "text-muted"
       : health === "loading"
-        ? "text-amber-400"
-        : "text-red-400";
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
   const detail =
     health === "ok"
       ? "curation-api :8001"
@@ -69,16 +70,16 @@ export default function Sidebar() {
         : "curation-api :8001 (unreachable)";
 
   return (
-    <aside className="w-56 min-h-screen bg-[#0a1120] border-r border-[#1e3a5f] flex flex-col shrink-0">
+    <aside className="w-56 min-h-screen bg-surface border-r border-line flex flex-col shrink-0">
       {/* logo */}
-      <div className="px-5 py-5 border-b border-[#1e3a5f]">
+      <div className="px-5 py-5 border-b border-line">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-md bg-cyan-500 flex items-center justify-center shrink-0">
-            <Layers className="w-4 h-4 text-gray-950" />
+          <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center shrink-0">
+            <Layers className="w-4 h-4 text-on-accent" />
           </div>
           <div>
-            <div className="text-sm font-bold text-slate-100 leading-none">My-Curator</div>
-            <div className="text-[10px] text-slate-500 mt-0.5 leading-none">AV Curation Platform</div>
+            <div className="text-sm font-bold text-ink leading-none">My-Curator</div>
+            <div className="text-[10px] text-muted mt-0.5 leading-none">AV Curation Platform</div>
           </div>
         </div>
       </div>
@@ -91,8 +92,8 @@ export default function Sidebar() {
             href={href}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
               isActive(href)
-                ? "bg-cyan-500/15 text-cyan-400 font-medium border border-cyan-500/25"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#111f36]"
+                ? "bg-accent/15 text-accent font-medium border border-accent/25"
+                : "text-muted hover:text-ink hover:bg-surface-hover"
             }`}
           >
             <Icon className="w-4 h-4 shrink-0" />
@@ -102,13 +103,16 @@ export default function Sidebar() {
       </nav>
 
       {/* footer */}
-      <div className="px-4 py-4 border-t border-[#1e3a5f]">
-        <div className="flex items-center gap-2 mb-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
-          <span className={`text-xs ${textClass}`}>{detail}</span>
-        </div>
-        <div className="text-[10px] text-slate-600 font-mono">
-          DNA v0.1
+      <div className="px-3 py-3 border-t border-line space-y-2">
+        <ThemeToggle />
+        <div className="px-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+            <span className={`text-xs ${textClass}`}>{detail}</span>
+          </div>
+          <div className="text-[10px] text-faint font-mono">
+            DNA v0.1
+          </div>
         </div>
       </div>
     </aside>

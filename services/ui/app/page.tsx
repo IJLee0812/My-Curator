@@ -34,15 +34,15 @@ function StatCard({
   return (
     <div className="card p-5">
       <div className="flex items-start justify-between mb-3">
-        <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+        <span className="text-xs text-muted uppercase tracking-wider">{label}</span>
         <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ?? "bg-cyan-500/15"}`}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ?? "bg-accent/15 text-accent"}`}
         >
           <Icon className="w-4 h-4" />
         </div>
       </div>
-      <div className="text-2xl font-bold text-slate-100">{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+      <div className="text-2xl font-bold text-ink">{value}</div>
+      {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
     </div>
   );
 }
@@ -61,18 +61,18 @@ function SystemStatusRow({
       ? "bg-green-400 animate-pulse"
       : status === "warn"
         ? "bg-amber-400"
-        : "bg-slate-600";
+        : "bg-line";
   const text =
     status === "ok"
-      ? "text-green-400"
+      ? "text-green-600 dark:text-green-400"
       : status === "warn"
-        ? "text-amber-400"
-        : "text-slate-500";
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-muted";
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[#1e3a5f] last:border-0">
+    <div className="flex items-center justify-between py-2.5 border-b border-line last:border-0">
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${dot}`} />
-        <span className="text-sm text-slate-300">{label}</span>
+        <span className="text-sm text-ink">{label}</span>
       </div>
       <span className={`text-xs font-mono ${text}`}>{detail}</span>
     </div>
@@ -135,12 +135,12 @@ export default async function DashboardPage() {
         : ":8001 · unreachable";
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-8 space-y-8">
       {/* header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="t-title text-ink">Dashboard</h1>
+          <p className="text-sm text-muted mt-0.5">
             Scenario DNA v0.1 · corpus: {totalClips} clip{totalClips === 1 ? "" : "s"} ·
             DNA rows: {stats?.scenario_dna_count ?? 0}
           </p>
@@ -164,14 +164,14 @@ export default async function DashboardPage() {
           value={review.pending}
           sub="awaiting curation"
           icon={ClipboardCheck}
-          accent="bg-amber-500/15 text-amber-400"
+          accent="bg-amber-500/15 text-amber-600 dark:text-amber-400"
         />
         <StatCard
           label="DNA Pass Rate"
           value={decided === 0 || dnaPassRate === null ? "N/A" : `${(dnaPassRate * 100).toFixed(1)}%`}
           sub={decided === 0 ? "no decisions yet" : "approved / decided"}
           icon={CheckCircle2}
-          accent="bg-green-500/15 text-green-400"
+          accent="bg-green-500/15 text-green-600 dark:text-green-400"
         />
       </div>
 
@@ -179,14 +179,14 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* review breakdown */}
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-cyan-400" /> Review Queue
+          <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+            <ClipboardCheck className="w-4 h-4 text-accent" /> Review Queue
           </h2>
           {([
-            { label: "Approved", count: review.approved, hex: "#22c55e", color: "text-green-400" },
-            { label: "Rejected", count: review.rejected, hex: "#ef4444", color: "text-red-400" },
-            { label: "Pending", count: review.pending, hex: "#f59e0b", color: "text-amber-400" },
-            { label: "Schema Invalid", count: review.rejected_schema_invalid, hex: "#64748b", color: "text-slate-400" },
+            { label: "Approved", count: review.approved, hex: "#22c55e", color: "text-green-600 dark:text-green-400" },
+            { label: "Rejected", count: review.rejected, hex: "#ef4444", color: "text-red-600 dark:text-red-400" },
+            { label: "Pending", count: review.pending, hex: "#f59e0b", color: "text-amber-600 dark:text-amber-400" },
+            { label: "Schema Invalid", count: review.rejected_schema_invalid, hex: "#64748b", color: "text-muted" },
           ] as const).map(({ label, count, hex, color }) => {
             const total =
               review.approved + review.rejected + review.pending + review.rejected_schema_invalid;
@@ -195,23 +195,23 @@ export default async function DashboardPage() {
               <div key={label} className="mb-3">
                 <div className="flex justify-between text-xs mb-1">
                   <span className={color}>{label}</span>
-                  <span className="text-slate-500">{count} ({pct}%)</span>
+                  <span className="text-muted">{count} ({pct}%)</span>
                 </div>
-                <div className="h-2 bg-[#1e3a5f] rounded-full">
+                <div className="h-2 bg-surface-2 rounded-full">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.75 }} />
                 </div>
               </div>
             );
           })}
-          <Link href="/review" className="mt-2 flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300">
+          <Link href="/review" className="mt-2 flex items-center gap-1 text-xs text-accent hover:text-accent">
             View queue <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
 
         {/* system status */}
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-cyan-400" /> System Status
+          <h2 className="text-sm font-semibold text-ink mb-2 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-accent" /> System Status
           </h2>
           <SystemStatusRow label="curation-api" status={apiStatus} detail={apiDetail} />
           <SystemStatusRow
@@ -239,9 +239,9 @@ export default async function DashboardPage() {
       {/* Milvus collection */}
       {collection && (
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <Database className="w-4 h-4 text-cyan-400" />
-            Milvus Collection — <span className="font-mono text-cyan-400">{collection.collection_name}</span>
+          <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+            <Database className="w-4 h-4 text-accent" />
+            Milvus Collection — <span className="font-mono text-accent">{collection.collection_name}</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
@@ -250,9 +250,9 @@ export default async function DashboardPage() {
               { label: "Index", value: collection.index_type },
               { label: "Metric", value: collection.metric_type === "IP" ? "Inner Product (Cosine Similarity)" : collection.metric_type },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-[#0a1120] rounded-lg p-3 border border-[#1e3a5f]">
-                <div className="text-xs text-slate-500 mb-1">{label}</div>
-                <div className="text-sm font-mono font-semibold text-cyan-300">{value}</div>
+              <div key={label} className="bg-surface-2 rounded-lg p-3 border border-line">
+                <div className="text-xs text-muted mb-1">{label}</div>
+                <div className="text-sm font-mono font-semibold text-accent">{value}</div>
               </div>
             ))}
           </div>
