@@ -429,6 +429,49 @@ class PGRepository:
         )
         return [{"clip_id": r["clip_id"], "dna_json": dict(r["dna_json"])} for r in rows]
 
+    async def list_reembed_source(
+        self,
+        *,
+        session_id: str | None = None,
+        limit: int = 5000,
+    ) -> list[dict[str, Any]]:
+        """Return v0.2 clips with everything the P4-7 re-embed needs in one query:
+        ``[{clip_id, dna_json, frames_blob_uri, source_clip_id}]``.
+
+        ``frames_blob_uri`` is NULL when the pipeline never captured frames for
+        that segment (those clips get a text-only vector).  Schema-validity
+        filtering is applied by the caller, not here.
+        """
+        conditions = ["sd.dna_version = '0.2.0'"]
+        params: list[Any] = []
+        idx = 1
+        if session_id is not None:
+            conditions.append(f"c.session_id = ${idx}")
+            params.append(session_id)
+            idx += 1
+        where = " AND ".join(conditions)
+        params.append(int(limit))
+        rows = await self._pool.fetch(
+            f"""
+            SELECT sd.clip_id, sd.dna_json, c.frames_blob_uri, c.source_clip_id
+            FROM scenario_dna sd
+            JOIN clips c ON c.clip_id = sd.clip_id
+            WHERE {where}
+            ORDER BY c.created_at
+            LIMIT ${idx}
+            """,
+            *params,
+        )
+        return [
+            {
+                "clip_id": r["clip_id"],
+                "dna_json": dict(r["dna_json"]),
+                "frames_blob_uri": r["frames_blob_uri"],
+                "source_clip_id": r["source_clip_id"],
+            }
+            for r in rows
+        ]
+
     # ── reads ──────────────────────────────────────────────────────────────
 
     async def get_dna(self, clip_id: UUID) -> dict[str, Any] | None:
