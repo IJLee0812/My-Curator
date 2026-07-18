@@ -102,7 +102,6 @@ class PGRepository:
         start_s: float,
         end_s: float,
         frame_count: int | None = None,
-        is_gold: bool = False,
         is_synthetic: bool = False,
         frames_blob_uri: str | None = None,
         source_clip_id: str | None = None,
@@ -111,9 +110,9 @@ class PGRepository:
             """
             INSERT INTO clips
                 (clip_id, session_id, blob_uri, start_s, end_s,
-                 frame_count, is_gold, is_synthetic, frames_blob_uri,
+                 frame_count, is_synthetic, frames_blob_uri,
                  source_clip_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ON CONFLICT (clip_id) DO NOTHING
             """,
             clip_id,
@@ -122,7 +121,6 @@ class PGRepository:
             start_s,
             end_s,
             frame_count,
-            is_gold,
             is_synthetic,
             frames_blob_uri,
             source_clip_id,
@@ -177,7 +175,6 @@ class PGRepository:
         scout_prompt_hash: str,
         pipeline_version: str,
         frame_count: int | None = None,
-        is_gold: bool = False,
         is_synthetic: bool = False,
         judge_prompt_hash: str | None = None,
         curation_meta: dict[str, Any] | None = None,
@@ -190,9 +187,9 @@ class PGRepository:
                 """
                 INSERT INTO clips
                     (clip_id, session_id, blob_uri, start_s, end_s,
-                     frame_count, is_gold, is_synthetic, frames_blob_uri,
+                     frame_count, is_synthetic, frames_blob_uri,
                      source_clip_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (clip_id) DO NOTHING
                 """,
                 clip_id,
@@ -201,7 +198,6 @@ class PGRepository:
                 start_s,
                 end_s,
                 frame_count,
-                is_gold,
                 is_synthetic,
                 frames_blob_uri,
                 source_clip_id,
@@ -263,12 +259,9 @@ class PGRepository:
             state,
         )
 
-    async def get_review_queue(
-        self,
-        status: str | None = None,
-        limit: int = 50,
-    ) -> list[dict[str, Any]]:
-        """Return review_queue rows joined with clip + DNA data.
+    @staticmethod
+    def _review_state_filter(status: str | None) -> tuple[str, list[Any]]:
+        """Map a UI status tab to a SQL predicate + bind params.
 
         status filter:
           None / "all"     → all states
@@ -277,30 +270,52 @@ class PGRepository:
           "rejected"       → state = 'rejected'
           "schema_invalid" → state = 'rejected_schema_invalid'
         """
-        capped = max(1, min(int(limit), 200))
         if status in (None, "all"):
-            where = ""
-            params: list[Any] = [capped]
-        elif status == "schema_invalid":
-            where = "WHERE rq.state = 'rejected_schema_invalid'"
-            params = [capped]
-        else:
-            where = "WHERE rq.state = $1"
-            params = [status, capped]
+            return "", []
+        if status == "schema_invalid":
+            return "WHERE state = 'rejected_schema_invalid'", []
+        return "WHERE state = $1", [status]
 
+    async def count_review_queue(self, status: str | None = None) -> int:
+        """Total review_queue rows matching the status tab (drives pagination)."""
+        where, params = self._review_state_filter(status)
+        row = await self._pool.fetchrow(f"SELECT COUNT(*) AS n FROM review_queue {where}", *params)
+        return int(row["n"]) if row else 0
+
+    async def get_review_queue(
+        self,
+        status: str | None = None,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """Return a page of review_queue rows joined with clip + DNA data.
+
+        Ordered by ``created_at DESC``; ``limit``/``offset`` page within the
+        status tab.  See :meth:`count_review_queue` for the tab total.
+        """
+        capped = max(1, min(int(limit), 200))
+        off = max(0, int(offset))
+        where, params = self._review_state_filter(status)
+        # rq.state is the same predicate as the count query; the filter helper
+        # uses an unqualified column name, so re-qualify it for the JOIN query.
+        where = where.replace("state =", "rq.state =")
+        params.append(capped)
         limit_param = f"${len(params)}"
+        params.append(off)
+        offset_param = f"${len(params)}"
         rows = await self._pool.fetch(
             f"""
             SELECT rq.queue_id, rq.clip_id, rq.state, rq.reviewed_at,
                    rq.reason, rq.created_at,
-                   c.blob_uri, c.frames_blob_uri, c.start_s, c.end_s, c.is_gold,
+                   c.blob_uri, c.frames_blob_uri, c.start_s, c.end_s,
                    sd.dna_json
             FROM review_queue rq
             JOIN clips c ON c.clip_id = rq.clip_id
             LEFT JOIN scenario_dna sd ON sd.clip_id = rq.clip_id
             {where}
             ORDER BY rq.created_at DESC
-            LIMIT {limit_param}
+            LIMIT {limit_param} OFFSET {offset_param}
             """,
             *params,
         )
@@ -316,7 +331,6 @@ class PGRepository:
                 "frames_blob_uri": r["frames_blob_uri"],
                 "start_s": r["start_s"],
                 "end_s": r["end_s"],
-                "is_gold": r["is_gold"],
                 "dna_json": dict(r["dna_json"]) if r["dna_json"] else None,
             }
             for r in rows
@@ -560,10 +574,10 @@ class PGRepository:
         where = " AND ".join(conditions)
         params.append(limit)
         # P3-4: JOIN clips so search results carry the metadata UI needs in
-        # a single round-trip (start_s/end_s, blob_uri, is_gold, source_clip_id).
+        # a single round-trip (start_s/end_s, blob_uri, source_clip_id).
         sql = (
             "SELECT sd.clip_id, sd.dna_json, "
-            "c.start_s, c.end_s, c.blob_uri, c.is_gold, c.source_clip_id "
+            "c.start_s, c.end_s, c.blob_uri, c.source_clip_id "
             "FROM scenario_dna sd "
             "JOIN clips c ON c.clip_id = sd.clip_id "
             f"WHERE {where} "
@@ -578,7 +592,6 @@ class PGRepository:
                 "start_s": r["start_s"],
                 "end_s": r["end_s"],
                 "blob_uri": r["blob_uri"],
-                "is_gold": r["is_gold"],
                 "source_clip_id": r["source_clip_id"],
             }
             for r in rows
@@ -589,7 +602,7 @@ class PGRepository:
 
         Returns:
             Dict with keys: clip_id, session_id, blob_uri, frames_blob_uri,
-            start_s, end_s, is_gold, source_clip_id, dna_version, dna_json,
+            start_s, end_s, source_clip_id, dna_version, dna_json,
             dataset, subset, dataset_version.
             dataset/subset/dataset_version are None when the session row is
             missing (should not happen in practice).
@@ -598,7 +611,7 @@ class PGRepository:
         row = await self._pool.fetchrow(
             """
             SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
-                   c.start_s, c.end_s, c.is_gold, c.source_clip_id,
+                   c.start_s, c.end_s, c.source_clip_id,
                    sd.dna_version, sd.dna_json,
                    s.dataset, s.subset, s.dataset_version,
                    rq.state AS review_status
@@ -624,7 +637,6 @@ class PGRepository:
             "frames_blob_uri": row["frames_blob_uri"],
             "start_s": row["start_s"],
             "end_s": row["end_s"],
-            "is_gold": row["is_gold"],
             "source_clip_id": row["source_clip_id"],
             "dna_version": row["dna_version"],
             "dna_json": dict(row["dna_json"]) if row["dna_json"] else None,
@@ -651,7 +663,7 @@ class PGRepository:
         rows = await self._pool.fetch(
             """
             SELECT c.clip_id, c.session_id, c.blob_uri, c.frames_blob_uri,
-                   c.start_s, c.end_s, c.is_gold, c.source_clip_id,
+                   c.start_s, c.end_s, c.source_clip_id,
                    sd.dna_version, sd.dna_json
             FROM clips c
             LEFT JOIN scenario_dna sd ON c.clip_id = sd.clip_id
@@ -668,7 +680,6 @@ class PGRepository:
                 "frames_blob_uri": r["frames_blob_uri"],
                 "start_s": r["start_s"],
                 "end_s": r["end_s"],
-                "is_gold": r["is_gold"],
                 "source_clip_id": r["source_clip_id"],
                 "dna_version": r["dna_version"],
                 "dna_json": dict(r["dna_json"]) if r["dna_json"] else None,

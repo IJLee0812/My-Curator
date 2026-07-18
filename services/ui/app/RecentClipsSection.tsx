@@ -36,8 +36,8 @@ export default function RecentClipsSection({
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-          <Film className="w-4 h-4 text-cyan-400" /> Recent Clips
+        <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+          <Film className="w-4 h-4 text-accent" /> Recent Clips
         </h2>
         <div className="flex items-center gap-3">
           {/* count selector */}
@@ -48,8 +48,8 @@ export default function RecentClipsSection({
                 onClick={() => setCount(n)}
                 className={`text-xs px-2 py-0.5 rounded transition-colors ${
                   count === n
-                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                    : "text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-600"
+                    ? "bg-accent/20 text-accent border border-accent/30"
+                    : "text-muted hover:text-ink border border-transparent hover:border-line"
                 }`}
               >
                 {n}
@@ -58,7 +58,7 @@ export default function RecentClipsSection({
           </div>
           <Link
             href="/search"
-            className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+            className="text-xs text-accent hover:text-accent flex items-center gap-1"
           >
             Browse all <ArrowRight className="w-3 h-3" />
           </Link>
@@ -68,8 +68,8 @@ export default function RecentClipsSection({
       {/* risk distribution — live with count selector */}
       {clips.length > 0 && (
         <div className="card p-5 mb-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400" /> Risk Distribution (recent {count})
+          <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Risk Distribution (recent {count})
           </h2>
           {(["nominal", "elevated", "critical"] as const).map((level) => {
             const n = clips.filter(
@@ -81,17 +81,17 @@ export default function RecentClipsSection({
             return (
               <div key={level} className="mb-3">
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="capitalize text-slate-400">{level}</span>
-                  <span className="text-slate-500">{n} ({pct}%)</span>
+                  <span className="capitalize text-muted">{level}</span>
+                  <span className="text-muted">{n} ({pct}%)</span>
                 </div>
-                <div className="h-2 bg-[#1e3a5f] rounded-full">
+                <div className="h-2 bg-surface-2 rounded-full">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: hex, opacity: 0.8 }} />
                 </div>
               </div>
             );
           })}
-          <div className="mt-3 pt-3 border-t border-[#1e3a5f] text-xs text-slate-500">
-            <span className="text-red-400 font-semibold">
+          <div className="mt-3 pt-3 border-t border-line text-xs text-muted">
+            <span className="text-red-600 dark:text-red-400 font-semibold">
               {clips.filter((c) => c.dna_json?.planner_logic?.risk_level === "critical").length} critical
             </span>{" "}in the last {clips.length} clip{clips.length === 1 ? "" : "s"}
           </div>
@@ -99,14 +99,14 @@ export default function RecentClipsSection({
       )}
 
       {clips.length === 0 && !loading ? (
-        <div className="card p-6 text-center text-xs text-slate-500">
+        <div className="card p-6 text-center text-xs text-muted">
           No clips yet — once the DS pipeline ingests segments they will appear here.
         </div>
       ) : (
         <div className="relative">
           {loading && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#060c18]/60 rounded-lg">
-              <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-canvas/60 rounded-lg">
+              <Loader2 className="w-5 h-5 text-accent animate-spin" />
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -122,30 +122,23 @@ export default function RecentClipsSection({
                   href={`/clips/${clip.clip_id}`}
                   className="card card-hover p-5 block"
                 >
-                  <div className="w-full h-56 bg-[#0a1120] rounded-lg mb-4 flex items-center justify-center border border-[#1e3a5f] relative overflow-hidden">
+                  <div className="w-full h-56 bg-surface-2 rounded-lg mb-4 flex items-center justify-center border border-line relative overflow-hidden">
                     <ClipThumbnail clipId={clip.clip_id} />
                     <div className="absolute top-2 right-2">
                       <RiskBadge level={risk} />
                     </div>
-                    {clip.is_gold && (
-                      <div className="absolute top-2 left-2">
-                        <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                          gold
-                        </span>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-mono text-slate-400 truncate">
+                      <div className="text-sm font-mono text-muted truncate">
                         {clip.clip_id.slice(0, 22)}…
                       </div>
-                      <span className="text-xs font-mono text-slate-500 shrink-0 ml-2">
+                      <span className="text-xs font-mono text-muted shrink-0 ml-2">
                         {clip.start_s.toFixed(1)}–{clip.end_s.toFixed(1)}s
                       </span>
                     </div>
                     <OddbBadges odd={odd} />
-                    <div className="text-sm text-slate-500 truncate">{sourceTag}</div>
+                    <div className="text-sm text-muted truncate">{sourceTag}</div>
                   </div>
                 </Link>
               );

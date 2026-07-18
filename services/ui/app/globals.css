@@ -1,85 +1,220 @@
 @import "tailwindcss";
 
-/* Tailwind v4: dark-mode opt-in via .dark on <html> (P3-4). */
+/* Tailwind v4: dark-mode opt-in via .dark on <html>. */
 @variant dark (&:where(.dark, .dark *));
 
-/* Theme tokens — replaces tailwind.config.ts in v4. */
-@theme {
-  --color-background: #070d1a;
-  --color-foreground: #e2e8f0;
-  --color-sidebar-bg: #0a1120;
-  --color-card-bg: #0f1b2e;
-  --color-border-app: #1e3a5f;
-  --color-accent: #06b6d4;
-  --color-accent-dim: #0e7490;
-  --color-muted: #64748b;
-  --color-risk-nominal: #22c55e;
-  --color-risk-elevated: #f59e0b;
-  --color-risk-critical: #ef4444;
-  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* ──────────────────────────────────────────────────────────────────────
+ * Design system tokens (light/dark), mapped through the theme layer.
+ * Raw values in :root (light) / .dark (dark); @theme inline maps them to
+ * Tailwind utilities (bg-canvas, text-ink, border-line, bg-accent, …) that
+ * carry the var() reference through so every surface adapts with the theme.
+ * ────────────────────────────────────────────────────────────────────── */
+:root {
+  /* surfaces — light: parchment page + white cards */
+  --c-canvas: #f5f5f7;      /* off-white page background */
+  --c-surface: #ffffff;     /* cards / panels */
+  --c-surface-2: #f5f5f7;   /* wells / inputs */
+  --c-surface-hover: #ececef;
+  --c-line: #d2d2d7;        /* hairline borders */
+  --c-ink: #1d1d1f;         /* near-black ink — all headings & body */
+  --c-muted: #6e6e73;       /* secondary text */
+  --c-faint: #86868b;       /* tertiary text */
+
+  /* single accent colour */
+  --c-accent: #0066cc;      /* primary */
+  --c-accent-hover: #0071e3;/* focus / hover */
+  --c-on-accent: #ffffff;
+
+  /* badge hues — light (darkened for contrast on pale tints) */
+  --badge-green: #248a3d;
+  --badge-amber: #a15c00;
+  --badge-red: #d70015;
+  --badge-blue: #0066cc;
+  --badge-purple: #8944ab;
+  --badge-orange: #c93400;
+  --badge-pink: #c01543;
+
+  --background: var(--c-canvas);
+  --foreground: var(--c-ink);
 }
 
-:root {
-  --background: var(--color-background);
-  --foreground: var(--color-foreground);
+.dark {
+  /* surfaces — dark: true-black canvas + near-black tiles */
+  --c-canvas: #000000;
+  --c-surface: #1c1c1e;
+  --c-surface-2: #2c2c2e;
+  --c-surface-hover: #37373a;
+  --c-line: #38383a;
+  --c-ink: #f5f5f7;
+  --c-muted: #a1a1a6;
+  --c-faint: #86868b;
+
+  --c-accent: #2997ff;       /* brighter accent for dark surfaces */
+  --c-accent-hover: #47a3ff;
+  --c-on-accent: #ffffff;
+
+  /* badge hues — dark (bright) */
+  --badge-green: #30d158;
+  --badge-amber: #ff9f0a;
+  --badge-red: #ff453a;
+  --badge-blue: #64d2ff;
+  --badge-purple: #da8fff;
+  --badge-orange: #ff9f0a;
+  --badge-pink: #ff375f;
+
+  --background: var(--c-canvas);
+  --foreground: var(--c-ink);
+}
+
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-surface-hover: var(--c-surface-hover);
+  --color-line: var(--c-line);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-on-accent: var(--c-on-accent);
+
+  --color-risk-nominal: #34c759;
+  --color-risk-elevated: #ff9f0a;
+  --color-risk-critical: #ff3b30;
+
+  /* Inter (self-hosted, --font-inter) gives a consistent UI face; native
+   * system fonts resolve first where available. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+  /* Inter ss03: single-storey "a" and tighter kerning. */
+  font-feature-settings: "ss03", "cv11";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
   overflow-x: hidden;
 }
 
+/* ── Type scale (display/title/body proportions) ───────────────────
+ * Negative tracking at display sizes = a tight display cadence.
+ * Weight ladder is 300 / 400 / 600 / 700 — 500 is deliberately absent. */
+@utility t-hero {
+  font-size: clamp(2.25rem, 4vw, 3rem); font-weight: 600;
+  line-height: 1.07; letter-spacing: -0.015em;
+}
+@utility t-display {
+  font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 600;
+  line-height: 1.1; letter-spacing: -0.012em;
+}
+@utility t-title {
+  font-size: 1.75rem; font-weight: 600; line-height: 1.15; letter-spacing: -0.014em;
+}
+@utility t-lead {
+  font-size: 1.3125rem; font-weight: 400; line-height: 1.3; letter-spacing: -0.006em;
+}
+@utility t-tagline {
+  font-size: 1.0625rem; font-weight: 600; line-height: 1.24; letter-spacing: -0.017em;
+}
+@utility t-body {
+  font-size: 1.0625rem; font-weight: 400; line-height: 1.47; letter-spacing: -0.017em;
+}
+@utility t-body-strong {
+  font-size: 1.0625rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.017em;
+}
+@utility t-caption {
+  font-size: 0.8125rem; font-weight: 400; line-height: 1.4; letter-spacing: -0.008em;
+}
+@utility t-caption-strong {
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.008em;
+}
+@utility t-fine {
+  font-size: 0.6875rem; font-weight: 400; line-height: 1.3; letter-spacing: 0;
+}
+
 /* scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #2d5a8e; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-faint) 45%, transparent);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--c-faint) 70%, transparent);
+}
 
 @utility text-balance {
   text-wrap: balance;
 }
 
+/* ── badges (theme-adaptive tint + hue text) ──────────────────────────── */
 @utility badge-risk-nominal {
-  @apply bg-green-500/15 text-green-400 border border-green-500/30;
+  background-color: color-mix(in srgb, var(--badge-green) 13%, transparent);
+  color: var(--badge-green);
+  border: 1px solid color-mix(in srgb, var(--badge-green) 30%, transparent);
 }
 @utility badge-risk-elevated {
-  @apply bg-amber-500/15 text-amber-400 border border-amber-500/30;
+  background-color: color-mix(in srgb, var(--badge-amber) 13%, transparent);
+  color: var(--badge-amber);
+  border: 1px solid color-mix(in srgb, var(--badge-amber) 30%, transparent);
 }
 @utility badge-risk-critical {
-  @apply bg-red-500/15 text-red-400 border border-red-500/30;
+  background-color: color-mix(in srgb, var(--badge-red) 13%, transparent);
+  color: var(--badge-red);
+  border: 1px solid color-mix(in srgb, var(--badge-red) 30%, transparent);
 }
 @utility badge-odd {
-  @apply bg-blue-500/15 text-blue-300 border border-blue-500/25;
+  background-color: color-mix(in srgb, var(--badge-blue) 12%, transparent);
+  color: var(--badge-blue);
+  border: 1px solid color-mix(in srgb, var(--badge-blue) 28%, transparent);
 }
 @utility badge-topology {
-  @apply bg-purple-500/15 text-purple-300 border border-purple-500/25;
+  background-color: color-mix(in srgb, var(--badge-purple) 12%, transparent);
+  color: var(--badge-purple);
+  border: 1px solid color-mix(in srgb, var(--badge-purple) 28%, transparent);
 }
 @utility badge-actor {
-  @apply bg-orange-500/15 text-orange-300 border border-orange-500/25;
+  background-color: color-mix(in srgb, var(--badge-orange) 12%, transparent);
+  color: var(--badge-orange);
+  border: 1px solid color-mix(in srgb, var(--badge-orange) 28%, transparent);
 }
 @utility badge-planner {
-  @apply bg-pink-500/15 text-pink-300 border border-pink-500/25;
+  background-color: color-mix(in srgb, var(--badge-pink) 12%, transparent);
+  color: var(--badge-pink);
+  border: 1px solid color-mix(in srgb, var(--badge-pink) 28%, transparent);
 }
 
+/* ── surfaces & controls (no chrome shadows; elevation via surface contrast) ─ */
 @utility card {
-  @apply rounded-xl border border-[#1e3a5f] bg-[#0f1b2e];
+  @apply rounded-[18px] border border-line bg-surface;
 }
 @utility card-hover {
-  @apply hover:border-cyan-500/40 hover:bg-[#111f36] transition-colors cursor-pointer;
+  @apply hover:border-accent/40 transition-colors cursor-pointer;
 }
+/* pill CTAs + scale-0.97 press micro-interaction (the system-wide gesture). */
 @utility btn-primary {
-  @apply bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-semibold px-4 py-2 rounded-lg transition-colors;
+  @apply bg-accent hover:bg-accent-hover text-on-accent font-normal px-5 py-2 rounded-full transition-all active:scale-[0.97];
 }
 @utility btn-ghost {
-  @apply border border-[#1e3a5f] hover:border-cyan-500/40 hover:bg-[#111f36] text-slate-300 px-4 py-2 rounded-lg transition-colors;
+  @apply border border-accent text-accent hover:bg-accent/10 px-5 py-2 rounded-full transition-all active:scale-[0.97];
 }
 @utility input-dark {
-  @apply bg-[#0a1120] border border-[#1e3a5f] focus:border-cyan-500/60 focus:outline-none rounded-lg px-4 py-2.5 text-slate-200 placeholder:text-slate-500 transition-colors;
+  @apply bg-surface border border-line focus:border-accent focus:outline-none rounded-full px-5 py-2.5 text-ink placeholder:text-faint transition-colors;
 }

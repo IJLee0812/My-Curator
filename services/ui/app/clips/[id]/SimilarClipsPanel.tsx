@@ -81,8 +81,8 @@ export default function SimilarClipsPanel({
   if (loading) {
     return (
       <div>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Similar Clips</h2>
-        <div className="card p-6 flex items-center justify-center text-slate-500 text-xs">
+        <h2 className="text-sm font-semibold text-ink mb-3">Similar Clips</h2>
+        <div className="card p-6 flex items-center justify-center text-muted text-xs">
           <Loader2 className="w-4 h-4 animate-spin mr-2" /> Computing similar clips…
         </div>
       </div>
@@ -92,8 +92,8 @@ export default function SimilarClipsPanel({
   if (error) {
     return (
       <div>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Similar Clips</h2>
-        <div className="card p-4 text-xs text-red-300 border-red-500/40">{error}</div>
+        <h2 className="text-sm font-semibold text-ink mb-3">Similar Clips</h2>
+        <div className="card p-4 text-xs text-red-700 dark:text-red-300 border-red-500/40">{error}</div>
       </div>
     );
   }
@@ -101,8 +101,8 @@ export default function SimilarClipsPanel({
   if (results.length === 0) {
     return (
       <div>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Similar Clips</h2>
-        <div className="card p-4 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-ink mb-3">Similar Clips</h2>
+        <div className="card p-4 text-xs text-muted">
           No similar clips found in the current corpus.
         </div>
       </div>
@@ -116,7 +116,7 @@ export default function SimilarClipsPanel({
 
   return (
     <div>
-      <h2 className="text-sm font-semibold text-slate-300 mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold text-ink mb-3">{title}</h2>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {results.map((c) => {
           const risk = c.dna_json?.planner_logic?.risk_level ?? "nominal";
@@ -126,15 +126,15 @@ export default function SimilarClipsPanel({
               href={`/clips/${c.clip_id}`}
               className="card card-hover p-3 block"
             >
-              <div className="w-full h-16 bg-[#0a1120] rounded-lg mb-2 flex items-center justify-center border border-[#1e3a5f] relative overflow-hidden">
+              <div className="w-full h-16 bg-surface-2 rounded-lg mb-2 flex items-center justify-center border border-line relative overflow-hidden">
                 <ClipThumbnail clipId={c.clip_id} iconSize="sm" />
               </div>
-              <div className="text-[10px] font-mono text-slate-500 truncate">
+              <div className="text-[10px] font-mono text-muted truncate">
                 {c.clip_id.slice(0, 16)}…
               </div>
               <div className="mt-1 flex items-center justify-between gap-1">
                 <RiskBadge level={risk} />
-                <span className="text-[10px] font-mono text-cyan-400">
+                <span className="text-[10px] font-mono text-accent">
                   {c.score.toFixed(3)}
                 </span>
               </div>

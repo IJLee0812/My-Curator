@@ -89,23 +89,23 @@ export default function VideoPlayer({
   if (!videoSrc) {
     return (
       <div className="card overflow-hidden">
-        <div className="aspect-video bg-[#060c18] border-b border-[#1e3a5f] flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <Film className="w-10 h-10 text-slate-700" />
+        <div className="aspect-video bg-canvas border-b border-line flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <Film className="w-10 h-10 text-faint" />
           <div>
-            <p className="text-sm font-medium text-slate-400">No streamable video source</p>
-            <p className="text-xs text-slate-600 mt-1">
+            <p className="text-sm font-medium text-muted">No streamable video source</p>
+            <p className="text-xs text-faint mt-1">
               This clip has no presigned URL and its blob URI is not a local file stream.
               The raw video may have been evicted from MinIO or was never uploaded.
             </p>
           </div>
-          <div className="w-full max-w-sm bg-[#0a1120] border border-[#1e3a5f] rounded px-3 py-2 text-left">
-            <p className="text-[10px] text-slate-600 mb-1 uppercase tracking-wider">blob_uri</p>
-            <p className="text-[11px] text-slate-500 font-mono break-all">{blobUri}</p>
+          <div className="w-full max-w-sm bg-surface-2 border border-line rounded px-3 py-2 text-left">
+            <p className="text-[10px] text-faint mb-1 uppercase tracking-wider">blob_uri</p>
+            <p className="text-[11px] text-muted font-mono break-all">{blobUri}</p>
           </div>
         </div>
-        <div className="p-3 flex items-center justify-between text-xs text-slate-500">
+        <div className="p-3 flex items-center justify-between text-xs text-muted">
           <span className="font-mono">{startS.toFixed(2)}s – {endS.toFixed(2)}s</span>
-          <span className="text-slate-600">{framesBlobUri ? "frames available" : "no frames"}</span>
+          <span className="text-faint">{framesBlobUri ? "frames available" : "no frames"}</span>
         </div>
       </div>
     );
@@ -114,7 +114,7 @@ export default function VideoPlayer({
   return (
     <div className="card overflow-hidden">
       <div
-        className="aspect-video bg-[#060c18] border-b border-[#1e3a5f] relative group cursor-pointer"
+        className="aspect-video bg-canvas border-b border-line relative group cursor-pointer"
         onClick={togglePlay}
         onContextMenu={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
@@ -151,12 +151,12 @@ export default function VideoPlayer({
         </div>
 
         {expired && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060c18]/85 text-center px-6">
-            <RefreshCw className="w-6 h-6 text-amber-400 mb-2" />
-            <div className="text-sm text-slate-200 font-medium">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-canvas/85 text-center px-6">
+            <RefreshCw className="w-6 h-6 text-amber-600 dark:text-amber-400 mb-2" />
+            <div className="text-sm text-ink font-medium">
               Presigned URL is about to expire
             </div>
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-muted mt-1">
               Reload the page to fetch a fresh URL from curation-api.
             </div>
             <button
@@ -169,12 +169,12 @@ export default function VideoPlayer({
         )}
       </div>
 
-      <div className="p-3 flex items-center justify-between text-xs text-slate-500">
+      <div className="p-3 flex items-center justify-between text-xs text-muted">
         <span className="font-mono flex items-center gap-1.5">
-          <RotateCcw className="w-3 h-3 text-cyan-500/60" />
+          <RotateCcw className="w-3 h-3 text-accent/60" />
           {startS.toFixed(2)}s – {endS.toFixed(2)}s
         </span>
-        <span className="text-slate-600 truncate max-w-[60%]" title={blobUri}>
+        <span className="text-faint truncate max-w-[60%]" title={blobUri}>
           {blobUri.replace(/^file:\/\//, "").replace(/^[a-z]+:\/\//, "")}
         </span>
       </div>

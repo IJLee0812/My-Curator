@@ -133,7 +133,6 @@ def _make_ingest_msg(session_id: str = "ingest-session-001") -> dict:
         "scout_prompt_hash": "aabbccddaabbccdd",
         "pipeline_version": "0.1.0",
         "frame_count": None,
-        "is_gold": False,
         "is_synthetic": False,
         "judge_prompt_hash": None,
         "curation_meta": None,

@@ -61,7 +61,6 @@ class IngestRequest(BaseModel):
     scout_prompt_hash: str
     pipeline_version: str
     frame_count: int | None = None
-    is_gold: bool = False
     is_synthetic: bool = False
     judge_prompt_hash: str | None = None
     curation_meta: dict | None = None

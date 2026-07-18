@@ -41,24 +41,19 @@ export default async function ClipDetailPage({ params, searchParams }: PageProps
         <BackButton fallback={backHref} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-sm sm:text-base font-bold text-slate-100 font-mono truncate">
+            <h1 className="text-sm sm:text-base font-bold text-ink font-mono truncate">
               {clip.clip_id}
             </h1>
-            {clip.is_gold && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 shrink-0">
-                gold set
-              </span>
-            )}
-            <RiskBadge level={risk} />
+            <RiskBadge level={risk} rationale={dna?.planner_logic?.risk_level_rationale} />
           </div>
-          <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-1.5">
+          <p className="text-xs text-muted mt-0.5 flex flex-wrap gap-x-1.5">
             <span>{clip.start_s.toFixed(2)}s – {clip.end_s.toFixed(2)}s</span>
             <span>·</span>
             <span>session: {clip.session_id}</span>
             {clip.source_clip_id && (
               <>
                 <span>·</span>
-                <span className="text-slate-400">
+                <span className="text-muted">
                   source: <span className="font-mono">{clip.source_clip_id}</span>
                 </span>
               </>

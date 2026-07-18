@@ -23,10 +23,19 @@ export interface ActorDynamic {
   grounded_by_yolo26: boolean;
 }
 
+export interface SafetyEvent {
+  has_event: boolean;
+  event_type: string;
+  collision_type: string | null;
+  severity_estimate: string | null;
+}
+
 export interface ScenarioDNA {
   dna_version: string;
   clip_id: string;
   timestamp_range: { start_s: number; end_s: number };
+  // v0.2: free-text scene narrative (absent on v0.1 clips).
+  scene_description?: string;
   odd: {
     weather: string;
     lighting: string;
@@ -42,6 +51,9 @@ export interface ScenarioDNA {
     ego_maneuver: string;
     risk_level: RiskLevel;
     causal_trigger_actor_index: number | null;
+    // v0.2 additions (absent on v0.1 clips).
+    risk_level_rationale?: string;
+    safety_event?: SafetyEvent;
   };
   confidence: {
     overall: number;
@@ -121,7 +133,6 @@ export interface ClipResult {
   start_s: number | null;
   end_s: number | null;
   blob_uri: string | null;
-  is_gold: boolean | null;
   source_clip_id: string | null;
 }
 
@@ -139,7 +150,6 @@ export interface ClipDetail {
   end_s: number;
   precise_start_s: number;
   precise_end_s: number;
-  is_gold: boolean;
   source_clip_id: string | null;
   dna_version: string | null;
   dna_json: ScenarioDNA | null;
@@ -154,7 +164,6 @@ export interface ClipSummary {
   frames_blob_uri: string | null;
   start_s: number;
   end_s: number;
-  is_gold: boolean;
   source_clip_id: string | null;
   dna_version: string | null;
   dna_json: ScenarioDNA | null;
@@ -207,13 +216,14 @@ export interface ReviewQueueItem {
   frames_blob_uri: string | null;
   start_s: number;
   end_s: number;
-  is_gold: boolean;
   dna_json: ScenarioDNA | null;
 }
 
 export interface ReviewQueueResponse {
   items: ReviewQueueItem[];
   total: number;
+  page: number;
+  size: number;
 }
 
 // ── Endpoints ───────────────────────────────────────────────────────────────
@@ -222,12 +232,14 @@ export async function searchClips(
   query: string,
   filters: Record<string, string[]>,
   limit = 20,
+  dedupBySource = true,
 ): Promise<SearchResponse> {
   return postJSON<SearchResponse>("/v1/search", {
     query,
     filters,
     limit,
     top_k: 1000,
+    dedup_by_source: dedupBySource,
   });
 }
 
@@ -286,9 +298,10 @@ export async function reviewClip(
 
 export async function getReviewQueue(
   status?: string,
-  limit = 50,
+  page = 1,
+  size = 30,
 ): Promise<ReviewQueueResponse> {
-  const params = new URLSearchParams({ limit: String(limit) });
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (status) params.set("status", status);
   return getJSON<ReviewQueueResponse>(`/v1/review?${params}`);
 }

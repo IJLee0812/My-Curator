@@ -38,7 +38,6 @@ class ClipDetail(BaseModel):
     end_s: float
     precise_start_s: float
     precise_end_s: float
-    is_gold: bool
     source_clip_id: str | None
     dna_version: str | None
     dna_json: dict[str, Any] | None
@@ -59,7 +58,6 @@ class ClipSummary(BaseModel):
     frames_blob_uri: str | None
     start_s: float
     end_s: float
-    is_gold: bool
     source_clip_id: str | None
     dna_version: str | None
     dna_json: dict[str, Any] | None
@@ -102,7 +100,6 @@ async def get_clip(
         end_s=end_s,
         precise_start_s=precise_start_s,
         precise_end_s=precise_end_s,
-        is_gold=bool(row.get("is_gold", False)),
         source_clip_id=row.get("source_clip_id"),
         dna_version=row.get("dna_version"),
         dna_json=row.get("dna_json"),
@@ -217,7 +214,6 @@ async def list_clips(
             frames_blob_uri=r.get("frames_blob_uri"),
             start_s=r["start_s"],
             end_s=r["end_s"],
-            is_gold=bool(r.get("is_gold", False)),
             source_clip_id=r.get("source_clip_id"),
             dna_version=r.get("dna_version"),
             dna_json=r.get("dna_json"),

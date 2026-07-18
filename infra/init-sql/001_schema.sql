@@ -41,14 +41,12 @@ CREATE TABLE IF NOT EXISTS clips (
     start_s         DOUBLE PRECISION NOT NULL CHECK (start_s >= 0),
     end_s           DOUBLE PRECISION NOT NULL CHECK (end_s >= start_s),
     frame_count     INTEGER,
-    is_gold         BOOLEAN     NOT NULL DEFAULT FALSE,
     is_synthetic    BOOLEAN     NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     frames_blob_uri TEXT,                                 -- P3-1 (ALTER-appended)
     source_clip_id  TEXT                                  -- P3-4 (ALTER-appended)
 );
 CREATE INDEX IF NOT EXISTS idx_clips_session         ON clips(session_id);
-CREATE INDEX IF NOT EXISTS idx_clips_is_gold         ON clips(is_gold) WHERE is_gold;
 CREATE INDEX IF NOT EXISTS idx_clips_source_clip_id  ON clips(source_clip_id);  -- P3-4
 
 -- ──────────────────────────────────────────────────────────────────────
