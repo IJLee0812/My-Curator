@@ -422,8 +422,13 @@ function SearchPageInner() {
                                 : (clip.blob_uri ?? "")}
                             </div>
                           </div>
-                          <RiskBadge level={risk} />
+                          <RiskBadge level={risk} rationale={dna?.planner_logic?.risk_level_rationale} />
                         </div>
+                        {dna?.scene_description && (
+                          <p className="text-xs text-slate-400 leading-snug line-clamp-2">
+                            {dna.scene_description}
+                          </p>
+                        )}
                         <OddbBadges odd={dna?.odd} />
                         <TopologyBadges topology={dna?.topology} />
                         <ActorBadges actors={dna?.actor_dynamics} />

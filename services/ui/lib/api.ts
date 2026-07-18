@@ -23,10 +23,19 @@ export interface ActorDynamic {
   grounded_by_yolo26: boolean;
 }
 
+export interface SafetyEvent {
+  has_event: boolean;
+  event_type: string;
+  collision_type: string | null;
+  severity_estimate: string | null;
+}
+
 export interface ScenarioDNA {
   dna_version: string;
   clip_id: string;
   timestamp_range: { start_s: number; end_s: number };
+  // v0.2: free-text scene narrative (absent on v0.1 clips).
+  scene_description?: string;
   odd: {
     weather: string;
     lighting: string;
@@ -42,6 +51,9 @@ export interface ScenarioDNA {
     ego_maneuver: string;
     risk_level: RiskLevel;
     causal_trigger_actor_index: number | null;
+    // v0.2 additions (absent on v0.1 clips).
+    risk_level_rationale?: string;
+    safety_event?: SafetyEvent;
   };
   confidence: {
     overall: number;

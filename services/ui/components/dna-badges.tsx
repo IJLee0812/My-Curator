@@ -1,4 +1,16 @@
-import type { ScenarioDNA, RiskLevel } from "@/lib/api";
+import type { ScenarioDNA, RiskLevel, SafetyEvent } from "@/lib/api";
+
+// Schema maxLength caps (schemas/scenario_dna_v0_2.schema.json). The Scout DNA
+// normalizer hard-truncates these free-text fields to satisfy the schema, so a
+// stored value at its cap was cut mid-thought. The dropped text is not
+// recoverable (it is truncated before persistence), so we mark a capped value
+// with an ellipsis rather than present a cut string as if it were whole.
+export const SCENE_DESCRIPTION_MAX = 500;
+export const RISK_RATIONALE_MAX = 300;
+
+export function markIfTruncated(text: string, cap: number): string {
+  return text.length >= cap ? `${text}…` : text;
+}
 
 const WEATHER_ICONS: Record<string, string> = {
   clear: "☀️", overcast: "☁️", light_rain: "🌦️", heavy_rain: "🌧️",
@@ -9,7 +21,7 @@ const LIGHTING_ICONS: Record<string, string> = {
   tunnel: "🚇", overcast_day: "🌥️",
 };
 
-export function RiskBadge({ level }: { level: RiskLevel }) {
+export function RiskBadge({ level, rationale }: { level: RiskLevel; rationale?: string }) {
   const cls =
     level === "critical" ? "badge-risk-critical" :
     level === "elevated" ? "badge-risk-elevated" :
@@ -18,7 +30,10 @@ export function RiskBadge({ level }: { level: RiskLevel }) {
     level === "critical" ? "bg-red-400" :
     level === "elevated" ? "bg-amber-400" : "bg-green-400";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${cls} ${rationale ? "cursor-help" : ""}`}
+      title={rationale ? markIfTruncated(rationale, RISK_RATIONALE_MAX) : undefined}
+    >
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
       {level}
     </span>
@@ -112,6 +127,50 @@ export function PlannerBadge({
     <span className="badge-planner inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full">
       🎯 {planner.ego_maneuver.replace(/_/g, " ")}
     </span>
+  );
+}
+
+// v0.2 safety_event card — rendered only when has_event is true (the nominal
+// majority has no event).  Colour-coded by severity_estimate; collision_type is
+// null across the current corpus (no collisions), so it renders as "—".
+const SEVERITY_STYLE: Record<string, string> = {
+  minor:    "border-amber-500/30 bg-amber-500/10 text-amber-300",
+  moderate: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+  severe:   "border-red-500/30 bg-red-500/10 text-red-300",
+  fatal:    "border-red-600/40 bg-red-600/15 text-red-300",
+};
+
+function collisionLabel(collision: string | null): string {
+  if (collision === null || collision === undefined) return "—";
+  if (collision === "none") return "no collision";
+  return collision.replace(/_/g, " ");
+}
+
+export function SafetyEventCard({ event }: { event: SafetyEvent | null | undefined }) {
+  if (!event?.has_event) return null;
+  const sev = event.severity_estimate ?? "";
+  const style = SEVERITY_STYLE[sev] ?? "border-slate-500/30 bg-slate-500/10 text-slate-300";
+  return (
+    <div className={`rounded-xl border p-3 ${style}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm">⚠️</span>
+        <span className="text-xs font-semibold uppercase tracking-wide">Safety Event</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        <div>
+          <div className="text-[10px] uppercase opacity-60 mb-0.5">Type</div>
+          <div className="font-mono">{(event.event_type || "—").replace(/_/g, " ")}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-60 mb-0.5">Severity</div>
+          <div className="font-mono">{event.severity_estimate ?? "—"}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-60 mb-0.5">Collision</div>
+          <div className="font-mono">{collisionLabel(event.collision_type)}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 

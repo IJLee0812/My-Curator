@@ -7,9 +7,13 @@ import type { ScenarioDNA } from "@/lib/api";
 import {
   ActorBadges,
   ConfidenceBar,
+  markIfTruncated,
   OddbBadges,
   PlannerBadge,
+  RISK_RATIONALE_MAX,
   RiskBadge,
+  SafetyEventCard,
+  SCENE_DESCRIPTION_MAX,
   TopologyBadges,
 } from "@/components/dna-badges";
 
@@ -69,7 +73,7 @@ export default function DnaAccordion({ dna }: { dna: ScenarioDNA | null }) {
   const topology =
     dna.topology ?? { road_type: "", lane_event: "", intersection_type: "" };
   const actors = dna.actor_dynamics ?? [];
-  const planner =
+  const planner: ScenarioDNA["planner_logic"] =
     dna.planner_logic ?? {
       ego_maneuver: "",
       risk_level: "nominal",
@@ -79,6 +83,17 @@ export default function DnaAccordion({ dna }: { dna: ScenarioDNA | null }) {
 
   return (
     <div className="space-y-2">
+      {dna.scene_description && (
+        <div className="border border-[#1e3a5f] rounded-xl bg-[#0a1120] px-4 py-3">
+          <div className="text-xs font-medium text-cyan-300 mb-1.5">Scene Description</div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            {markIfTruncated(dna.scene_description, SCENE_DESCRIPTION_MAX)}
+          </p>
+        </div>
+      )}
+
+      <SafetyEventCard event={planner.safety_event} />
+
       <AccordionSection
         title="Layer 1 — ODD (Operational Design Domain)"
         color="bg-blue-500/10 text-blue-300 border-b border-blue-500/20"
@@ -148,7 +163,16 @@ export default function DnaAccordion({ dna }: { dna: ScenarioDNA | null }) {
       >
         <div className="space-y-1 mb-3">
           <KV k="ego_maneuver" v={planner.ego_maneuver || "—"} />
-          <KV k="risk_level" v={<RiskBadge level={planner.risk_level} />} />
+          <KV
+            k="risk_level"
+            v={<RiskBadge level={planner.risk_level} rationale={planner.risk_level_rationale} />}
+          />
+          {planner.risk_level_rationale && (
+            <KV
+              k="risk_rationale"
+              v={markIfTruncated(planner.risk_level_rationale, RISK_RATIONALE_MAX)}
+            />
+          )}
           <KV
             k="causal_trigger"
             v={

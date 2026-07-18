@@ -44,7 +44,7 @@ export default async function ClipDetailPage({ params, searchParams }: PageProps
             <h1 className="text-sm sm:text-base font-bold text-slate-100 font-mono truncate">
               {clip.clip_id}
             </h1>
-            <RiskBadge level={risk} />
+            <RiskBadge level={risk} rationale={dna?.planner_logic?.risk_level_rationale} />
           </div>
           <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-1.5">
             <span>{clip.start_s.toFixed(2)}s – {clip.end_s.toFixed(2)}s</span>
