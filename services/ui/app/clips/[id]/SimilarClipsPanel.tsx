@@ -126,7 +126,7 @@ export default function SimilarClipsPanel({
               href={`/clips/${c.clip_id}`}
               className="card card-hover p-3 block"
             >
-              <div className="w-full h-16 bg-surface-2 rounded-lg mb-2 flex items-center justify-center border border-line relative overflow-hidden">
+              <div className="w-full h-32 bg-surface-2 rounded-lg mb-2 flex items-center justify-center border border-line relative overflow-hidden">
                 <ClipThumbnail clipId={c.clip_id} iconSize="sm" />
               </div>
               <div className="text-[10px] font-mono text-muted truncate">
