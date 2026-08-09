@@ -14,7 +14,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from my_curator.adapters.gst.utils import compute_sample_interval_ns, compute_step_ns
+from my_curator.adapters.gst.utils import (
+    clamp_segment_end_ns,
+    compute_sample_interval_ns,
+    compute_step_ns,
+)
 from my_curator.application.consumers.curation_consumer import CurationConsumer
 
 _CONFIG_PATH = Path(__file__).parent.parent.parent / "configs" / "config_driving_scene.yaml"
@@ -61,6 +65,39 @@ class TestOverlapSegmentMath:
         """5 s segment @ selection_fps → frame count; fps=2 (shipped) → 10 frames."""
         interval_ns = compute_sample_interval_ns(fps)
         assert (5 * 1_000_000_000) // interval_ns == expected_frames
+
+
+@pytest.mark.integration
+class TestClampSegmentEnd:
+    """EOS flush clamp: trailing segment end must not exceed the last real frame."""
+
+    _P = 33_333_333  # ~30 fps frame period
+
+    def test_trailing_segment_clamped_to_last_frame(self):
+        # 10 s clip @30 fps: last frame PTS ≈ 9.9667 s; segment [8.1 s, 13.1 s]
+        start, end = 8_100_000_000, 13_100_000_000
+        last_pts = 9_966_666_567
+        clamped = clamp_segment_end_ns(start, end, last_pts, self._P)
+        assert clamped == last_pts + self._P
+        assert clamped / 1e9 == pytest.approx(10.0, abs=0.05)
+
+    def test_inner_segment_unchanged(self):
+        # Segment ends before the last frame → no clamp.
+        start, end = 0, 5_000_000_000
+        assert clamp_segment_end_ns(start, end, 9_966_666_567, self._P) == end
+
+    def test_no_frames_observed_is_noop(self):
+        assert clamp_segment_end_ns(0, 5_000_000_000, None, 0) == 5_000_000_000
+
+    def test_never_clamps_below_start(self):
+        # Pathological: last frame before segment start → clamp floors at start.
+        start, end = 8_100_000_000, 13_100_000_000
+        assert clamp_segment_end_ns(start, end, 1_000_000_000, self._P) == start
+
+    def test_zero_period_falls_back_to_last_pts(self):
+        # Single-frame stream (period unknown) → clamp to the frame PTS itself.
+        start, end = 0, 5_000_000_000
+        assert clamp_segment_end_ns(start, end, 2_000_000_000, 0) == 2_000_000_000
 
 
 @pytest.mark.integration
