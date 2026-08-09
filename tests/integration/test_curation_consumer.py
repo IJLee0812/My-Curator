@@ -218,6 +218,71 @@ class TestComputePromptHash:
         assert len(h) == 16
 
 
+# ─── segment time refinement (sidecar clamp at persistence boundary) ──────────
+
+
+def _write_sidecar(video_root: Path, rel_video: str, fps: int, n_frames: int) -> None:
+    ts_path = (video_root / rel_video).with_suffix(".timestamp")
+    ts_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [f"FPS,{fps}", "Size,1920,1080"]
+    rows += [f"{i},{1714000000000000 + i * 1_000_000 // fps}" for i in range(n_frames)]
+    ts_path.write_text("\n".join(rows) + "\n")
+
+
+@pytest.mark.integration
+class TestSegmentTimeRefinement:
+    """Sidecar present → persisted start_s/end_s are frame-aligned and clamped
+    to the video's real duration (10 s @30 fps → end 299/30 s, not 13.1 s)."""
+
+    _REL = "sess-01/00001/video/00001.mp4"
+
+    def _msg(self, base: dict) -> dict:
+        base["segment"] = {"start_time": 8.1, "end_time": 13.1, "duration": 5.0}
+        base["source_video_path"] = self._REL
+        return base
+
+    async def test_scouted_end_clamped_to_video_duration(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("VIDEO_DATA_ROOT", str(tmp_path))
+        _write_sidecar(tmp_path, self._REL, fps=30, n_frames=300)
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", self._msg(_make_scouted_msg()))
+        kwargs = pg.write_clip_with_dna.call_args.kwargs
+        assert kwargs["start_s"] == pytest.approx(8.1)
+        assert kwargs["end_s"] == pytest.approx(299 / 30)
+
+    async def test_scouted_dna_timestamp_range_matches_clamped(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("VIDEO_DATA_ROOT", str(tmp_path))
+        _write_sidecar(tmp_path, self._REL, fps=30, n_frames=300)
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", self._msg(_make_scouted_msg()))
+        tr = pg.write_clip_with_dna.call_args.kwargs["dna_json"]["timestamp_range"]
+        assert tr["end_s"] == pytest.approx(299 / 30)
+
+    async def test_needs_review_end_clamped(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("VIDEO_DATA_ROOT", str(tmp_path))
+        _write_sidecar(tmp_path, self._REL, fps=30, n_frames=300)
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.needs_review", self._msg(_make_needs_review_msg()))
+        assert pg.write_clip_with_dna.call_args.kwargs["end_s"] == pytest.approx(299 / 30)
+
+    async def test_no_sidecar_keeps_raw_times(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("VIDEO_DATA_ROOT", str(tmp_path))
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", self._msg(_make_scouted_msg()))
+        assert pg.write_clip_with_dna.call_args.kwargs["end_s"] == pytest.approx(13.1)
+
+    async def test_no_video_root_keeps_raw_times(self, monkeypatch):
+        monkeypatch.delenv("VIDEO_DATA_ROOT", raising=False)
+        pg = AsyncMock()
+        consumer = _mock_consumer(pg=pg)
+        await consumer.handle("curation.clip.scouted", self._msg(_make_scouted_msg()))
+        assert pg.write_clip_with_dna.call_args.kwargs["end_s"] == pytest.approx(13.1)
+
+
 # ─── mocked DAL tests ─────────────────────────────────────────────────────────
 
 

@@ -28,8 +28,19 @@ from pathlib import Path
 from my_curator.domain.scout.dna_normalizer import ensure_managed_fields
 from my_curator.domain.scout.dna_validator import DNAValidator
 from my_curator.domain.scout.versioning import resolve_dna_version
+from my_curator.domain.timestamp import get_precise_times
 
 log = logging.getLogger(__name__)
+
+
+def _refine_segment_times(blob_uri: str, start_s: float, end_s: float) -> tuple[float, float]:
+    """Frame-align segment times via the .timestamp sidecar at the persistence
+    boundary, so a trailing segment's end never exceeds the source video.
+    Best-effort: returns the inputs unchanged when no sidecar is available."""
+    video_root = os.environ.get("VIDEO_DATA_ROOT")
+    if not video_root:
+        return start_s, end_s
+    return get_precise_times(blob_uri, start_s, end_s, video_root)
 
 
 def _moov_at_end(path: Path) -> bool:
@@ -73,7 +84,9 @@ def _run_faststart(path: Path) -> None:
 _SCOUT_PROMPT_PATH = (
     Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v2.md"
 )
-PIPELINE_VERSION = "p2-6"
+# Tracks the DNA-producing pipeline generation; pair with the deployed Scout
+# prompt's "Schema Version" block (scout_cosmos_reason2.v2.md → p4-2).
+PIPELINE_VERSION = "p4-2"
 
 
 def _compute_prompt_hash(path: Path) -> str:
@@ -163,6 +176,7 @@ class CurationConsumer:
             abs_path = Path(video_root) / _svp.lstrip("/")
             if abs_path.exists() and _moov_at_end(abs_path):
                 await asyncio.to_thread(_run_faststart, abs_path)
+        start_s, end_s = _refine_segment_times(blob_uri, start_s, end_s)
         frames_blob_uri = data.get("frames_blob_uri")
         # P3-4: link the segment back to its original source clip identifier
         # when the publisher provides one.  Stays NULL otherwise (column is nullable).
@@ -301,6 +315,7 @@ class CurationConsumer:
         end_s: float = data["segment"]["end_time"]
         _svp = data.get("source_video_path")
         blob_uri = f"file://{_svp}" if _svp else f"stream://{stream_id}/{start_s:.2f}-{end_s:.2f}"
+        start_s, end_s = _refine_segment_times(blob_uri, start_s, end_s)
         frames_blob_uri = data.get("frames_blob_uri")
         source_clip_id = data.get("source_clip_id")
         dna_json, curation_meta = _parse_dna_json(data.get("result", ""), data.get("curation", {}))

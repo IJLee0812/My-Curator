@@ -41,6 +41,7 @@ except RuntimeError:
 from my_curator.adapters.gst.config_loader import get_config  # noqa: E402
 from my_curator.adapters.gst.utils import (  # noqa: E402
     YOLO26_CLASS_MAPPING,
+    clamp_segment_end_ns,
     collect_detections,
     compute_sample_interval_ns,
     compute_step_ns,
@@ -108,6 +109,11 @@ class StreamContext:
         self.next_segment_start_pts: int | None = None
         self.base_pts: int | None = None
         self.frame_counter: int = 0
+
+        # Last real frame PTS + observed inter-frame period, used to clamp the
+        # trailing segment's fixed-length end at EOS flush.
+        self.last_frame_pts_ns: int | None = None
+        self.frame_period_ns: int = 0
 
         # Statistics
         self.segments_submitted: int = 0
@@ -801,6 +807,12 @@ class NvVllmVLM(GstBase.BaseTransform):
 
                 current_pts = frame_meta.buffer_pts
 
+                if ctx.last_frame_pts_ns is None:
+                    ctx.last_frame_pts_ns = current_pts
+                elif current_pts > ctx.last_frame_pts_ns:
+                    ctx.frame_period_ns = current_pts - ctx.last_frame_pts_ns
+                    ctx.last_frame_pts_ns = current_pts
+
                 # Ensure segments and finalize completed ones
                 batch_id = frame_meta.batch_id
                 self._ensure_segments_until(ctx, current_pts, batch_id)
@@ -1299,6 +1311,12 @@ class NvVllmVLM(GstBase.BaseTransform):
             for seg in ctx.open_segments[:]:
                 if not seg.frames:
                     continue
+                seg.end_pts_ns = clamp_segment_end_ns(
+                    seg.start_pts_ns,
+                    seg.end_pts_ns,
+                    ctx.last_frame_pts_ns,
+                    ctx.frame_period_ns,
+                )
                 prompt_config = {
                     "user_prompt": self.user_prompt,
                     "system_prompt": self._system_prompt,
@@ -1365,6 +1383,12 @@ class NvVllmVLM(GstBase.BaseTransform):
                     )
                     for seg in ctx.open_segments[:]:
                         if seg.frames:
+                            seg.end_pts_ns = clamp_segment_end_ns(
+                                seg.start_pts_ns,
+                                seg.end_pts_ns,
+                                ctx.last_frame_pts_ns,
+                                ctx.frame_period_ns,
+                            )
                             start_sec = seg.start_pts_ns / 1_000_000_000
                             end_sec = seg.end_pts_ns / 1_000_000_000
                             pts_diff = seg.frames[-1].pts - seg.frames[0].pts

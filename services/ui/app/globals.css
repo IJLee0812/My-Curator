@@ -88,7 +88,9 @@
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     var(--font-inter), "Inter", system-ui, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Single-typeface UI: font-mono aliases the sans face so every surface
+   * renders in Inter (no monospace / Courier fallback on non-Apple systems). */
+  --font-mono: var(--font-sans);
 
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

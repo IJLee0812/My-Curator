@@ -193,6 +193,27 @@ def compute_step_ns(segment_length_sec: int, overlap_sec: int) -> int:
     return step * 1_000_000_000
 
 
+def clamp_segment_end_ns(
+    start_pts_ns: int,
+    end_pts_ns: int,
+    last_frame_pts_ns: int | None,
+    frame_period_ns: int,
+) -> int:
+    """Clamp a trailing segment's fixed-length end to the last real frame.
+
+    Segments are opened with end = start + segment_length, so the final
+    (partial) segment of a clip keeps an end past the video's actual
+    duration. At EOS flush, cap it at last_frame_pts + one frame period.
+    Never clamps below start_pts_ns; no-op when no frame was observed.
+    """
+    if last_frame_pts_ns is None:
+        return end_pts_ns
+    end = last_frame_pts_ns + frame_period_ns
+    if end < end_pts_ns:
+        return max(end, start_pts_ns)
+    return end_pts_ns
+
+
 def compute_sample_interval_ns(selection_fps: int) -> int | None:
     """Convert selection FPS to a nanosecond sampling interval.
 

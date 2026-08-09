@@ -264,9 +264,9 @@ class TestDNARoundTripSmoke:
                     " WHERE pipeline_version = $1"
                     " AND (dna_json->>'dna_version') IS NOT NULL"
                     " LIMIT 10",
-                    "p2-6",
+                    "p4-2",
                 )
-                assert rows, "No schema-valid scenario_dna rows found for pipeline_version='p2-6'"
+                assert rows, "No schema-valid scenario_dna rows found for pipeline_version='p4-2'"
                 for row in rows:
                     raw = row["dna_json"]
                     dna = raw if isinstance(raw, dict) else json.loads(raw)

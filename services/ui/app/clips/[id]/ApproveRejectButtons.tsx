@@ -49,7 +49,21 @@ export default function ApproveRejectButtons({
 
   const copyId = async () => {
     try {
-      await navigator.clipboard.writeText(clipId);
+      // navigator.clipboard exists only in secure contexts (HTTPS/localhost).
+      // Over plain HTTP it is undefined, so fall back to a hidden textarea.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(clipId);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = clipId;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (e) {
@@ -64,9 +78,13 @@ export default function ApproveRejectButtons({
         <button
           type="button"
           onClick={copyId}
-          className="text-xs text-muted hover:text-accent"
+          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            copied
+              ? "border-green-500/40 text-green-600 dark:text-green-400"
+              : "border-line text-muted hover:text-accent hover:border-accent/40"
+          }`}
         >
-          {copied ? "copied" : "copy clip_id"}
+          {copied ? "copied ✓" : "copy clip_id"}
         </button>
       </div>
       <div className="flex gap-2 flex-wrap">
