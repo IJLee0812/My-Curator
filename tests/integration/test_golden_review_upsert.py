@@ -16,6 +16,7 @@ References:
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
 import pytest
@@ -105,6 +106,25 @@ def _pick_existing_clip_id() -> str | None:
         return None
 
 
+async def _restore_review_row(conn, clip_id, before) -> None:
+    """Put a clip's review row back to its pre-test state (or remove it)."""
+    if before is None:
+        await conn.execute("DELETE FROM review_queue WHERE clip_id = $1", clip_id)
+        return
+    await conn.execute(
+        """
+        UPDATE review_queue
+           SET state = $2, reason = $3, reviewer = $4, reviewed_at = $5
+         WHERE clip_id = $1
+        """,
+        clip_id,
+        before["state"],
+        before["reason"],
+        before["reviewer"],
+        before["reviewed_at"],
+    )
+
+
 @pytest.mark.asyncio
 async def test_golden_review_upsert_lifecycle():
     """approve → reject → approve must keep exactly one row per clip_id and end as approved."""
@@ -116,6 +136,13 @@ async def test_golden_review_upsert_lifecycle():
     if conn is None:
         pytest.skip("postgres unreachable / auth failed for DSN derived from .env")
 
+    cid = uuid.UUID(clip_id)
+    # The clip is a live corpus row, so snapshot its review state and put it
+    # back in the finally block — the test must not leave it approved.
+    before = await conn.fetchrow(
+        "SELECT state, reason, reviewer, reviewed_at FROM review_queue WHERE clip_id = $1", cid
+    )
+
     try:
         async with httpx.AsyncClient(base_url=_API_BASE, timeout=5.0) as client:
             for action in ("approve", "reject", "approve"):
@@ -123,15 +150,12 @@ async def test_golden_review_upsert_lifecycle():
                 assert r.status_code in (200, 204), f"{action}: {r.status_code} {r.text}"
 
         # UPSERT: exactly one row per clip_id, latest state = approved.
-        import uuid as _uuid
-
-        row_count = await conn.fetchval(
-            "SELECT count(*) FROM review_queue WHERE clip_id = $1", _uuid.UUID(clip_id)
-        )
-        state = await conn.fetchval(
-            "SELECT state FROM review_queue WHERE clip_id = $1", _uuid.UUID(clip_id)
-        )
+        row_count = await conn.fetchval("SELECT count(*) FROM review_queue WHERE clip_id = $1", cid)
+        state = await conn.fetchval("SELECT state FROM review_queue WHERE clip_id = $1", cid)
         assert row_count == 1, f"UPSERT regression: expected 1 row, got {row_count}"
         assert state == "approved", f"final state drift: {state!r}"
     finally:
-        await conn.close()
+        try:
+            await _restore_review_row(conn, cid, before)
+        finally:
+            await conn.close()
