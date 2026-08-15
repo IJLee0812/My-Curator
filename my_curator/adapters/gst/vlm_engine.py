@@ -74,7 +74,7 @@ class VLMEngine:
             gpu_memory_utilization=self.gpu_memory_utilization,
             # Compact JSON: without it xgrammar allows unbounded inter-token
             # whitespace and the model pads to max_tokens without closing the
-            # document. Must be set here - the per-request field is ignored.
+            # document. Must be set here — the per-request field is ignored.
             structured_outputs_config=StructuredOutputsConfig(
                 backend="xgrammar", disable_any_whitespace=True
             ),
@@ -98,10 +98,15 @@ class VLMEngine:
         if self.llm is None:
             return
         try:
-            if hasattr(self.llm, "shutdown"):
+            # vLLM 0.14 has no public shutdown on LLM/LLMEngine. The engine-core
+            # client flags engine_dead before closing the child process, so the
+            # liveness monitor stays silent instead of reporting a crash at exit.
+            core = getattr(getattr(self.llm, "llm_engine", None), "engine_core", None)
+            if core is not None and hasattr(core, "shutdown"):
+                core.shutdown()
+            elif hasattr(self.llm, "shutdown"):
                 self.llm.shutdown()
-            elif hasattr(self.llm, "llm_engine") and hasattr(self.llm.llm_engine, "shutdown"):
-                self.llm.llm_engine.shutdown()
+            print(f"VLMEngine: shutdown complete ({self.model})")
         except Exception as e:
             print(f"VLMEngine: shutdown error: {e}")
         finally:

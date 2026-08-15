@@ -81,12 +81,15 @@ def _run_faststart(path: Path) -> None:
         log.warning("faststart failed for %s — skipping", path.name, exc_info=True)
 
 
-_SCOUT_PROMPT_PATH = (
-    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v2.md"
+_DEFAULT_SCOUT_PROMPT = (
+    Path(__file__).parent.parent.parent.parent / "prompts" / "scout_cosmos_reason2.v3.md"
 )
+# SCOUT_PROMPT_FILE switches the prompt whose hash is stamped into provenance
+# without rebuilding the image.
+_SCOUT_PROMPT_PATH = Path(os.environ.get("SCOUT_PROMPT_FILE") or _DEFAULT_SCOUT_PROMPT)
 # Tracks the DNA-producing pipeline generation; pair with the deployed Scout
-# prompt's "Schema Version" block (scout_cosmos_reason2.v2.md → p4-2).
-PIPELINE_VERSION = "p4-2"
+# prompt's "Schema Version" block (scout_cosmos_reason2.v3.md → post-p4).
+PIPELINE_VERSION = "post-p4"
 
 
 def _compute_prompt_hash(path: Path) -> str:
