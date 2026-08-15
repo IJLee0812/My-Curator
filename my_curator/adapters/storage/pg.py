@@ -276,16 +276,41 @@ class PGRepository:
             return "WHERE state = 'rejected_schema_invalid'", []
         return "WHERE state = $1", [status]
 
-    async def count_review_queue(self, status: str | None = None) -> int:
+    @classmethod
+    def _review_filters(cls, status: str | None, risk: str | None) -> tuple[str, list[Any]]:
+        """State predicate plus an optional planner_logic.risk_level predicate.
+
+        Risk lives in scenario_dna, so a risk filter forces the JOIN even on the
+        count query; rows without DNA (schema-invalid ones) drop out, which is
+        the intended reading of "clips at this risk level".
+        """
+        where, params = cls._review_state_filter(status)
+        if risk in (None, "all"):
+            return where, params
+        params.append(risk)
+        clause = f"sd.dna_json->'planner_logic'->>'risk_level' = ${len(params)}"
+        return (f"{where} AND {clause}" if where else f"WHERE {clause}"), params
+
+    async def count_review_queue(self, status: str | None = None, risk: str | None = None) -> int:
         """Total review_queue rows matching the status tab (drives pagination)."""
-        where, params = self._review_state_filter(status)
-        row = await self._pool.fetchrow(f"SELECT COUNT(*) AS n FROM review_queue {where}", *params)
+        where, params = self._review_filters(status, risk)
+        where = where.replace("state =", "rq.state =")
+        row = await self._pool.fetchrow(
+            f"""
+            SELECT COUNT(*) AS n
+            FROM review_queue rq
+            LEFT JOIN scenario_dna sd ON sd.clip_id = rq.clip_id
+            {where}
+            """,
+            *params,
+        )
         return int(row["n"]) if row else 0
 
     async def get_review_queue(
         self,
         status: str | None = None,
         *,
+        risk: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -296,7 +321,7 @@ class PGRepository:
         """
         capped = max(1, min(int(limit), 200))
         off = max(0, int(offset))
-        where, params = self._review_state_filter(status)
+        where, params = self._review_filters(status, risk)
         # rq.state is the same predicate as the count query; the filter helper
         # uses an unqualified column name, so re-qualify it for the JOIN query.
         where = where.replace("state =", "rq.state =")

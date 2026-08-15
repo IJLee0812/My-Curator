@@ -27,6 +27,17 @@ const TAB_CONFIG: Record<Tab, { label: string; color: string; dot: string }> = {
 
 const PAGE_SIZES = [30, 50, 100] as const;
 
+type RiskFilter = "all" | "nominal" | "elevated" | "critical";
+
+const RISK_FILTERS: RiskFilter[] = ["all", "nominal", "elevated", "critical"];
+
+const RISK_LABEL: Record<RiskFilter, string> = {
+  all: "All",
+  nominal: "Nominal",
+  elevated: "Elevated",
+  critical: "Critical",
+};
+
 const ZERO_COUNTS: Record<Tab, number> = { pending: 0, approved: 0, rejected: 0, schema_invalid: 0 };
 
 const TABS: Tab[] = ["pending", "approved", "rejected", "schema_invalid"];
@@ -61,13 +72,22 @@ function ReviewQueuePage() {
     const s = Number(searchParams.get("size"));
     return (PAGE_SIZES as readonly number[]).includes(s) ? s : 30;
   });
+  const [risk, setRisk] = useState<RiskFilter>(() => {
+    const r = searchParams.get("risk") as RiskFilter | null;
+    return r && RISK_FILTERS.includes(r) ? r : "all";
+  });
 
   // Mirror pagination state into the URL (replace: no extra history entries for
   // in-page navigation; the card click still pushes a fresh entry to return to).
   useEffect(() => {
-    const params = new URLSearchParams({ tab, page: String(page), size: String(size) });
+    const params = new URLSearchParams({
+      tab,
+      page: String(page),
+      size: String(size),
+      risk,
+    });
     router.replace(`/review?${params}`, { scroll: false });
-  }, [tab, page, size, router]);
+  }, [tab, page, size, risk, router]);
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<Record<Tab, number>>(ZERO_COUNTS);
@@ -81,7 +101,7 @@ function ReviewQueuePage() {
     setError(null);
     try {
       const [res, stats] = await Promise.all([
-        getReviewQueue(tab, page, size),
+        getReviewQueue(tab, page, size, risk),
         getStats(),
       ]);
       setItems(res.items);
@@ -97,7 +117,7 @@ function ReviewQueuePage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, page, size]);
+  }, [tab, page, size, risk]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -105,6 +125,7 @@ function ReviewQueuePage() {
 
   const changeTab = (next: Tab) => { setTab(next); setPage(1); };
   const changeSize = (next: number) => { setSize(next); setPage(1); };
+  const changeRisk = (next: RiskFilter) => { setRisk(next); setPage(1); };
 
   const act = async (clipId: string, action: "approve" | "reject") => {
     setActing((s) => new Set(s).add(clipId));
@@ -139,7 +160,10 @@ function ReviewQueuePage() {
             Review Queue
           </h1>
           <p className="text-sm text-muted mt-0.5">
-            Verify-by-Exception curation workflow · {counts[tab]} in {TAB_CONFIG[tab].label}
+            Verify-by-Exception curation workflow ·{" "}
+            {risk === "all"
+              ? `${counts[tab]} in ${TAB_CONFIG[tab].label}`
+              : `${total} ${risk} of ${counts[tab]} in ${TAB_CONFIG[tab].label}`}
           </p>
           <p className="text-xs text-faint mt-0.5">
             Click any clip card to open the detail review page
@@ -175,8 +199,30 @@ function ReviewQueuePage() {
         ))}
       </div>
 
-      {/* page-size selector */}
-      <div className="flex items-center justify-between text-xs text-muted">
+      {/* risk filter + page-size selector */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-ink">Risk Level</span>
+          {RISK_FILTERS.map((r) => (
+            <button
+              key={r}
+              onClick={() => changeRisk(r)}
+              className={`px-2.5 py-1 rounded border text-xs font-medium transition-colors ${
+                risk === r
+                  ? r === "critical"
+                    ? "border-red-500/60 text-red-600 dark:text-red-400 bg-red-500/10"
+                    : r === "elevated"
+                      ? "border-amber-500/60 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                      : r === "nominal"
+                        ? "border-green-500/60 text-green-600 dark:text-green-400 bg-green-500/10"
+                        : "border-accent text-accent bg-accent/10"
+                  : "border-line text-muted hover:text-ink"
+              }`}
+            >
+              {RISK_LABEL[r]}
+            </button>
+          ))}
+        </div>
         <span>
           {total === 0
             ? "No items"
@@ -213,7 +259,11 @@ function ReviewQueuePage() {
           {items.length === 0 ? (
             <div className="card p-12 text-center text-faint">
               <Filter className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No items in this category</p>
+              <p className="text-sm">
+                {risk === "all"
+                  ? "No items in this category"
+                  : `No ${risk} clips in this category`}
+              </p>
             </div>
           ) : (
             items.map((item) => {
