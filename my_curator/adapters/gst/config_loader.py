@@ -118,6 +118,12 @@ class Config:
     def selection_fps(self) -> int:
         return self._config.get("segment", {}).get("selection_fps", 1)
 
+    @property
+    def segment_start_offset_sec(self) -> float:
+        """Diagnostic delay before the first segment window opens; frames before it
+        belong to no segment and are dropped. 0 (default) is production."""
+        return float(self._config.get("segment", {}).get("start_offset_sec", 0.0))
+
     # Inference properties
     @property
     def user_prompt(self) -> str:
@@ -155,6 +161,11 @@ class Config:
         return self._config.get("inference", {}).get(  # noqa: BLK100
             "repetition_penalty", None
         )
+
+    @property
+    def structured_output(self) -> bool:
+        """Grammar-constrain generation to the Scenario DNA schema (default off)."""
+        return bool(self._config.get("inference", {}).get("structured_output", False))
 
     @property
     def stream_prompts(self) -> dict:

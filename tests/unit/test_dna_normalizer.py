@@ -153,9 +153,11 @@ class TestSafetyEvent:
 
 @pytest.mark.unit
 class TestTruncation:
-    def test_scene_description_capped_at_500(self):
+    def test_scene_description_backstop_cap(self):
+        # Grammar-constrained generation never exceeds ~604 chars (3 x 200-char
+        # sentences); this cap only backstops the unconstrained path.
         out = normalize_dna({"scene_description": "a" * 900})
-        assert len(out["scene_description"]) <= 500
+        assert len(out["scene_description"]) <= 640
 
     def test_rationale_capped_at_300(self):
         out = normalize_dna({"planner_logic": {"risk_level_rationale": "b" * 900}})
@@ -168,11 +170,56 @@ class TestTruncation:
     def test_sentence_boundary_preferred_when_past_midpoint(self):
         # A period past the halfway mark is used as the cut; earlier tiny-sentence
         # boundaries are ignored in favour of retaining more content.
-        text = "A" * 400 + ". " + "z" * 300
+        text = "A" * 500 + ". " + "z" * 300
         out = normalize_dna({"scene_description": text})["scene_description"]
         assert out.endswith(".")
-        assert len(out) <= 500
+        assert len(out) <= 640
         assert "z" not in out
+
+    def test_grammar_amputee_trimmed_to_last_sentence(self):
+        # A mid-sentence amputee (the shape the unconstrained path produces at
+        # the cap) must end complete after normalize.
+        text = ("First sentence here. " + "Second complete sentence follows. ").ljust(0) + "x" * 640
+        text = text[:640]
+        assert len(text) == 640 and not text.endswith(".")
+        out = normalize_dna({"scene_description": text})["scene_description"]
+        assert out == "First sentence here. Second complete sentence follows."
+
+    def test_rationale_amputee_trimmed(self):
+        text = ("Rule 2: elevated because a pedestrian is near and closing. " + "y" * 300)[:300]
+        assert not text.endswith(".")
+        out = normalize_dna({"planner_logic": {"risk_level_rationale": text}})
+        assert (
+            out["planner_logic"]["risk_level_rationale"]
+            == "Rule 2: elevated because a pedestrian is near and closing."
+        )
+
+    def test_decimal_point_is_not_a_sentence_boundary(self):
+        # The only '.' chars sit inside numbers (digit follows) — no usable
+        # terminator, so the amputee is kept rather than cut inside "0.5".
+        text = ("gap closes to 0.5 m at 3.2 s while " + "w" * 500)[:500]
+        out = normalize_dna({"scene_description": text})["scene_description"]
+        assert out == text.rstrip()
+
+    def test_single_sentence_amputee_closed_at_clause_boundary(self):
+        # One-sentence fields (risk_level_rationale) amputate with no earlier
+        # terminator; the last clause boundary becomes the period.
+        text = ("Rule 2: elevated risk, pedestrian near and closing, ego must " + "q" * 300)[:300]
+        out = normalize_dna({"planner_logic": {"risk_level_rationale": text}})
+        assert (
+            out["planner_logic"]["risk_level_rationale"]
+            == "Rule 2: elevated risk, pedestrian near and closing."
+        )
+
+    def test_no_terminator_no_clause_keeps_amputee(self):
+        text = "x" * 500
+        out = normalize_dna({"scene_description": text})["scene_description"]
+        assert out == text
+
+    def test_complete_short_text_never_touched(self):
+        text = "Ends with a question mark?"
+        out = normalize_dna({"scene_description": text})["scene_description"]
+        assert out == text
 
 
 @pytest.mark.unit
@@ -300,4 +347,4 @@ class TestEndToEndRepair:
         assert repaired["actor_dynamics"][0]["actor_class"] == "pedestrian"
         assert repaired["planner_logic"]["ego_maneuver"] == "nudge_right"
         assert repaired["planner_logic"]["safety_event"]["collision_type"] is None
-        assert len(repaired["scene_description"]) <= 500
+        assert len(repaired["scene_description"]) <= 640

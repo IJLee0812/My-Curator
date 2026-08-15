@@ -65,11 +65,19 @@ class VLMEngine:
         torch.cuda.set_device(dev)
         print(f"VLMEngine: CUDA on GPU {dev} ({torch.cuda.get_device_name(dev)})")
 
+        from vllm.config import StructuredOutputsConfig
+
         llm_kwargs = dict(
             model=self.model,
             max_model_len=self.max_model_len,
             trust_remote_code=self.trust_remote_code,
             gpu_memory_utilization=self.gpu_memory_utilization,
+            # Compact JSON: without it xgrammar allows unbounded inter-token
+            # whitespace and the model pads to max_tokens without closing the
+            # document. Must be set here - the per-request field is ignored.
+            structured_outputs_config=StructuredOutputsConfig(
+                backend="xgrammar", disable_any_whitespace=True
+            ),
         )
         if self.enforce_eager:
             llm_kwargs["enforce_eager"] = True

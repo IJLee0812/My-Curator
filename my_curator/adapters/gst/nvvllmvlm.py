@@ -66,6 +66,7 @@ DEFAULT_SEGMENT_LEN_SEC = config.segment_length_sec
 DEFAULT_OVERLAP_SEC = config.overlap_sec
 DEFAULT_SUBSAMPLE_INTERVAL = config.subsample_interval
 DEFAULT_SELECTION_FPS = config.selection_fps
+DEFAULT_START_OFFSET_SEC = config.segment_start_offset_sec
 
 
 class BufferData:
@@ -397,6 +398,8 @@ class NvVllmVLM(GstBase.BaseTransform):
         self.overlap_sec: int = DEFAULT_OVERLAP_SEC
         self.subsample_interval: int = DEFAULT_SUBSAMPLE_INTERVAL
         self.selection_fps: int = DEFAULT_SELECTION_FPS
+        # Diagnostic grid shift; 0 = production.
+        self._start_offset_ns: int = int(DEFAULT_START_OFFSET_SEC * 1_000_000_000)
 
         # Video format info
         self.width: int | None = None
@@ -423,6 +426,7 @@ class NvVllmVLM(GstBase.BaseTransform):
         # Additional sampling parameters (optional)
         self.top_p: float | None = config.top_p
         self.top_k: int | None = config.top_k
+        self.structured_output: bool = config.structured_output
         self.repetition_penalty: float | None = config.repetition_penalty
 
         # Model initialization parameters
@@ -680,7 +684,13 @@ class NvVllmVLM(GstBase.BaseTransform):
     def _ensure_segments_until(self, ctx: StreamContext, pts_ns: int) -> None:
         """Create segments for a stream until covering pts_ns"""
         if ctx.next_segment_start_pts is None:
-            ctx.next_segment_start_pts = pts_ns
+            # Frames before the shifted grid fall into no segment and are dropped.
+            ctx.next_segment_start_pts = pts_ns + self._start_offset_ns
+            if self._start_offset_ns:
+                Gst.info(
+                    f"{GST_PLUGIN_NAME}[Stream {ctx.stream_id}]: segment grid "
+                    f"shifted +{self._start_offset_ns / 1e9:.2f}s"
+                )
 
         while ctx.next_segment_start_pts is not None and ctx.next_segment_start_pts <= pts_ns:
             start = ctx.next_segment_start_pts
@@ -750,6 +760,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                 )
                 if repetition_penalty is not None:
                     prompt_config["repetition_penalty"] = repetition_penalty
+
+                if self.structured_output:
+                    prompt_config["structured_output"] = True
 
                 # P2-4: snapshot YOLO inventory at segment boundary and reset
                 inventory_snapshot = dict(ctx.yolo_inventory)
@@ -1105,6 +1118,17 @@ class NvVllmVLM(GstBase.BaseTransform):
             ):
                 sampling_params_dict["repetition_penalty"] = prompt_config["repetition_penalty"]
 
+            if prompt_config.get("structured_output"):
+                from vllm.sampling_params import StructuredOutputsParams
+
+                from my_curator.domain.scout.dna_validator import generation_schema
+
+                # disable_any_whitespace belongs on the engine config (vlm_engine.py);
+                # the V1 engine ignores it here.
+                sampling_params_dict["structured_outputs"] = StructuredOutputsParams(
+                    json=generation_schema()
+                )
+
             sampling_params = SamplingParams(**sampling_params_dict)
 
             # Use chat template
@@ -1328,6 +1352,8 @@ class NvVllmVLM(GstBase.BaseTransform):
                     prompt_config["top_k"] = self.top_k
                 if self.repetition_penalty is not None:
                     prompt_config["repetition_penalty"] = self.repetition_penalty
+                if self.structured_output:
+                    prompt_config["structured_output"] = True
                 inv = dict(ctx.yolo_inventory)
                 ctx.yolo_inventory.clear()
                 try:
@@ -1419,6 +1445,8 @@ class NvVllmVLM(GstBase.BaseTransform):
                                 prompt_config["top_k"] = self.top_k
                             if self.repetition_penalty is not None:
                                 prompt_config["repetition_penalty"] = self.repetition_penalty
+                            if self.structured_output:
+                                prompt_config["structured_output"] = True
 
                             # P2-4: snapshot inventory for remaining segment
                             inventory_snapshot = dict(ctx.yolo_inventory)
