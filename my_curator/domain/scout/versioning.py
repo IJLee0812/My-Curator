@@ -25,6 +25,8 @@ PROMPT_VERSION_MAP: dict[str, str] = {
     "223892aa4a72b577": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-6: DNA v0.1 CoT prompt)
     "6dfb9ccc8e7f0150": "0.2.0",  # prompts/scout_cosmos_reason2.v2.md (P4-2: DNA v0.2 SOTIF C×S prompt; superseded)
     "82e083d75bf378b8": "0.2.0",  # prompts/scout_cosmos_reason2.v2.md (hotfix: nested-JSON exemplar + enum-discipline notes)
+    "37eaf4b7a095a7a4": "0.2.0",  # prompts/scout_cosmos_reason2.v3.md (post-p4: risk ladder + no managed envelope; superseded)
+    "6038fb0832d12908": "0.2.0",  # prompts/scout_cosmos_reason2.v3.md (post-p4: structured-decoding pass; JSON-only + sentence contract)
 }
 
 
