@@ -66,6 +66,7 @@ DEFAULT_SEGMENT_LEN_SEC = config.segment_length_sec
 DEFAULT_OVERLAP_SEC = config.overlap_sec
 DEFAULT_SUBSAMPLE_INTERVAL = config.subsample_interval
 DEFAULT_SELECTION_FPS = config.selection_fps
+DEFAULT_START_OFFSET_SEC = config.segment_start_offset_sec
 
 
 class BufferData:
@@ -89,11 +90,10 @@ class BufferData:
 class Segment:
     """Temporal segment containing multiple frames"""
 
-    def __init__(self, stream_id: int, start_pts_ns: int, end_pts_ns: int, batch_id: int) -> None:
+    def __init__(self, stream_id: int, start_pts_ns: int, end_pts_ns: int) -> None:
         self.stream_id = stream_id  # Which stream this segment belongs to
         self.start_pts_ns = start_pts_ns
         self.end_pts_ns = end_pts_ns
-        self.batch_id = batch_id
         self.frames: list[BufferData] = []
         self.last_saved_pts_ns: int | None = None
 
@@ -398,6 +398,8 @@ class NvVllmVLM(GstBase.BaseTransform):
         self.overlap_sec: int = DEFAULT_OVERLAP_SEC
         self.subsample_interval: int = DEFAULT_SUBSAMPLE_INTERVAL
         self.selection_fps: int = DEFAULT_SELECTION_FPS
+        # Diagnostic grid shift; 0 = production.
+        self._start_offset_ns: int = int(DEFAULT_START_OFFSET_SEC * 1_000_000_000)
 
         # Video format info
         self.width: int | None = None
@@ -424,6 +426,7 @@ class NvVllmVLM(GstBase.BaseTransform):
         # Additional sampling parameters (optional)
         self.top_p: float | None = config.top_p
         self.top_k: int | None = config.top_k
+        self.structured_output: bool = config.structured_output
         self.repetition_penalty: float | None = config.repetition_penalty
 
         # Model initialization parameters
@@ -678,15 +681,21 @@ class NvVllmVLM(GstBase.BaseTransform):
                 )
             return self.stream_contexts[stream_id]
 
-    def _ensure_segments_until(self, ctx: StreamContext, pts_ns: int, batch_id: int) -> None:
+    def _ensure_segments_until(self, ctx: StreamContext, pts_ns: int) -> None:
         """Create segments for a stream until covering pts_ns"""
         if ctx.next_segment_start_pts is None:
-            ctx.next_segment_start_pts = pts_ns
+            # Frames before the shifted grid fall into no segment and are dropped.
+            ctx.next_segment_start_pts = pts_ns + self._start_offset_ns
+            if self._start_offset_ns:
+                Gst.info(
+                    f"{GST_PLUGIN_NAME}[Stream {ctx.stream_id}]: segment grid "
+                    f"shifted +{self._start_offset_ns / 1e9:.2f}s"
+                )
 
         while ctx.next_segment_start_pts is not None and ctx.next_segment_start_pts <= pts_ns:
             start = ctx.next_segment_start_pts
             end = start + self._seg_len_ns
-            seg = Segment(ctx.stream_id, start, end, batch_id)
+            seg = Segment(ctx.stream_id, start, end)
             ctx.open_segments.append(seg)
             Gst.debug(
                 f"{GST_PLUGIN_NAME}[Stream {ctx.stream_id}]: "
@@ -694,12 +703,11 @@ class NvVllmVLM(GstBase.BaseTransform):
             )
             ctx.next_segment_start_pts = start + self._step_ns
 
-    def _finalize_segments_up_to(self, ctx: StreamContext, pts_ns: int, batch_id: int) -> None:
+    def _finalize_segments_up_to(self, ctx: StreamContext, pts_ns: int) -> None:
         """Finalize completed segments for a stream"""
         to_finalize = []
         for s in ctx.open_segments:
-            batch_match = s.batch_id == batch_id or batch_id is None
-            if s.end_pts_ns <= pts_ns and batch_match:
+            if s.end_pts_ns <= pts_ns:
                 to_finalize.append(s)
 
         # Determine if we're in multi-stream mode for cleaner logging
@@ -752,6 +760,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                 )
                 if repetition_penalty is not None:
                     prompt_config["repetition_penalty"] = repetition_penalty
+
+                if self.structured_output:
+                    prompt_config["structured_output"] = True
 
                 # P2-4: snapshot YOLO inventory at segment boundary and reset
                 inventory_snapshot = dict(ctx.yolo_inventory)
@@ -814,10 +825,10 @@ class NvVllmVLM(GstBase.BaseTransform):
                     ctx.last_frame_pts_ns = current_pts
 
                 # Ensure segments and finalize completed ones
-                batch_id = frame_meta.batch_id
-                self._ensure_segments_until(ctx, current_pts, batch_id)
+                batch_id = frame_meta.batch_id  # buffer.extract() only
+                self._ensure_segments_until(ctx, current_pts)
                 prev_pts = current_pts - 1
-                self._finalize_segments_up_to(ctx, prev_pts, batch_id)
+                self._finalize_segments_up_to(ctx, prev_pts)
 
                 # Extract frame data
                 tensor = buffer.extract(batch_id)
@@ -852,8 +863,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                 if self._sample_interval_ns is not None and self._sample_interval_ns > 0:
                     # FPS-based sampling
                     for seg in ctx.open_segments:
-                        if seg.batch_id != frame_meta.batch_id:
-                            continue
+                        # Never gate admission on batch_id: it is a frame's position
+                        # inside the mux batch, not a stream identity (open_segments
+                        # is already per-stream), and it shifts mid-clip under --warm.
                         if seg.start_pts_ns <= current_pts <= seg.end_pts_ns:
                             should_keep = (
                                 seg.last_saved_pts_ns is None
@@ -1106,6 +1118,17 @@ class NvVllmVLM(GstBase.BaseTransform):
             ):
                 sampling_params_dict["repetition_penalty"] = prompt_config["repetition_penalty"]
 
+            if prompt_config.get("structured_output"):
+                from vllm.sampling_params import StructuredOutputsParams
+
+                from my_curator.domain.scout.dna_validator import generation_schema
+
+                # disable_any_whitespace belongs on the engine config (vlm_engine.py);
+                # the V1 engine ignores it here.
+                sampling_params_dict["structured_outputs"] = StructuredOutputsParams(
+                    json=generation_schema()
+                )
+
             sampling_params = SamplingParams(**sampling_params_dict)
 
             # Use chat template
@@ -1329,6 +1352,8 @@ class NvVllmVLM(GstBase.BaseTransform):
                     prompt_config["top_k"] = self.top_k
                 if self.repetition_penalty is not None:
                     prompt_config["repetition_penalty"] = self.repetition_penalty
+                if self.structured_output:
+                    prompt_config["structured_output"] = True
                 inv = dict(ctx.yolo_inventory)
                 ctx.yolo_inventory.clear()
                 try:
@@ -1420,6 +1445,8 @@ class NvVllmVLM(GstBase.BaseTransform):
                                 prompt_config["top_k"] = self.top_k
                             if self.repetition_penalty is not None:
                                 prompt_config["repetition_penalty"] = self.repetition_penalty
+                            if self.structured_output:
+                                prompt_config["structured_output"] = True
 
                             # P2-4: snapshot inventory for remaining segment
                             inventory_snapshot = dict(ctx.yolo_inventory)

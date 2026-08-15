@@ -300,9 +300,13 @@ export async function getReviewQueue(
   status?: string,
   page = 1,
   size = 30,
+  risk?: string,
 ): Promise<ReviewQueueResponse> {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (status) params.set("status", status);
+  // "all" is the absence of a risk filter; sending it would only add a no-op
+  // JOIN predicate that also drops rows without DNA.
+  if (risk && risk !== "all") params.set("risk", risk);
   return getJSON<ReviewQueueResponse>(`/v1/review?${params}`);
 }
 

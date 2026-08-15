@@ -966,7 +966,8 @@ def test_v02_missing_safety_event_field_fails(validator_v02, field):
     assert _fails(validator_v02, doc)
 
 
-# ── v0.2 length constraints (scene_description <= 500, no min; rationale <= 300) ──
+# ── v0.2 length constraints (scene_description unbounded — sentence structure is
+# grammar-enforced at generation via generation_schema(); rationale <= 300) ──
 
 
 @pytest.mark.schema
@@ -979,12 +980,15 @@ def test_v02_scene_description_empty_allowed(validator_v02):
 
 @pytest.mark.schema
 @pytest.mark.unit
-def test_v02_scene_description_max_500(validator_v02):
+def test_v02_scene_description_no_max_length(validator_v02):
+    """In-place relaxation: the storage schema no longer caps the narrative, so
+    a complete third sentence can never be amputated by validation.  Length
+    discipline lives in the generation grammar (3 sentences x <=200 chars)."""
     doc = _valid_doc_v02()
     doc["scene_description"] = "x" * 500
     assert not _fails(validator_v02, doc)
-    doc["scene_description"] = "x" * 501
-    assert _fails(validator_v02, doc)
+    doc["scene_description"] = "x" * 604  # 3 grammar-maximal sentences
+    assert not _fails(validator_v02, doc)
 
 
 @pytest.mark.schema
@@ -1119,7 +1123,8 @@ _V02_CORRUPTIONS = [
     "missing_required_top",
     "extra_field",
     "out_of_range",
-    "scene_too_long",
+    # "scene_too_long" retired: the storage schema no longer caps scene_description
+    # (in-place relaxation — sentence structure is grammar-enforced at generation).
     "rationale_too_long",
     "missing_scene",
     "missing_rationale",
@@ -1151,8 +1156,6 @@ def _corrupt_dna_v02_st(draw):
                 st.floats(min_value=-1e6, max_value=-0.0001, allow_nan=False, allow_infinity=False),
             )
         )
-    elif strategy == "scene_too_long":
-        doc["scene_description"] = "x" * 501
     elif strategy == "rationale_too_long":
         doc["planner_logic"]["risk_level_rationale"] = "x" * 301
     elif strategy == "missing_scene":

@@ -257,6 +257,10 @@ class TestDNARoundTripSmoke:
         async def _assert_pg_row() -> None:
             import asyncpg
 
+            # Read the version from the consumer so a bump never leaves this
+            # query asserting on a retired generation.
+            from my_curator.application.consumers.curation_consumer import PIPELINE_VERSION
+
             conn = await asyncpg.connect(self._pg_dsn())
             try:
                 rows = await conn.fetch(
@@ -264,9 +268,12 @@ class TestDNARoundTripSmoke:
                     " WHERE pipeline_version = $1"
                     " AND (dna_json->>'dna_version') IS NOT NULL"
                     " LIMIT 10",
-                    "p4-2",
+                    PIPELINE_VERSION,
                 )
-                assert rows, "No schema-valid scenario_dna rows found for pipeline_version='p4-2'"
+                assert rows, (
+                    "No schema-valid scenario_dna rows found for "
+                    f"pipeline_version={PIPELINE_VERSION!r}"
+                )
                 for row in rows:
                     raw = row["dna_json"]
                     dna = raw if isinstance(raw, dict) else json.loads(raw)

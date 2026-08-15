@@ -23,6 +23,65 @@ _SCHEMA_FILES: dict[str, str] = {
 }
 _CODE_FENCE_RE = re.compile(r"```json\s*(.*?)```", re.DOTALL)
 
+# Authored by the pipeline after generation (dna_normalizer.ensure_managed_fields).
+# With additionalProperties:false, a decoder constrained by the raw schema would
+# force the model to fabricate the whole envelope.
+MANAGED_FIELDS: tuple[str, ...] = ("dna_version", "clip_id", "timestamp_range", "provenance")
+
+# Generation-side only; the storage schema stays pattern-free so historical
+# documents remain valid.  Per-sentence bounds make the grammar TERMINATING —
+# without them a comma chain never emits a terminator and runs to max_tokens,
+# losing the document.  Side effect: decimals ("0.5") are ungrammarable, so the
+# prompt asks for whole numbers or words.
+SCENE_DESCRIPTION_PATTERN = r"[^.!?]{1,199}[.!?] [^.!?]{1,199}[.!?] [^.!?]{1,199}[.!?]"
+# One sentence, <= 300 chars (the stored budget).  Forcing the sentence to open by
+# citing the deciding risk rule was measured and regressed recall sharply — the
+# citation became boilerplate; do not re-add without a fresh A/B.
+RISK_RATIONALE_PATTERN = r"[^.!?]{1,299}[.!?]"
+
+
+def generation_schema(version: str = "0.2.0") -> dict[str, Any]:
+    """The deployed schema minus the pipeline-managed envelope, for
+    grammar-constrained decoding.  Everything else is kept, so a constrained
+    generation followed by ``ensure_managed_fields`` validates against the
+    full deployed schema.
+    """
+    filename = _SCHEMA_FILES.get(version)
+    if filename is None:
+        raise ValueError(f"unregistered dna_version: {version!r}")
+    schema = json.loads((_SCHEMA_DIR / filename).read_text(encoding="utf-8"))
+    for field in MANAGED_FIELDS:
+        schema["properties"].pop(field, None)
+    schema["required"] = [k for k in schema["required"] if k not in MANAGED_FIELDS]
+    _drop_ungrammarable(schema)
+
+    sd = schema["properties"].get("scene_description")
+    if isinstance(sd, dict):
+        sd.pop("maxLength", None)  # the pattern is the length constraint
+        sd["pattern"] = SCENE_DESCRIPTION_PATTERN
+    rationale = (
+        schema["properties"]
+        .get("planner_logic", {})
+        .get("properties", {})
+        .get("risk_level_rationale")
+    )
+    if isinstance(rationale, dict):
+        rationale.pop("maxLength", None)  # pattern bounds it at 299 <= the stored 300
+        rationale["pattern"] = RISK_RATIONALE_PATTERN
+    return schema
+
+
+def _drop_ungrammarable(obj: Any) -> None:
+    """Strip constraints the decoder's schema whitelist rejects (currently only
+    ``uniqueItems``); the deployed schema keeps them for post-generation validation."""
+    if isinstance(obj, dict):
+        obj.pop("uniqueItems", None)
+        for value in obj.values():
+            _drop_ungrammarable(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            _drop_ungrammarable(value)
+
 
 class DNAValidator:
     """Post-aggregator JSON-Schema validator with dna_version-based dispatch.

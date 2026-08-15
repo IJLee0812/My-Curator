@@ -9,10 +9,16 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 
 import pytest
 
-from my_curator.domain.scout.dna_validator import DNAValidator, _extract_last_object
+from my_curator.domain.scout.dna_validator import (
+    MANAGED_FIELDS,
+    DNAValidator,
+    _extract_last_object,
+    generation_schema,
+)
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -389,3 +395,66 @@ class TestIntegration:
         extracted = validator.extract_json(cot_text)
         ok, errors = validator.validate(extracted)
         assert ok is True, errors
+
+
+@pytest.mark.unit
+@pytest.mark.schema
+class TestGenerationSchema:
+    """generation_schema() = deployed schema minus the pipeline-managed envelope."""
+
+    def test_managed_fields_absent_from_properties_and_required(self):
+        gs = generation_schema()
+        for field in MANAGED_FIELDS:
+            assert field not in gs["properties"]
+            assert field not in gs["required"]
+
+    def test_everything_else_survives(self):
+        gs = generation_schema()
+        full = json.loads(Path("schemas/scenario_dna_v0_2.schema.json").read_text(encoding="utf-8"))
+        kept = set(full["properties"]) - set(MANAGED_FIELDS)
+        assert set(gs["properties"]) == kept
+        assert gs["additionalProperties"] is False
+
+    def test_free_text_fields_carry_sentence_patterns(self):
+        """The two narrative fields swap maxLength for a sentence-structure
+        pattern: exactly 3 bounded sentences / exactly 1 bounded sentence.
+        Per-sentence bounds keep the grammar terminating; anything the pattern
+        admits also satisfies the stored schema (rationale <= 299 < 300)."""
+        import re
+
+        gs = generation_schema()
+        sd = gs["properties"]["scene_description"]
+        assert "maxLength" not in sd
+        three = re.fullmatch(sd["pattern"], "One clear sentence. A second one here. And a third!")
+        assert three
+        assert not re.fullmatch(sd["pattern"], "Only one sentence.")
+        assert not re.fullmatch(sd["pattern"], "One. Two. Three. Four.")
+
+        rationale = gs["properties"]["planner_logic"]["properties"]["risk_level_rationale"]
+        assert "maxLength" not in rationale
+        assert re.fullmatch(rationale["pattern"], "Rule 2: elevated, pedestrian near and closing.")
+        assert not re.fullmatch(rationale["pattern"], "")  # empty no longer legal
+        assert not re.fullmatch(rationale["pattern"], "Two sentences here. Not allowed.")
+        # pattern-legal rationale always fits the stored maxLength 300
+        assert re.fullmatch(rationale["pattern"], "x" * 299 + ".")
+        assert not re.fullmatch(rationale["pattern"], "x" * 300 + ".")
+
+    def test_constrained_output_plus_envelope_validates_fully(self, validator, valid_dna):
+        """A doc shaped by the generation schema + ensure_managed_fields passes
+        the full deployed-schema validation — the two halves compose exactly."""
+        from my_curator.domain.scout.dna_normalizer import ensure_managed_fields
+
+        doc = {k: v for k, v in valid_dna.items() if k not in MANAGED_FIELDS}
+        ensure_managed_fields(
+            doc,
+            dna_version="0.1.0",
+            clip_id=valid_dna["clip_id"],
+            start_s=0.0,
+            end_s=5.0,
+        )
+        ok, errors = validator.validate(doc)
+        assert ok is True, errors
+
+    def test_unregistered_version_raises(self):
+        with pytest.raises(ValueError):
+            generation_schema("9.9.9")

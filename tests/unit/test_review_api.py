@@ -77,15 +77,36 @@ def test_list_review_queue_returns_items(client, pg_mock):
     assert item["state"] == "pending"
     assert item["reviewed_at"] is None
     # page 2 @ size 50 → offset 50
-    pg_mock.get_review_queue.assert_awaited_once_with(status="pending", limit=50, offset=50)
-    pg_mock.count_review_queue.assert_awaited_once_with(status="pending")
+    pg_mock.get_review_queue.assert_awaited_once_with(
+        status="pending", risk=None, limit=50, offset=50
+    )
+    pg_mock.count_review_queue.assert_awaited_once_with(status="pending", risk=None)
 
 
 def test_list_review_queue_no_status_filter(client, pg_mock):
     pg_mock.get_review_queue.return_value = []
     pg_mock.count_review_queue.return_value = 0
     client.get("/v1/review")
-    pg_mock.get_review_queue.assert_awaited_once_with(status=None, limit=30, offset=0)
+    pg_mock.get_review_queue.assert_awaited_once_with(status=None, risk=None, limit=30, offset=0)
+
+
+def test_list_review_queue_risk_filter_reaches_both_queries(client, pg_mock):
+    """The risk filter must narrow the count too, or pagination would offer
+    pages the filtered list cannot fill."""
+    pg_mock.get_review_queue.return_value = []
+    pg_mock.count_review_queue.return_value = 1
+    resp = client.get("/v1/review?status=pending&risk=critical")
+    assert resp.status_code == 200
+    pg_mock.get_review_queue.assert_awaited_once_with(
+        status="pending", risk="critical", limit=30, offset=0
+    )
+    pg_mock.count_review_queue.assert_awaited_once_with(status="pending", risk="critical")
+
+
+def test_list_review_queue_rejects_unknown_risk(client, pg_mock):
+    resp = client.get("/v1/review?risk=catastrophic")
+    assert resp.status_code == 422
+    pg_mock.get_review_queue.assert_not_awaited()
 
 
 # ── PATCH /v1/clips/{id}/review ────────────────────────────────────────────────
@@ -138,3 +159,41 @@ def test_review_clip_missing_body(client, pg_mock):
     clip_id = str(uuid.uuid4())
     resp = client.patch(f"/v1/clips/{clip_id}/review", json={})
     assert resp.status_code == 422
+
+
+# ── SQL predicate builder (pure, no DB) ────────────────────────────────────────
+
+
+class TestReviewFilters:
+    """PGRepository._review_filters composes the status and risk predicates."""
+
+    @staticmethod
+    def _build(status, risk):
+        from my_curator.adapters.storage.pg import PGRepository
+
+        return PGRepository._review_filters(status, risk)
+
+    def test_no_filters_is_no_where_clause(self):
+        assert self._build(None, None) == ("", [])
+        assert self._build("all", "all") == ("", [])
+
+    def test_risk_only_opens_the_where_clause(self):
+        where, params = self._build(None, "critical")
+        assert where.startswith("WHERE ")
+        assert "planner_logic" in where and "$1" in where
+        assert params == ["critical"]
+
+    def test_status_and_risk_are_anded_with_distinct_placeholders(self):
+        where, params = self._build("pending", "elevated")
+        assert where.count("WHERE") == 1
+        assert " AND " in where
+        assert "$1" in where and "$2" in where
+        assert params == ["pending", "elevated"]
+
+    def test_schema_invalid_status_binds_no_param_so_risk_takes_dollar_one(self):
+        """The schema_invalid tab inlines its state literal, so a risk filter
+        must still bind at $1 rather than assuming a status param exists."""
+        where, params = self._build("schema_invalid", "nominal")
+        assert "rejected_schema_invalid" in where
+        assert params == ["nominal"]
+        assert "$1" in where and "$2" not in where

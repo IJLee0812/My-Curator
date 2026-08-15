@@ -11,9 +11,12 @@ fabricates an injury severity or an absent required field (those route to review
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 
-SCENE_DESCRIPTION_MAX = 500
+# Backstop for the unconstrained decoding path only; 640 = 3 x 200-char sentences
+# plus separators, so a grammar-legal narrative is never touched.
+SCENE_DESCRIPTION_MAX = 640
 RISK_RATIONALE_MAX = 300
 
 # Enum-drift synonym maps (canonicalised drift value -> v0.2 enum).
@@ -375,11 +378,23 @@ def _truncate_lengths(dna: dict[str, Any]) -> None:
 
 
 def _truncate(text: str, limit: int) -> str:
-    """Truncate to <= *limit*, at the last '.' within the limit if it keeps half the budget."""
-    if len(text) <= limit:
-        return text
-    window = text[:limit]
-    cut = window.rfind(".")
-    if cut >= limit // 2:
-        return text[: cut + 1]
-    return window.rstrip()
+    """Cap at *limit* AND trim back to the last complete sentence.
+
+    A terminator counts only at end-of-text or before whitespace, so decimals
+    ("0.5 m") never match.  A single amputated sentence (no terminator anywhere)
+    is closed at its last clause boundary; if neither boundary exists the capped
+    text is kept, since truncated information beats an empty field.
+    """
+    window = text[:limit].rstrip() if len(text) > limit else text.rstrip()
+    if window.endswith((".", "!", "?")):
+        return window
+    cut = -1
+    for m in re.finditer(r"[.!?](?=\s)", window):
+        cut = m.end()
+    if cut > 0:
+        return window[:cut].rstrip()
+    for m in re.finditer(r"[,;](?=\s)", window):
+        cut = m.start()
+    if cut > 0:
+        return window[:cut] + "."
+    return window

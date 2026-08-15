@@ -27,22 +27,34 @@
     },
     "scene_description": {
       "type": "string",
-      "maxLength": 500,
-      "$comment": "Free-text VLM-authored narrative (3 concise sentences, AV-safety-expert persona). Produced by the Scout from the video + P4-2 prompt; NOT derived from the structured topology/odd fields. No minLength constraint. Used for UI clip-detail narrative and as a high-signal input to the text embedding."
+      "$comment": "Free-text VLM-authored narrative: exactly 3 sentences, each <= ~200 chars, enforced at generation time via generation_schema(). The storage schema carries no maxLength so a complete third sentence is never amputated (relaxation of the former maxLength 500; every previously valid document remains valid). NOT derived from the structured topology/odd fields. No minLength constraint. Used for UI clip-detail narrative and as a high-signal input to the text embedding."
     },
     "timestamp_range": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["start_s", "end_s"],
+      "required": [
+        "start_s",
+        "end_s"
+      ],
       "properties": {
-        "start_s": {"type": "number", "minimum": 0},
-        "end_s":   {"type": "number", "minimum": 0}
+        "start_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_s": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     },
     "odd": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["weather", "lighting", "sensor_fidelity"],
+      "required": [
+        "weather",
+        "lighting",
+        "sensor_fidelity"
+      ],
       "properties": {
         "weather": {
           "type": "string",
@@ -92,7 +104,11 @@
     "topology": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["road_type", "lane_event", "intersection_type"],
+      "required": [
+        "road_type",
+        "lane_event",
+        "intersection_type"
+      ],
       "properties": {
         "road_type": {
           "type": "string",
@@ -190,7 +206,11 @@
           },
           "distance_bucket": {
             "type": "string",
-            "enum": ["near", "mid", "far"]
+            "enum": [
+              "near",
+              "mid",
+              "far"
+            ]
           },
           "confidence": {
             "type": "number",
@@ -206,7 +226,12 @@
     "planner_logic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ego_maneuver", "risk_level", "risk_level_rationale", "safety_event"],
+      "required": [
+        "ego_maneuver",
+        "risk_level",
+        "risk_level_rationale",
+        "safety_event"
+      ],
       "properties": {
         "ego_maneuver": {
           "type": "string",
@@ -229,7 +254,11 @@
         },
         "risk_level": {
           "type": "string",
-          "enum": ["nominal", "elevated", "critical"],
+          "enum": [
+            "nominal",
+            "elevated",
+            "critical"
+          ],
           "$comment": "SOTIF mapping (ISO 21448): nominal=absence of unreasonable risk; elevated=tolerable with mitigation; critical=unreasonable risk (SOTIF trigger)."
         },
         "risk_level_rationale": {
@@ -238,7 +267,10 @@
           "$comment": "One-sentence justification for the chosen risk_level, citing the ISO 21448:2022 Sec.6 C x S decision. Authored by the Scout (P4-2 prompt). For 'nominal' explains why no harm was reachable; for 'elevated'/'critical' cites the controllability margin / severity."
         },
         "causal_trigger_actor_index": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "default": null,
           "$comment": "Index into actor_dynamics[]; null allowed in single-Scout era. Expected to be populated once Judge lands (post-v0.1)."
@@ -246,7 +278,12 @@
         "safety_event": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["has_event", "event_type", "collision_type", "severity_estimate"],
+          "required": [
+            "has_event",
+            "event_type",
+            "collision_type",
+            "severity_estimate"
+          ],
           "$comment": "Generic curation-grade event channel (not accident-specific). Captures near-miss / hard-brake / evasive-swerve with the same fidelity as collision. Expected has_event=false and event_type=none on ~95% of routine clips. risk_level<->event_type semantic consistency is intentionally NOT enforced here (delegated to the P4-6 Judge critic); only the intra-object structural invariants below are enforced via if/then.",
           "properties": {
             "has_event": {
@@ -254,15 +291,36 @@
             },
             "event_type": {
               "type": "string",
-              "enum": ["none", "near_miss", "hard_brake", "evasive_swerve", "collision"],
+              "enum": [
+                "none",
+                "near_miss",
+                "hard_brake",
+                "evasive_swerve",
+                "collision"
+              ],
               "$comment": "'none' is the dominant value on routine traffic; 'near_miss'/'hard_brake' are the high Verify-by-Exception-value categories v0.1 could not express."
             },
             "collision_type": {
-              "enum": ["head_on", "rear_end", "t_bone", "sideswipe", "single_vehicle", "vru_struck", "none", null],
+              "enum": [
+                "head_on",
+                "rear_end",
+                "t_bone",
+                "sideswipe",
+                "single_vehicle",
+                "vru_struck",
+                "none",
+                null
+              ],
               "$comment": "Populated only when event_type=collision. Semantic distinction: 'none' is a positive determination (collision visible but not matching the taxonomy); null = unable to determine (off-screen / occluded / partial frame). When event_type!=collision this MUST be null (enforced by allOf if/then)."
             },
             "severity_estimate": {
-              "enum": ["no_harm", "minor", "major", "fatal", null],
+              "enum": [
+                "no_harm",
+                "minor",
+                "major",
+                "fatal",
+                null
+              ],
               "$comment": "Abbreviated-Injury-Scale-style proxy. null permitted if-and-only-if event_type=none (bidirectional, enforced by allOf if/then/else)."
             }
           },
@@ -270,25 +328,48 @@
             {
               "$comment": "collision_type is null whenever event_type is not 'collision'.",
               "if": {
-                "properties": {"event_type": {"not": {"const": "collision"}}}
+                "properties": {
+                  "event_type": {
+                    "not": {
+                      "const": "collision"
+                    }
+                  }
+                }
               },
               "then": {
-                "properties": {"collision_type": {"const": null}}
+                "properties": {
+                  "collision_type": {
+                    "const": null
+                  }
+                }
               }
             },
             {
               "$comment": "severity_estimate is null iff event_type is 'none' (bidirectional).",
               "if": {
-                "properties": {"event_type": {"const": "none"}}
+                "properties": {
+                  "event_type": {
+                    "const": "none"
+                  }
+                }
               },
               "then": {
-                "properties": {"severity_estimate": {"const": null}}
+                "properties": {
+                  "severity_estimate": {
+                    "const": null
+                  }
+                }
               },
               "else": {
                 "properties": {
                   "severity_estimate": {
                     "type": "string",
-                    "enum": ["no_harm", "minor", "major", "fatal"]
+                    "enum": [
+                      "no_harm",
+                      "minor",
+                      "major",
+                      "fatal"
+                    ]
                   }
                 }
               }
@@ -300,7 +381,11 @@
     "confidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["overall", "scout_agreement", "hallucination_flags"],
+      "required": [
+        "overall",
+        "scout_agreement",
+        "hallucination_flags"
+      ],
       "properties": {
         "overall": {
           "type": "number",
@@ -315,7 +400,9 @@
         },
         "hallucination_flags": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -332,7 +419,9 @@
       "properties": {
         "scout_models": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "minItems": 1
         },
         "scout_prompt_hash": {
@@ -340,12 +429,18 @@
           "$comment": "SHA256 of normalized prompt (whitespace-collapsed, CRLF->LF, trailing newline stripped)."
         },
         "judge_model": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null,
           "$comment": "Populated by the P4-6 text-only Judge critic (qwen3-8b-awq). Null until the Judge re-scores the row."
         },
         "judge_prompt_hash": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "pipeline_version": {
@@ -357,7 +452,9 @@
         },
         "reference_standards": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "$comment": "Canonical value: see docs/implementation_plan.md provenance block. v0.2 additions: ISO 21448:2022 Sec.6, NVIDIA CDS (2025-Q4), VLM-AutoDrive (arXiv:2603.18178)."
         }
       }
