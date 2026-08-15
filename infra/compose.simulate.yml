@@ -1,0 +1,47 @@
+# CARLA simulation server for My-Curator (P5-1).
+#
+# On-demand: guarded by `profiles: ["simulate"]` so it is never in a default `up`.
+#   docker compose -f infra/compose.base.yml -f infra/compose.simulate.yml \
+#     --env-file .env --profile simulate up -d carla-server
+#   … --profile simulate down
+#
+# Host-side ports are overridable via CARLA_HOST_PORTS / CARLA_NOVNC_PORT;
+# the container side is fixed (2000-2002 RPC, 6080 viewer).
+
+services:
+
+  carla-server:
+    build:
+      context: .
+      dockerfile: carla.Dockerfile
+    image: my-curator-carla:0.9.15
+    container_name: my-curator-carla
+    profiles: ["simulate"]
+    restart: "no"
+    entrypoint: ["/bin/bash", "/carla-entrypoint.sh"]
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      NVIDIA_DRIVER_CAPABILITIES: "all"
+      CARLA_VIEWER: "${CARLA_VIEWER:-1}"
+      CARLA_QUALITY: "${CARLA_QUALITY:-Low}"
+      CARLA_RESOLUTION: "${CARLA_RESOLUTION:-800x600}"
+    ports:
+      - "${CARLA_HOST_PORTS:-2000-2002}:2000-2002"
+      - "${CARLA_NOVNC_PORT:-6080}:6080"
+    volumes:
+      - "/usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro"
+      - "./carla-entrypoint.sh:/carla-entrypoint.sh:ro"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    networks:
+      - curation-net
+
+networks:
+  curation-net:
+    external: true
+    name: my-curator-base_curation-net
