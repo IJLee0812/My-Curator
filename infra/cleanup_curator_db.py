@@ -19,10 +19,18 @@ import asyncio
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from my_curator.adapters.storage.milvus import (  # noqa: E402
+    COLLECTION_NAME,
+    HYBRID_COLLECTION_NAME,
+)
+
 ENV_PATH = Path(__file__).parent.parent / ".env"
 
 PG_TABLES = ["sessions", "clips", "scenario_dna", "review_queue"]
-MILVUS_COLLECTIONS = ["clip_video_embed"]
+MILVUS_COLLECTIONS = [HYBRID_COLLECTION_NAME, COLLECTION_NAME]
+MILVUS_OWNED_PREFIX = "clip_"
 MINIO_BUCKETS = ["frames", "clips", "raw", "artifacts"]
 
 
@@ -84,6 +92,14 @@ def cleanup_milvus(env: dict) -> None:
             print(f"[Milvus] Dropped '{col}' — OK")
         else:
             print(f"[Milvus] '{col}' not found — skip")
+
+    leftover = [c for c in client.list_collections() if c.startswith(MILVUS_OWNED_PREFIX)]
+    if leftover:
+        print(
+            f"[Milvus] WARNING: pipeline-owned collections still present: "
+            f"{', '.join(sorted(leftover))} — add them to MILVUS_COLLECTIONS; "
+            "a fresh run will search stale vectors alongside the new corpus"
+        )
 
 
 # ── MinIO cleanup ─────────────────────────────────────────────────────────────
