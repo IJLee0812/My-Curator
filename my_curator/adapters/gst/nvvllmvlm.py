@@ -89,11 +89,10 @@ class BufferData:
 class Segment:
     """Temporal segment containing multiple frames"""
 
-    def __init__(self, stream_id: int, start_pts_ns: int, end_pts_ns: int, batch_id: int) -> None:
+    def __init__(self, stream_id: int, start_pts_ns: int, end_pts_ns: int) -> None:
         self.stream_id = stream_id  # Which stream this segment belongs to
         self.start_pts_ns = start_pts_ns
         self.end_pts_ns = end_pts_ns
-        self.batch_id = batch_id
         self.frames: list[BufferData] = []
         self.last_saved_pts_ns: int | None = None
 
@@ -678,7 +677,7 @@ class NvVllmVLM(GstBase.BaseTransform):
                 )
             return self.stream_contexts[stream_id]
 
-    def _ensure_segments_until(self, ctx: StreamContext, pts_ns: int, batch_id: int) -> None:
+    def _ensure_segments_until(self, ctx: StreamContext, pts_ns: int) -> None:
         """Create segments for a stream until covering pts_ns"""
         if ctx.next_segment_start_pts is None:
             ctx.next_segment_start_pts = pts_ns
@@ -686,7 +685,7 @@ class NvVllmVLM(GstBase.BaseTransform):
         while ctx.next_segment_start_pts is not None and ctx.next_segment_start_pts <= pts_ns:
             start = ctx.next_segment_start_pts
             end = start + self._seg_len_ns
-            seg = Segment(ctx.stream_id, start, end, batch_id)
+            seg = Segment(ctx.stream_id, start, end)
             ctx.open_segments.append(seg)
             Gst.debug(
                 f"{GST_PLUGIN_NAME}[Stream {ctx.stream_id}]: "
@@ -694,12 +693,11 @@ class NvVllmVLM(GstBase.BaseTransform):
             )
             ctx.next_segment_start_pts = start + self._step_ns
 
-    def _finalize_segments_up_to(self, ctx: StreamContext, pts_ns: int, batch_id: int) -> None:
+    def _finalize_segments_up_to(self, ctx: StreamContext, pts_ns: int) -> None:
         """Finalize completed segments for a stream"""
         to_finalize = []
         for s in ctx.open_segments:
-            batch_match = s.batch_id == batch_id or batch_id is None
-            if s.end_pts_ns <= pts_ns and batch_match:
+            if s.end_pts_ns <= pts_ns:
                 to_finalize.append(s)
 
         # Determine if we're in multi-stream mode for cleaner logging
@@ -814,10 +812,10 @@ class NvVllmVLM(GstBase.BaseTransform):
                     ctx.last_frame_pts_ns = current_pts
 
                 # Ensure segments and finalize completed ones
-                batch_id = frame_meta.batch_id
-                self._ensure_segments_until(ctx, current_pts, batch_id)
+                batch_id = frame_meta.batch_id  # buffer.extract() only
+                self._ensure_segments_until(ctx, current_pts)
                 prev_pts = current_pts - 1
-                self._finalize_segments_up_to(ctx, prev_pts, batch_id)
+                self._finalize_segments_up_to(ctx, prev_pts)
 
                 # Extract frame data
                 tensor = buffer.extract(batch_id)
@@ -852,8 +850,9 @@ class NvVllmVLM(GstBase.BaseTransform):
                 if self._sample_interval_ns is not None and self._sample_interval_ns > 0:
                     # FPS-based sampling
                     for seg in ctx.open_segments:
-                        if seg.batch_id != frame_meta.batch_id:
-                            continue
+                        # Never gate admission on batch_id: it is a frame's position
+                        # inside the mux batch, not a stream identity (open_segments
+                        # is already per-stream), and it shifts mid-clip under --warm.
                         if seg.start_pts_ns <= current_pts <= seg.end_pts_ns:
                             should_keep = (
                                 seg.last_saved_pts_ns is None
