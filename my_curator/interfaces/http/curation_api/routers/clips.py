@@ -108,17 +108,45 @@ async def get_clip(
     )
 
 
+FRAMES_PER_CLIP = 8
+
+
+async def _sibling_frame_key(pg: PGRepository, row: dict) -> str | None:
+    """Frame key of a sibling segment covering this clip's start, or None.
+
+    Segments of one source overlap, so the frame returned is a real frame of
+    this clip's own time range. The 8 frames are sampled evenly across the
+    sibling's window, so the index closest to that instant is the one whose
+    position matches it proportionally.
+    """
+    source_clip_id = row.get("source_clip_id")
+    start_s = row.get("start_s")
+    if not source_clip_id or start_s is None:
+        return None
+
+    at_s = float(start_s)
+    sibling = await pg.find_frames_sibling(source_clip_id, at_s)
+    if sibling is None:
+        return None
+
+    span = float(sibling["end_s"]) - float(sibling["start_s"])
+    frac = (at_s - float(sibling["start_s"])) / span if span > 0 else 0.0
+    idx = round(min(max(frac, 0.0), 1.0) * (FRAMES_PER_CLIP - 1))
+    return f"{sibling['frames_blob_uri']}/frame_{idx}.jpg"
+
+
 @router.get("/v1/clips/{clip_id}/thumbnail")
 async def thumbnail_clip(
     clip_id: str,
     pg: PGRepository = Depends(get_pg),
     minio: MinIORepository = Depends(get_minio),
 ):
-    """Redirect to the presigned URL for the first extracted frame (frame_0.jpg).
+    """Serve the first extracted frame (frame_0.jpg) as the clip's thumbnail.
 
     frames_blob_uri stored in DB = "frames/{session_id}/{clip_id}" (key prefix).
     MinIO bucket = "frames", key = "{frames_blob_uri}/frame_0.jpg".
-    Returns 404 for clips without frames_blob_uri (legacy stream:// or /v1/ingest path).
+    Clips stored without frames of their own fall back to a sibling segment
+    covering the same instant; 404 only when no such frame exists.
     """
     try:
         uid = UUID(clip_id)
@@ -130,12 +158,15 @@ async def thumbnail_clip(
         raise HTTPException(status_code=404, detail="clip not found")
 
     frames_blob_uri: str | None = row.get("frames_blob_uri")
-    if not frames_blob_uri:
-        raise HTTPException(status_code=404, detail="No frames available for this clip")
+    if frames_blob_uri:
+        frame_key = f"{frames_blob_uri}/frame_0.jpg"
+    else:
+        frame_key = await _sibling_frame_key(pg, row)
+        if frame_key is None:
+            raise HTTPException(status_code=404, detail="No frames available for this clip")
 
-    first_frame_key = f"{frames_blob_uri}/frame_0.jpg"
     try:
-        data = await minio.download_bytes("frames", first_frame_key)
+        data = await minio.download_bytes("frames", frame_key)
     except Exception:
         raise HTTPException(status_code=404, detail="Frame not found in MinIO") from None
 

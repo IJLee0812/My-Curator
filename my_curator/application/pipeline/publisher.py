@@ -234,27 +234,27 @@ class VLMKafkaSignalPublisher:
         # P3-1: generate clip_id and capture 8 frames before releasing ctx.last_inputs
         clip_id = _uuid_module.uuid4()
         frames_blob_uri = None
-        if (
-            last_inputs is not None
-            and (end_time - start_time) >= 3.0
-            and self._minio_client is not None
-        ):
+        if last_inputs is not None and self._minio_client is not None:
             try:
                 import numpy as np
 
                 video_tuple = last_inputs["multi_modal_data"]["video"]
                 batch_tensor = video_tuple[0]  # [T, C, H, W] cpu uint8
                 T = batch_tensor.shape[0]
-                indices = np.linspace(0, T - 1, 8).astype(int)
-                sampled = batch_tensor[indices].cpu()
-                frames_blob_uri = f"frames/{self._session_id}/{clip_id}"
-                self._upload_executor.submit(
-                    _upload_frames_sync,
-                    self._minio_client,
-                    frames_blob_uri,
-                    sampled,
-                    self._frames_bucket,
-                )
+                # Gate on frames actually sampled, not wall-clock length: a
+                # trailing segment is short but still carries frames, and
+                # linspace repeats indices when T < 8.
+                if T >= 2:
+                    indices = np.linspace(0, T - 1, 8).astype(int)
+                    sampled = batch_tensor[indices].cpu()
+                    frames_blob_uri = f"frames/{self._session_id}/{clip_id}"
+                    self._upload_executor.submit(
+                        _upload_frames_sync,
+                        self._minio_client,
+                        frames_blob_uri,
+                        sampled,
+                        self._frames_bucket,
+                    )
             except Exception as _exc:
                 print(f"VLMKafkaPublisher: frame capture failed: {_exc}")
 

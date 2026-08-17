@@ -671,6 +671,40 @@ class PGRepository:
             "review_status": row["review_status"],
         }
 
+    async def find_frames_sibling(self, source_clip_id: str, at_s: float) -> dict[str, Any] | None:
+        """Return a sibling segment of the same source clip that has frames and
+        whose window contains ``at_s``.
+
+        Segments of one source overlap, so a segment without frames of its own is
+        still covered by a neighbour — the frame served is a real frame of the
+        requested time range, not a stand-in. Prefers the window whose midpoint
+        sits closest to ``at_s``.
+
+        Returns:
+            Dict with keys: frames_blob_uri, start_s, end_s. None if no sibling
+            with frames covers ``at_s``.
+        """
+        row = await self._pool.fetchrow(
+            """
+            SELECT frames_blob_uri, start_s, end_s
+            FROM clips
+            WHERE source_clip_id = $1
+              AND frames_blob_uri IS NOT NULL
+              AND start_s <= $2 AND end_s >= $2
+            ORDER BY abs((start_s + end_s) / 2 - $2)
+            LIMIT 1
+            """,
+            source_clip_id,
+            at_s,
+        )
+        if row is None:
+            return None
+        return {
+            "frames_blob_uri": row["frames_blob_uri"],
+            "start_s": row["start_s"],
+            "end_s": row["end_s"],
+        }
+
     async def list_clips(self, limit: int = 20) -> list[dict[str, Any]]:
         """Return the most recently inserted clips joined with their DNA row.
 
