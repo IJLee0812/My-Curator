@@ -33,9 +33,28 @@ LOADABLE_TOWNS: tuple[str, ...] = (
 #: Present as ``.xodr`` but NOT loadable — additional-maps package is not installed.
 UNAVAILABLE_TOWNS: tuple[str, ...] = ("Town06", "Town07")
 
+#: Hand-curated: OpenDRIVE junction ids that are roundabouts, keyed by town.
+#:
+#: Not detected. A geometric detector was tried and discarded — the turning arcs of an
+#: ordinary four-arm junction sum to the same total curvature as a ring, so curvature
+#: cannot separate them. Town03's junction 861 was identified by extent instead, and it
+#: is unambiguous: 30.2 m across against 26.1 m for the next largest, over 5 arms and 21
+#: connecting roads totalling 623 m where a normal junction of that town spans 3-4 arms
+#: and under 430 m. It is the only roundabout in the loadable map set.
+ROUNDABOUT_JUNCTIONS: dict[str, frozenset[int]] = {
+    "Town03": frozenset({861}),
+}
+
 
 class TownProfile(NamedTuple):
-    """Measured capability of one town (parsed from its OpenDRIVE)."""
+    """Measured capability of one town (parsed from its OpenDRIVE).
+
+    ``max_driving_lanes`` counts lanes *in one direction* on a single lane section — the
+    figure a lane-change maneuver actually needs. Counting a road's lanes across all of
+    its lane sections instead, as the first pass did, sums lanes that follow one another
+    rather than running side by side and overstates the width of any road that changes
+    its cross-section partway along.
+    """
 
     speed_kph: tuple[int, ...]
     max_driving_lanes: int
@@ -45,23 +64,23 @@ class TownProfile(NamedTuple):
 
 
 TOWN_PROFILES: dict[str, TownProfile] = {
-    "Town01": TownProfile((40,), 2, frozenset({"driving", "sidewalk", "shoulder"}), 12, 0),
-    "Town02": TownProfile((40,), 2, frozenset({"driving", "sidewalk", "shoulder"}), 8, 0),
+    "Town01": TownProfile((40,), 1, frozenset({"driving", "sidewalk", "shoulder"}), 12, 0),
+    "Town02": TownProfile((40,), 1, frozenset({"driving", "sidewalk", "shoulder"}), 8, 0),
     "Town03": TownProfile(
         (40, 80, 90),
-        6,
+        2,
         frozenset({"driving", "sidewalk", "shoulder", "parking", "bidirectional", "median"}),
         2,
         33,
     ),
     "Town04": TownProfile(
-        (50, 60, 90, 100), 8, frozenset({"driving", "sidewalk", "shoulder"}), 4, 23
+        (50, 60, 90, 100), 4, frozenset({"driving", "sidewalk", "shoulder"}), 4, 23
     ),
     "Town05": TownProfile(
-        (60, 90, 100), 6, frozenset({"driving", "sidewalk", "shoulder", "parking"}), 6, 15
+        (60, 90, 100), 3, frozenset({"driving", "sidewalk", "shoulder", "parking"}), 6, 15
     ),
     "Town10HD": TownProfile(
-        (60, 80), 4, frozenset({"driving", "sidewalk", "shoulder", "median"}), 2, 7
+        (60, 80), 2, frozenset({"driving", "sidewalk", "shoulder", "median"}), 2, 7
     ),
 }
 
