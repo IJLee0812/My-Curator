@@ -19,6 +19,8 @@ from uuid import UUID
 
 import asyncpg
 
+from my_curator.domain.scout.versioning import CURRENT_DNA_VERSION
+
 
 def dsn_from_env() -> str:
     """Build DSN from PG_USER, PG_PASSWORD, PG_HOST (default localhost),
@@ -433,18 +435,22 @@ class PGRepository:
             judge_prompt_hash,
         )
 
-    async def list_v02_dna(
+    async def list_dna(
         self,
         *,
+        dna_version: str = CURRENT_DNA_VERSION,
         session_id: str | None = None,
         clip_ids: list[UUID] | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Return v0.2 ``scenario_dna`` rows as ``[{clip_id, dna_json}]``; ``clip_ids`` and
-        ``session_id`` compose (AND), v0.1 rows are always excluded."""
-        conditions = ["sd.dna_version = '0.2.0'"]
-        params: list[Any] = []
-        idx = 1
+        """Return ``scenario_dna`` rows as ``[{clip_id, dna_json}]`` for one dna_version.
+
+        ``clip_ids`` and ``session_id`` compose (AND). The version is a parameter rather
+        than a literal so a schema bump does not require touching every caller.
+        """
+        conditions = ["sd.dna_version = $1"]
+        params: list[Any] = [dna_version]
+        idx = 2
         if clip_ids is not None:
             conditions.append(f"sd.clip_id = ANY(${idx})")
             params.append(clip_ids)
@@ -471,19 +477,20 @@ class PGRepository:
     async def list_reembed_source(
         self,
         *,
+        dna_version: str = CURRENT_DNA_VERSION,
         session_id: str | None = None,
         limit: int = 5000,
     ) -> list[dict[str, Any]]:
-        """Return v0.2 clips with everything the P4-7 re-embed needs in one query:
+        """Return clips with everything the re-embed pass needs in one query:
         ``[{clip_id, dna_json, frames_blob_uri, source_clip_id}]``.
 
         ``frames_blob_uri`` is NULL when the pipeline never captured frames for
         that segment (those clips get a text-only vector).  Schema-validity
         filtering is applied by the caller, not here.
         """
-        conditions = ["sd.dna_version = '0.2.0'"]
-        params: list[Any] = []
-        idx = 1
+        conditions = ["sd.dna_version = $1"]
+        params: list[Any] = [dna_version]
+        idx = 2
         if session_id is not None:
             conditions.append(f"c.session_id = ${idx}")
             params.append(session_id)

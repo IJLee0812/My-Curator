@@ -1,6 +1,6 @@
 """CLI entrypoint for the offline Judge-critic pass (P4-6).
 
-Scope is one of --gold-set (validation-first default), --session, or --all-v0.2. The
+Scope is one of --gold-set (validation-first default), --session, or --all. The
 judge-critic vLLM server must be running on GPU 0 (compose ``--profile judge``).
 """
 
@@ -21,6 +21,7 @@ from my_curator.domain.judge.prompt import (
     judge_prompt_hash,
     load_system_prompt,
 )
+from my_curator.domain.scout.versioning import CURRENT_DNA_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -41,9 +42,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=f"Judge the gold set (default path: {DEFAULT_GOLD})",
     )
-    scope.add_argument("--session", metavar="SESSION_ID", help="Judge one session's v0.2 clips")
+    scope.add_argument("--session", metavar="SESSION_ID", help="Judge one session's clips")
     scope.add_argument(
-        "--all-v0.2", dest="all_v02", action="store_true", help="Judge every v0.2 DNA row"
+        "--all", dest="all_segments", action="store_true", help="Judge every DNA row"
+    )
+    p.add_argument(
+        "--dna-version",
+        default=CURRENT_DNA_VERSION,
+        help=f"Scenario DNA version to judge (default: {CURRENT_DNA_VERSION})",
     )
     p.add_argument("--judge-url", default=base_url_from_env(), help="judge-critic base URL")
     p.add_argument(
@@ -70,15 +76,17 @@ def attach_gt(rows: list[dict], gt_map: dict[str, str]) -> list[dict]:
 async def _select_records(repo: Any, args: argparse.Namespace) -> list[dict]:
     """Resolve the CLI scope into judge_pass records (default: gold set)."""
     if args.session:
-        return await repo.list_v02_dna(session_id=args.session, limit=args.limit)
-    if args.all_v02:
-        return await repo.list_v02_dna(limit=args.limit)
+        return await repo.list_dna(
+            dna_version=args.dna_version, session_id=args.session, limit=args.limit
+        )
+    if args.all_segments:
+        return await repo.list_dna(dna_version=args.dna_version, limit=args.limit)
     gold_path = args.gold_set or DEFAULT_GOLD
     gt_map = load_gold_gt(gold_path)
     from uuid import UUID
 
     clip_ids = [UUID(cid) for cid in gt_map]
-    rows = await repo.list_v02_dna(clip_ids=clip_ids, limit=args.limit)
+    rows = await repo.list_dna(dna_version=args.dna_version, clip_ids=clip_ids, limit=args.limit)
     return attach_gt(rows, gt_map)
 
 
