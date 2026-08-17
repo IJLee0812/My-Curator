@@ -136,7 +136,7 @@ async def test_three_way_recall_bench():
 
     spec = json.loads(_BENCH_PATH.read_text())
     pg = await PGRepository.create(dsn_from_env())
-    rows = await pg.list_v02_dna(limit=1000)
+    rows = await pg.list_dna(limit=1000)
     encoder = CosmosEmbed1Encoder()
 
     modalities = ("text", "video", "hybrid")

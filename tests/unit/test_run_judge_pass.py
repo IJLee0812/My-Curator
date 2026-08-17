@@ -16,6 +16,7 @@ from my_curator.cli.run_judge_pass import (
     attach_gt,
     load_gold_gt,
 )
+from my_curator.domain.scout.versioning import CURRENT_DNA_VERSION
 
 pytestmark = pytest.mark.unit
 
@@ -28,7 +29,7 @@ def _parse(argv):
 
 def test_default_scope_has_no_session_or_all():
     a = _parse([])
-    assert a.session is None and a.all_v02 is False and a.gold_set is None
+    assert a.session is None and a.all_segments is False and a.gold_set is None
     assert a.n_samples == 3 and a.dry_run is False
 
 
@@ -42,13 +43,13 @@ def test_session_and_dry_run():
     assert a.session == "sess-1" and a.dry_run is True
 
 
-def test_all_v02_flag():
-    assert _parse(["--all-v0.2"]).all_v02 is True
+def test_all_flag():
+    assert _parse(["--all"]).all_segments is True
 
 
 def test_scope_mutually_exclusive():
     with pytest.raises(SystemExit):
-        _parse(["--session", "s", "--all-v0.2"])
+        _parse(["--session", "s", "--all"])
 
 
 def test_load_gold_gt(tmp_path):
@@ -70,24 +71,26 @@ def test_attach_gt_none_when_absent():
 
 async def test_select_records_session_scope():
     repo = AsyncMock()
-    repo.list_v02_dna = AsyncMock(return_value=[{"clip_id": UUID(CLIP), "dna_json": {}}])
+    repo.list_dna = AsyncMock(return_value=[{"clip_id": UUID(CLIP), "dna_json": {}}])
     rows = await _select_records(repo, _parse(["--session", "sess-1"]))
-    repo.list_v02_dna.assert_awaited_once_with(session_id="sess-1", limit=1000)
+    repo.list_dna.assert_awaited_once_with(
+        dna_version=CURRENT_DNA_VERSION, session_id="sess-1", limit=1000
+    )
     assert rows
 
 
-async def test_select_records_all_v02_scope():
+async def test_select_records_all_scope():
     repo = AsyncMock()
-    repo.list_v02_dna = AsyncMock(return_value=[])
-    await _select_records(repo, _parse(["--all-v0.2", "--limit", "50"]))
-    repo.list_v02_dna.assert_awaited_once_with(limit=50)
+    repo.list_dna = AsyncMock(return_value=[])
+    await _select_records(repo, _parse(["--all", "--limit", "50"]))
+    repo.list_dna.assert_awaited_once_with(dna_version=CURRENT_DNA_VERSION, limit=50)
 
 
 async def test_select_records_gold_scope_attaches_gt(tmp_path):
     p = tmp_path / "gold.json"
     p.write_text(json.dumps({"clips": [{"clip_id": CLIP, "risk_level": "critical"}]}))
     repo = AsyncMock()
-    repo.list_v02_dna = AsyncMock(return_value=[{"clip_id": UUID(CLIP), "dna_json": {}}])
+    repo.list_dna = AsyncMock(return_value=[{"clip_id": UUID(CLIP), "dna_json": {}}])
     rows = await _select_records(repo, _parse(["--gold-set", str(p)]))
-    assert repo.list_v02_dna.await_args.kwargs["clip_ids"] == [UUID(CLIP)]
+    assert repo.list_dna.await_args.kwargs["clip_ids"] == [UUID(CLIP)]
     assert rows[0]["gt"] == "critical"

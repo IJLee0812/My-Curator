@@ -94,7 +94,7 @@ async def _records_from_pg(gold_path: str) -> list[dict]:
     gt_map = load_gold_gt(gold_path)
     repo = await PGRepository.create(dsn_from_env())
     try:
-        rows = await repo.list_v02_dna(clip_ids=[UUID(c) for c in gt_map], limit=len(gt_map) or 1)
+        rows = await repo.list_dna(clip_ids=[UUID(c) for c in gt_map], limit=len(gt_map) or 1)
         return attach_gt(rows, gt_map)
     finally:
         await repo.close()

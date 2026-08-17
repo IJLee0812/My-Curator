@@ -145,19 +145,19 @@ async def test_apply_override_dna_preserves_scout_provenance(repo: PGRepository)
     assert dict(row["dna_json"])["planner_logic"]["risk_level"] == "critical"  # updated
 
 
-async def test_list_v02_dna_excludes_v01(repo: PGRepository):
-    rows = await repo.list_v02_dna()
+async def test_list_dna_excludes_v01(repo: PGRepository):
+    rows = await repo.list_dna()
     ids = {r["clip_id"] for r in rows}
     assert CLIP_V02 in ids
     assert CLIP_V01 not in ids  # v0.1 excluded
 
 
-async def test_list_v02_dna_by_session_and_clip_ids(repo: PGRepository):
-    by_session = await repo.list_v02_dna(session_id=SESSION_ID)
+async def test_list_dna_by_session_and_clip_ids(repo: PGRepository):
+    by_session = await repo.list_dna(session_id=SESSION_ID)
     assert [r["clip_id"] for r in by_session] == [CLIP_V02]
-    by_ids = await repo.list_v02_dna(clip_ids=[CLIP_V02, CLIP_V01])
+    by_ids = await repo.list_dna(clip_ids=[CLIP_V02, CLIP_V01])
     assert [r["clip_id"] for r in by_ids] == [CLIP_V02]  # v0.1 still filtered out
-    none_match = await repo.list_v02_dna(clip_ids=[CLIP_V01])
+    none_match = await repo.list_dna(clip_ids=[CLIP_V01])
     assert none_match == []
 
 

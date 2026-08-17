@@ -19,6 +19,11 @@ import logging
 
 log = logging.getLogger(__name__)
 
+#: The dna_version the pipeline currently writes, and the default scope for every
+#: version-filtered query. Bump alongside a schema migration; callers that must pin a
+#: specific corpus take an explicit ``dna_version`` argument instead of hardcoding one.
+CURRENT_DNA_VERSION = "0.2.0"
+
 # hash_prefix (16 hex chars) → dna_version string
 PROMPT_VERSION_MAP: dict[str, str] = {
     "f823defb040481ce": "0.1.0",  # prompts/scout_cosmos_reason2.v1.md (P2-4 baseline, pre-P2-6)
