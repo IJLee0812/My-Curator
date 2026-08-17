@@ -500,3 +500,54 @@ class TestSourceMapPropagation:
         msg = pub._collected_results[0]
         assert "source_clip_id" not in msg
         assert "source_video_path" not in msg
+
+
+# ---------------------------------------------------------------------------
+# Frame capture (hotfix #84) — gated on sampled frames, not segment length
+# ---------------------------------------------------------------------------
+
+
+class _FakeSampled:
+    def cpu(self):
+        return self
+
+
+class _FakeTensor:
+    """Stands in for the [T, C, H, W] uint8 batch without importing torch."""
+
+    def __init__(self, t: int):
+        self.shape = (t,)
+
+    def __getitem__(self, _indices):
+        return _FakeSampled()
+
+
+@pytest.mark.unit
+class TestFrameCapture:
+    def _capture(self, frames: int, start: float, end: float):
+        pub = _make_publisher(aggregator=BestOfNAggregator(), scout_config=_scout_config())
+        mock_scout = MagicMock()
+        mock_scout.sample.return_value = [_make_report(text=_VALID_DNA_COT_OUTPUT)]
+        pub._scout = mock_scout
+        pub._minio_client = MagicMock()
+        pub._upload_executor = MagicMock()
+        inputs = {"prompt": "t", "multi_modal_data": {"video": (_FakeTensor(frames),)}}
+        element = _make_element(last_inventory={"car": 1}, last_inputs=inputs)
+        _invoke(pub, element=element, start=start, end=end)
+        return pub
+
+    def test_short_trailing_segment_still_uploads_frames(self):
+        """A 1.73 s trailing segment carries frames — the old 3 s guard dropped it."""
+        pub = self._capture(frames=4, start=8.13, end=9.86)
+        assert pub._upload_executor.submit.call_count == 1
+        assert pub._collected_results[0]["frames_blob_uri"].startswith("frames/")
+
+    def test_full_length_segment_still_uploads_frames(self):
+        pub = self._capture(frames=10, start=0.13, end=5.13)
+        assert pub._upload_executor.submit.call_count == 1
+
+    def test_single_frame_segment_is_skipped(self):
+        """One frame cannot make a thumbnail strip worth storing."""
+        pub = self._capture(frames=1, start=9.80, end=9.86)
+        assert pub._upload_executor.submit.call_count == 0
+        assert "frames_blob_uri" not in pub._collected_results[0]

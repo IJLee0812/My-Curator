@@ -108,9 +108,9 @@ def _pick_clip_with_thumbnail(max_probes: int = 100) -> tuple[str, dict] | None:
     """Iterate the search corpus until one clip's /thumbnail endpoint returns 200.
 
     Returns (clip_id, response_headers) on success; None when no clip in the
-    first ``max_probes`` results has frames_blob_uri set.  The corpus is not
+    first ``max_probes`` results serves a thumbnail.  The corpus is not
     guaranteed to contain a clip with frames, but in practice the DS pipeline
-    populates it for every segment ≥3 s.
+    populates them for every segment.
     """
     if httpx is None:
         return None
