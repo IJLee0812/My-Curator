@@ -43,6 +43,29 @@ async def _setup_connection(conn: asyncpg.Connection) -> None:
     )
 
 
+#: sim_road_index (P5-3) — one row per driving lane per lane section of the built-in
+#: CARLA towns, rebuilt from the shipped OpenDRIVE files. Kept out of the repository
+#: because it is derived data, and provisioned by its builder because init-sql only runs
+#: on a fresh volume. Mirrored verbatim in infra/init-sql/001_schema.sql for new volumes;
+#: tests/unit/test_sim_road_index_ddl.py asserts the two stay identical.
+SIM_ROAD_INDEX_DDL = """
+CREATE TABLE IF NOT EXISTS sim_road_index (
+    town               TEXT             NOT NULL,
+    road_id            INTEGER          NOT NULL,
+    lane_id            INTEGER          NOT NULL,
+    lane_section_s     DOUBLE PRECISION NOT NULL,
+    lane_section_end_s DOUBLE PRECISION NOT NULL,
+    driving_lanes      SMALLINT         NOT NULL,
+    speed_kph          DOUBLE PRECISION NOT NULL,
+    lane_types         TEXT[]           NOT NULL,
+    junction_forms     TEXT[]           NOT NULL,
+    in_junction        BOOLEAN          NOT NULL,
+    PRIMARY KEY (town, road_id, lane_section_s, lane_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sim_road_town ON sim_road_index(town);
+"""
+
+
 class PGRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
@@ -752,6 +775,53 @@ class PGRepository:
             }
             for r in rows
         ]
+
+    async def ensure_sim_road_index(self) -> None:
+        """Create ``sim_road_index`` if it is absent.
+
+        The builder provisions its own table rather than relying on ``infra/init-sql``,
+        which only runs on a fresh volume: ``judge_overrides`` shipped that way in P4-6
+        and is still missing from the deployed database as a result.
+        """
+        await self._pool.execute(SIM_ROAD_INDEX_DDL)
+
+    async def replace_sim_road_index(self, rows: list[dict[str, Any]]) -> int:
+        """Swap in a freshly parsed index. Rebuilt whole; there is nothing to merge."""
+        await self.ensure_sim_road_index()
+        records = [
+            (
+                r["town"],
+                int(r["road_id"]),
+                int(r["lane_id"]),
+                float(r["lane_section_s"]),
+                float(r["lane_section_end_s"]),
+                int(r["driving_lanes"]),
+                float(r["speed_kph"]),
+                sorted(r["lane_types"]),
+                sorted(r["junction_forms"]),
+                bool(r["in_junction"]),
+            )
+            for r in rows
+        ]
+        async with self._pool.acquire() as conn, conn.transaction():
+            await conn.execute("TRUNCATE sim_road_index")
+            await conn.copy_records_to_table("sim_road_index", records=records)
+        return len(records)
+
+    async def list_sim_road_index(self, *, towns: list[str] | None = None) -> list[dict[str, Any]]:
+        """Return the road index, optionally restricted to *towns*."""
+        sql = """
+            SELECT town, road_id, lane_id, lane_section_s, lane_section_end_s,
+                   driving_lanes, speed_kph, lane_types, junction_forms, in_junction
+            FROM sim_road_index
+        """
+        params: list[Any] = []
+        if towns is not None:
+            sql += " WHERE town = ANY($1)"
+            params.append(towns)
+        sql += " ORDER BY town, road_id, lane_section_s, lane_id"
+        rows = await self._pool.fetch(sql, *params)
+        return [dict(r) for r in rows]
 
     async def get_stats(self) -> dict[str, Any]:
         """Return aggregate curation counts for the Dashboard (P3-4).

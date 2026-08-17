@@ -102,4 +102,23 @@ CREATE TABLE IF NOT EXISTS judge_overrides (
 );
 CREATE INDEX IF NOT EXISTS idx_judge_overrides_clip ON judge_overrides(clip_id);
 
+-- sim_road_index (P5-3) — one row per driving lane per lane section of the built-in CARLA
+-- towns, rebuilt from the shipped OpenDRIVE files by cli/build_road_index.py. That builder
+-- also provisions this table itself, because this file only runs on a fresh volume; the
+-- two definitions are kept identical by tests/unit/test_sim_road_index_ddl.py.
+CREATE TABLE IF NOT EXISTS sim_road_index (
+    town               TEXT             NOT NULL,
+    road_id            INTEGER          NOT NULL,
+    lane_id            INTEGER          NOT NULL,
+    lane_section_s     DOUBLE PRECISION NOT NULL,
+    lane_section_end_s DOUBLE PRECISION NOT NULL,
+    driving_lanes      SMALLINT         NOT NULL,
+    speed_kph          DOUBLE PRECISION NOT NULL,
+    lane_types         TEXT[]           NOT NULL,
+    junction_forms     TEXT[]           NOT NULL,
+    in_junction        BOOLEAN          NOT NULL,
+    PRIMARY KEY (town, road_id, lane_section_s, lane_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sim_road_town ON sim_road_index(town);
+
 COMMIT;

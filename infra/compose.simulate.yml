@@ -25,12 +25,20 @@ services:
       CARLA_VIEWER: "${CARLA_VIEWER:-1}"
       CARLA_QUALITY: "${CARLA_QUALITY:-Low}"
       CARLA_RESOLUTION: "${CARLA_RESOLUTION:-800x600}"
+      # Boot straight onto the town a scenario needs; switching maps at runtime segfaults
+      # this build (see carla-entrypoint.sh).
+      CARLA_MAP: "${CARLA_MAP:-}"
     ports:
       - "${CARLA_HOST_PORTS:-2000-2002}:2000-2002"
       - "${CARLA_NOVNC_PORT:-6080}:6080"
     volumes:
       - "/usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro"
       - "./carla-entrypoint.sh:/carla-entrypoint.sh:ro"
+      # Generated scenarios (P5-3), so the interoperability check can read what the
+      # compiler wrote without copying files in. Read-only, and outside the working
+      # tree: these are rebuildable output, and the name would otherwise collide with
+      # the unrelated MinIO `artifacts` bucket.
+      - "${SIM_ARTIFACT_DIR:-${DATA_ROOT}/sim}:/opt/sim:ro"
     deploy:
       resources:
         reservations:

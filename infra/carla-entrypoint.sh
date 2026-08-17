@@ -4,17 +4,29 @@
 #   CARLA_VIEWER      1 = Xvfb + x11vnc + noVNC, 0 = -RenderOffScreen (default 1)
 #   CARLA_QUALITY     UE4 quality level (default Low)
 #   CARLA_RESOLUTION  Xvfb screen size, viewer only (default 800x600)
+#   CARLA_MAP         town to boot on, e.g. Town03 (default: the engine's own default)
+#
+# CARLA_MAP exists because switching maps at runtime segfaults this build: a plain
+# client.load_world("Town03") takes the server down with signal 11, with no client
+# library and no scenario involved. Boot the server on the map you need instead.
 
 VIEWER="${CARLA_VIEWER:-1}"
 QUALITY="${CARLA_QUALITY:-Low}"
 RESOLUTION="${CARLA_RESOLUTION:-800x600}"
+MAP="${CARLA_MAP:-}"
+
+MAP_ARG=()
+if [ -n "$MAP" ]; then
+    MAP_ARG=("/Game/Carla/Maps/$MAP")
+    echo "[carla-entrypoint] booting on map $MAP"
+fi
 
 # The UE4 renderer needs Vulkan; without a working ICD it exits at startup.
 export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 
 if [ "$VIEWER" != "1" ]; then
     echo "[carla-entrypoint] headless, RPC on :2000"
-    exec ./CarlaUE4.sh -nosound -RenderOffScreen -carla-rpc-port=2000 \
+    exec ./CarlaUE4.sh "${MAP_ARG[@]}" -nosound -RenderOffScreen -carla-rpc-port=2000 \
         -quality-level="$QUALITY" "$@"
 fi
 
@@ -32,5 +44,5 @@ sleep 1
 websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
 
 echo "[carla-entrypoint] viewer on :6080, RPC on :2000"
-exec ./CarlaUE4/Binaries/Linux/CarlaUE4-Linux-Shipping CarlaUE4 -nosound \
+exec ./CarlaUE4/Binaries/Linux/CarlaUE4-Linux-Shipping CarlaUE4 "${MAP_ARG[@]}" -nosound \
     -carla-rpc-port=2000 -quality-level="$QUALITY" "$@"
