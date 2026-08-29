@@ -65,6 +65,27 @@ CREATE TABLE IF NOT EXISTS sim_road_index (
 CREATE INDEX IF NOT EXISTS idx_sim_road_town ON sim_road_index(town);
 """
 
+SIM_RENDER_DDL = """
+CREATE TABLE IF NOT EXISTS sim_render (
+    render_id      BIGSERIAL        PRIMARY KEY,
+    clip_id        UUID             NOT NULL REFERENCES clips(clip_id) ON DELETE CASCADE,
+    source_clip_id TEXT             NOT NULL,
+    segment_index  SMALLINT         NOT NULL,
+    status         TEXT             NOT NULL,
+    failure_reason TEXT,
+    town           TEXT,
+    road_id        INTEGER,
+    lane_id        INTEGER,
+    duration_s     DOUBLE PRECISION,
+    ego_key        TEXT,
+    chase_key      TEXT,
+    compare_key    TEXT,
+    rendered_at    TIMESTAMPTZ      NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sim_render_clip ON sim_render(clip_id);
+CREATE INDEX IF NOT EXISTS idx_sim_render_source ON sim_render(source_clip_id);
+"""
+
 
 class PGRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
@@ -820,6 +841,87 @@ class PGRepository:
             sql += " WHERE town = ANY($1)"
             params.append(towns)
         sql += " ORDER BY town, road_id, lane_section_s, lane_id"
+        rows = await self._pool.fetch(sql, *params)
+        return [dict(r) for r in rows]
+
+    # ── sim render ledger (P5-4) ─────────────────────────────────────────────────
+
+    async def ensure_sim_render(self) -> None:
+        """Create ``sim_render`` if it is absent, for the same reason the road index does."""
+        await self._pool.execute(SIM_RENDER_DDL)
+
+    async def list_sim_segments(
+        self,
+        *,
+        dna_version: str = CURRENT_DNA_VERSION,
+        source_clip_id: str | None = None,
+        limit: int = 5000,
+    ) -> list[dict[str, Any]]:
+        """Segments with everything a render needs: their DNA and their source video.
+
+        Ordered so ``segment_index`` is position within the source clip, which is what the
+        ``--segment`` override selects on.
+        """
+        conditions = ["sd.dna_version = $1"]
+        params: list[Any] = [dna_version]
+        idx = 2
+        if source_clip_id is not None:
+            conditions.append(f"c.source_clip_id = ${idx}")
+            params.append(source_clip_id)
+            idx += 1
+        params.append(int(limit))
+        rows = await self._pool.fetch(
+            f"""
+            SELECT sd.clip_id, sd.dna_json, c.source_clip_id, c.session_id,
+                   c.blob_uri, c.start_s, c.end_s,
+                   row_number() OVER (PARTITION BY c.source_clip_id ORDER BY c.start_s) - 1
+                       AS segment_index
+            FROM scenario_dna sd
+            JOIN clips c ON c.clip_id = sd.clip_id
+            WHERE {" AND ".join(conditions)} AND NOT c.is_synthetic
+            ORDER BY c.source_clip_id, c.start_s
+            LIMIT ${idx}
+            """,
+            *params,
+        )
+        return [{**dict(r), "dna_json": dict(r["dna_json"])} for r in rows]
+
+    async def record_sim_render(self, record: dict[str, Any]) -> int:
+        """Append one render attempt, successful or not. Returns its ``render_id``."""
+        await self.ensure_sim_render()
+        return await self._pool.fetchval(
+            """
+            INSERT INTO sim_render (
+                clip_id, source_clip_id, segment_index, status, failure_reason,
+                town, road_id, lane_id, duration_s, ego_key, chase_key, compare_key
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING render_id
+            """,
+            record["clip_id"],
+            record["source_clip_id"],
+            int(record["segment_index"]),
+            record["status"],
+            record.get("failure_reason"),
+            record.get("town"),
+            record.get("road_id"),
+            record.get("lane_id"),
+            record.get("duration_s"),
+            record.get("ego_key"),
+            record.get("chase_key"),
+            record.get("compare_key"),
+        )
+
+    async def list_sim_renders(
+        self, *, source_clip_id: str | None = None, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM sim_render"
+        params: list[Any] = []
+        if source_clip_id is not None:
+            sql += " WHERE source_clip_id = $1"
+            params.append(source_clip_id)
+        sql += f" ORDER BY rendered_at DESC, render_id DESC LIMIT ${len(params) + 1}"
+        params.append(int(limit))
         rows = await self._pool.fetch(sql, *params)
         return [dict(r) for r in rows]
 
