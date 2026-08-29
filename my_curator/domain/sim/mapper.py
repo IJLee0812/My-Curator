@@ -22,6 +22,7 @@ from my_curator.domain.sim.spec import (
     CHASE_CAM_TRANSFORM,
     DEFAULT_SEGMENT_S,
     EGO_CAM_TRANSFORM,
+    MIN_SEGMENT_S,
     WARMUP_S,
     ActorSpec,
     CameraSpec,
@@ -271,7 +272,7 @@ def map_dna(dna: dict[str, Any]) -> MappingResult:
     spec = SimSpec(
         clip_id=clip_id,
         dna_version=str(dna.get("dna_version", "")),
-        duration_s=DEFAULT_SEGMENT_S,
+        duration_s=_segment_duration_s(dna.get("timestamp_range")),
         warmup_s=WARMUP_S,
         risk_level=required["planner_logic.risk_level"],
         world=world,
@@ -282,6 +283,24 @@ def map_dna(dna: dict[str, Any]) -> MappingResult:
         degradations=tuple(degradations),
     )
     return MappingResult(clip_id, spec, (), tuple(anomalies))
+
+
+def _segment_duration_s(timestamp_range: Any) -> float:
+    """How long the source segment actually ran.
+
+    The pipeline emits segments of at most :data:`DEFAULT_SEGMENT_S`, but trailing
+    segments are shorter and the reconstruction has to match the source frame for frame.
+    DNA that states no usable range falls back to the nominal length.
+    """
+    if not isinstance(timestamp_range, dict):
+        return DEFAULT_SEGMENT_S
+    try:
+        span = float(timestamp_range["end_s"]) - float(timestamp_range["start_s"])
+    except (KeyError, TypeError, ValueError):
+        return DEFAULT_SEGMENT_S
+    if span <= 0.0:
+        return DEFAULT_SEGMENT_S
+    return round(max(MIN_SEGMENT_S, span), 3)
 
 
 def _map_actors(

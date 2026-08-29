@@ -13,6 +13,7 @@ from my_curator.domain.sim.coverage import classify_scene_content
 from my_curator.domain.sim.reasons import DegradationCode, ExclusionReason
 from my_curator.domain.sim.spec import (
     DEFAULT_SEGMENT_S,
+    MIN_SEGMENT_S,
     RENDER_FPS,
     RENDER_HEIGHT,
     RENDER_WIDTH,
@@ -339,12 +340,12 @@ class TestTownResolution:
         assert towns, f"{road_type}+{intersection_type} resolved to no town"
         assert set(towns) <= set(cat.LOADABLE_TOWNS)
 
-    def test_residential_unsignalized_relies_on_town03(self):
+    def test_residential_unsignalized_needs_a_town_with_unsignalized_junctions(self):
         """Town01/Town02 signalize every junction they own — the regression this guards."""
         result = map_dna(
             make_dna(topology={"road_type": "residential", "intersection_type": "unsignalized"})
         )
-        assert result.spec.world.road.candidate_towns == ("Town03",)
+        assert result.spec.world.road.candidate_towns == ("Town05",)
         assert DegradationCode.INTERSECTION_SUBSTITUTED not in degradation_codes(result)
 
     def test_relaxing_the_junction_is_recorded(self):
@@ -436,3 +437,31 @@ class TestCoverageReport:
 
         report = build_coverage_report([map_dna(make_dna())])
         assert json.loads(json.dumps(report.to_dict()))["total_segments"] == 1
+
+
+class TestSegmentDuration:
+    """The reconstruction has to be as long as the segment it reconstructs, not a constant."""
+
+    def test_the_source_range_sets_the_duration(self):
+        dna = make_dna(timestamp_range={"start_s": 8.13, "end_s": 9.87})
+        assert map_dna(dna).spec.duration_s == pytest.approx(1.74)
+
+    def test_a_full_length_segment_keeps_the_nominal_duration(self):
+        dna = make_dna(timestamp_range={"start_s": 4.13, "end_s": 9.13})
+        assert map_dna(dna).spec.duration_s == pytest.approx(DEFAULT_SEGMENT_S)
+
+    def test_dna_without_a_range_falls_back_to_the_nominal_duration(self):
+        assert map_dna(make_dna()).spec.duration_s == DEFAULT_SEGMENT_S
+
+    def test_an_unusable_range_falls_back_rather_than_producing_no_video(self):
+        for broken in ({"start_s": 5.0, "end_s": 5.0}, {"start_s": "x", "end_s": 1.0}, {}, None):
+            dna = make_dna(timestamp_range=broken)
+            assert map_dna(dna).spec.duration_s == DEFAULT_SEGMENT_S
+
+    def test_a_degenerate_range_is_floored_so_the_video_is_watchable(self):
+        dna = make_dna(timestamp_range={"start_s": 0.0, "end_s": 0.2})
+        assert map_dna(dna).spec.duration_s == MIN_SEGMENT_S
+
+    def test_the_warmup_is_unaffected_by_the_segment_length(self):
+        dna = make_dna(timestamp_range={"start_s": 8.13, "end_s": 9.87})
+        assert map_dna(dna).spec.warmup_s == WARMUP_S
