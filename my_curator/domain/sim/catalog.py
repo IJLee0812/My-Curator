@@ -20,11 +20,12 @@ from my_curator.domain.sim.spec import ControlMode
 
 # --- Towns ---
 
-#: Maps actually loadable in the deployed image (verified via ``get_available_maps()``).
+#: Maps that actually come up in the deployed image, verified by booting each one (P5-4).
+#: ``get_available_maps()`` is not sufficient evidence — it advertises Town03, which
+#: crashes.
 LOADABLE_TOWNS: tuple[str, ...] = (
     "Town01",
     "Town02",
-    "Town03",
     "Town04",
     "Town05",
     "Town10HD",
@@ -33,17 +34,16 @@ LOADABLE_TOWNS: tuple[str, ...] = (
 #: Present as ``.xodr`` but NOT loadable — additional-maps package is not installed.
 UNAVAILABLE_TOWNS: tuple[str, ...] = ("Town06", "Town07")
 
-#: Hand-curated: OpenDRIVE junction ids that are roundabouts, keyed by town.
-#:
-#: Not detected. A geometric detector was tried and discarded — the turning arcs of an
-#: ordinary four-arm junction sum to the same total curvature as a ring, so curvature
-#: cannot separate them. Town03's junction 861 was identified by extent instead, and it
-#: is unambiguous: 30.2 m across against 26.1 m for the next largest, over 5 arms and 21
-#: connecting roads totalling 623 m where a normal junction of that town spans 3-4 arms
-#: and under 430 m. It is the only roundabout in the loadable map set.
-ROUNDABOUT_JUNCTIONS: dict[str, frozenset[int]] = {
-    "Town03": frozenset({861}),
-}
+#: Advertised by ``get_available_maps()`` but fatal to load: the server dies with signal 11,
+#: both as the configured boot map and via ``load_world()``. Size is not the cause — Town05
+#: is larger (323 roads against Town03's 248) and loads.
+CRASHING_TOWNS: tuple[str, ...] = ("Town03",)
+
+#: OpenDRIVE junction ids that are roundabouts, keyed by town. Empty and deliberately
+#: kept: the only roundabout in the advertised map set is Town03's, which cannot be loaded.
+#: Roundabouts are not detected — an ordinary four-arm junction's turning arcs sum to the
+#: same total curvature as a ring — so a newly loadable town's junction goes here by hand.
+ROUNDABOUT_JUNCTIONS: dict[str, frozenset[int]] = {}
 
 
 class TownProfile(NamedTuple):
@@ -66,13 +66,6 @@ class TownProfile(NamedTuple):
 TOWN_PROFILES: dict[str, TownProfile] = {
     "Town01": TownProfile((40,), 1, frozenset({"driving", "sidewalk", "shoulder"}), 12, 0),
     "Town02": TownProfile((40,), 1, frozenset({"driving", "sidewalk", "shoulder"}), 8, 0),
-    "Town03": TownProfile(
-        (40, 80, 90),
-        2,
-        frozenset({"driving", "sidewalk", "shoulder", "parking", "bidirectional", "median"}),
-        2,
-        33,
-    ),
     "Town04": TownProfile(
         (50, 60, 90, 100), 4, frozenset({"driving", "sidewalk", "shoulder"}), 4, 23
     ),
@@ -256,23 +249,20 @@ class RoadMapping(NamedTuple):
 
 ROAD_TYPE: dict[str, RoadMapping] = {
     "motorway": RoadMapping(3, (90, 100), ("driving",), ("Town04", "Town05"), 95.0),
-    "trunk": RoadMapping(2, (80, 100), ("driving",), ("Town03", "Town04", "Town05"), 80.0),
-    "primary": RoadMapping(
-        1, (50, 90), ("driving",), ("Town03", "Town04", "Town05", "Town10HD"), 55.0
-    ),
-    "secondary": RoadMapping(
-        1, (40, 60), ("driving",), ("Town01", "Town02", "Town03", "Town10HD"), 45.0
-    ),
-    # Town03 is included because Town01/Town02 signalize *every* junction they own, so a
-    # residential road with an unsignalized junction would otherwise be unstageable.
+    "trunk": RoadMapping(2, (80, 100), ("driving",), ("Town04", "Town05"), 80.0),
+    "primary": RoadMapping(1, (50, 90), ("driving",), ("Town04", "Town05", "Town10HD"), 55.0),
+    "secondary": RoadMapping(1, (40, 60), ("driving",), ("Town01", "Town02", "Town10HD"), 45.0),
+    # Town05 joins the two residential grids because Town01/Town02 signalize *every*
+    # junction they own, so a residential road with an unsignalized junction would
+    # otherwise be unstageable — the role Town03 filled before it was found unloadable.
     "residential": RoadMapping(
-        1, (40, 40), ("driving", "sidewalk"), ("Town01", "Town02", "Town03"), 35.0
+        1, (40, 40), ("driving", "sidewalk"), ("Town01", "Town02", "Town05"), 35.0
     ),
     "service": RoadMapping(
         1,
         (40, 40),
         ("driving",),
-        ("Town01", "Town02", "Town03"),
+        ("Town01", "Town02", "Town05"),
         25.0,
         degradation=DegradationCode.ROAD_TYPE_SUBSTITUTED,
         applied="residential grid road (no service-road class in the built-in towns)",
@@ -281,12 +271,12 @@ ROAD_TYPE: dict[str, RoadMapping] = {
         1,
         (40, 60),
         ("driving",),
-        ("Town01", "Town02", "Town03"),
+        ("Town01", "Town02", "Town05"),
         50.0,
         degradation=DegradationCode.ROAD_TYPE_SUBSTITUTED,
         applied="low-speed town road — Town07 (rural) is not in the loadable map set",
     ),
-    "parking": RoadMapping(1, (40, 60), ("driving", "parking"), ("Town03", "Town05"), 10.0),
+    "parking": RoadMapping(1, (40, 60), ("driving", "parking"), ("Town05",), 10.0),
     "walkway": RoadMapping(0, (0, 0), (), (), 0.0, exclusion=ExclusionReason.UNSUPPORTED_ROAD_TYPE),
     "cycling": RoadMapping(0, (0, 0), (), (), 0.0, exclusion=ExclusionReason.UNSUPPORTED_ROAD_TYPE),
 }
@@ -304,12 +294,14 @@ class IntersectionMapping(NamedTuple):
 INTERSECTION_TYPE: dict[str, IntersectionMapping] = {
     "none": IntersectionMapping(LOADABLE_TOWNS),
     "signalized": IntersectionMapping(LOADABLE_TOWNS),
-    "unsignalized": IntersectionMapping(("Town03", "Town04", "Town05", "Town10HD")),
-    "roundabout": IntersectionMapping(("Town03",)),
-    "t_junction": IntersectionMapping(LOADABLE_TOWNS),
-    "crosswalk": IntersectionMapping(
-        ("Town01", "Town02", "Town03", "Town04", "Town05", "Town10HD")
+    "unsignalized": IntersectionMapping(("Town04", "Town05", "Town10HD")),
+    "roundabout": IntersectionMapping(
+        LOADABLE_TOWNS,
+        degradation=DegradationCode.INTERSECTION_SUBSTITUTED,
+        applied="no loadable town has a roundabout; the nearest junction geometry is used",
     ),
+    "t_junction": IntersectionMapping(LOADABLE_TOWNS),
+    "crosswalk": IntersectionMapping(LOADABLE_TOWNS),
     "direct_connection": IntersectionMapping(
         ("Town04",),
         degradation=DegradationCode.INTERSECTION_SUBSTITUTED,
@@ -517,3 +509,24 @@ COLLISION_TYPES: frozenset[str] = frozenset(
 SEVERITY_ESTIMATES: frozenset[str] = frozenset({"no_harm", "minor", "major", "fatal"})
 RISK_LEVELS: frozenset[str] = frozenset({"nominal", "elevated", "critical"})
 DISTANCE_BUCKETS: frozenset[str] = frozenset(DISTANCE_M)
+
+
+def parse_blueprint_filter(expression: str) -> tuple[tuple[str, ...], dict[str, str]]:
+    """Split a blueprint filter into id patterns and attribute constraints.
+
+    The filters above use ``|`` for two things: alternative blueprint ids
+    (``vehicle.kawasaki.ninja|vehicle.yamaha.yzf``) and an attribute requirement
+    (``vehicle.*|base_type=car``). A token containing ``=`` is the latter; everything else
+    is a pattern, and any one of them matching is enough.
+    """
+    patterns: list[str] = []
+    attributes: dict[str, str] = {}
+    for token in (part.strip() for part in expression.split("|")):
+        if not token:
+            continue
+        if "=" in token:
+            name, _, value = token.partition("=")
+            attributes[name.strip()] = value.strip()
+        else:
+            patterns.append(token)
+    return tuple(patterns), attributes
