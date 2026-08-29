@@ -180,3 +180,39 @@ class TestDdlParity:
             return " ".join(body.split())
 
         assert normalize(init_sql) == normalize(SIM_ROAD_INDEX_DDL)
+
+
+class TestTravelDirection:
+    """Lane sign decides which way "ahead" is; getting it wrong hides every actor."""
+
+    def test_a_right_hand_lane_runs_with_increasing_s(self):
+        assert candidate(lane_id=-1).travel_direction == 1
+
+    def test_a_left_hand_lane_runs_against_increasing_s(self):
+        assert candidate(lane_id=2).travel_direction == -1
+
+    def test_entry_leaves_room_behind_on_a_right_hand_lane(self):
+        """A follower has to fit behind ego without overlapping it."""
+        c = candidate(lane_id=-1, lane_section_s=0.0, lane_section_end_s=200.0)
+        assert c.entry_s == pytest.approx(ENTRY_MARGIN_M)
+
+    def test_entry_is_measured_from_the_far_end_on_a_left_hand_lane(self):
+        c = candidate(lane_id=1, lane_section_s=0.0, lane_section_end_s=200.0)
+        assert c.entry_s == pytest.approx(200.0 - ENTRY_MARGIN_M)
+
+    def test_ahead_is_ahead_on_both_sides_of_the_road(self):
+        right = candidate(lane_id=-1, lane_section_s=0.0, lane_section_end_s=200.0)
+        left = candidate(lane_id=1, lane_section_s=0.0, lane_section_end_s=200.0)
+        assert right.s_ahead(8.0) == pytest.approx(ENTRY_MARGIN_M + 8.0)
+        assert left.s_ahead(8.0) == pytest.approx(200.0 - ENTRY_MARGIN_M - 8.0)
+        for c in (right, left):
+            assert (c.s_ahead(8.0) - c.entry_s) * c.travel_direction > 0
+
+    def test_a_point_beyond_the_section_is_clamped_into_it(self):
+        c = candidate(lane_id=-1, lane_section_s=10.0, lane_section_end_s=40.0)
+        assert c.s_ahead(500.0) == pytest.approx(40.0)
+        assert c.s_ahead(-500.0) == pytest.approx(10.0)
+
+    def test_a_short_section_still_places_entities_inside_it(self):
+        c = candidate(lane_id=1, lane_section_s=0.0, lane_section_end_s=4.0)
+        assert c.lane_section_s <= c.entry_s <= c.lane_section_end_s

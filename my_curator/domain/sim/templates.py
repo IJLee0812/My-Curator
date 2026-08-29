@@ -16,10 +16,19 @@ controller — belongs to the render stage, which reads these actions back.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
 from dataclasses import dataclass
 
-#: Seconds of warm-up before a scripted cue fires, so the world is settled first.
+# typing, not collections.abc: TemplateBuilder below is evaluated at runtime, and neither
+# builtin nor abc generics are subscriptable on the py3.7 the simulator image runs.
+from typing import Callable, List  # noqa: UP035
+
+from my_curator.domain.sim.spec import DEFAULT_SEGMENT_S, WARMUP_S
+
+#: When a scripted cue fires, as a point in the *recorded* segment: this many seconds into
+#: a nominal DEFAULT_SEGMENT_S recording, scaled to the segment's real length. Simulation
+#: time 0 is the start of the unrecorded warm-up, so :meth:`TemplateContext.cue_s` turns
+#: this into the absolute time the document needs — a bare 2.0 s would fire before the
+#: cameras start.
 SCRIPTED_CUE_S = 2.0
 
 #: Ego lane-change and offset directions. OpenSCENARIO counts lanes leftward from the
@@ -63,6 +72,19 @@ class TemplateContext:
     trigger_distance_m: float
     #: Event-timed maneuvers trigger off ego; scripted ones off the clock.
     event_timed: bool
+    #: The unrecorded settling time before the cameras start; simulation time 0 is warm-up.
+    warmup_s: float = WARMUP_S
+    #: Length of the recorded segment, which scripted cue times scale to.
+    duration_s: float = DEFAULT_SEGMENT_S
+
+    def cue_s(self, offset_s: float = 0.0) -> float:
+        """Absolute simulation time of a scripted cue *offset_s* after the base cue.
+
+        Cue times are stated relative to a nominal DEFAULT_SEGMENT_S recording and scaled
+        to the real one, so a multi-phase maneuver keeps its proportions on a short
+        segment instead of running off the end of it.
+        """
+        return self.warmup_s + (SCRIPTED_CUE_S + offset_s) * self.duration_s / DEFAULT_SEGMENT_S
 
 
 # --- OpenSCENARIO vocabulary -------------------------------------------------------
@@ -146,14 +168,17 @@ def event(name: str, actions: list[ET.Element], trigger: ET.Element) -> ET.Eleme
 
 
 def _trigger_for(ctx: TemplateContext) -> ET.Element:
-    return distance_trigger(ctx) if ctx.event_timed else time_trigger(SCRIPTED_CUE_S)
+    return distance_trigger(ctx) if ctx.event_timed else time_trigger(ctx.cue_s())
 
 
 # --- actor_dynamics[].state templates ----------------------------------------------
 
 
 def _walker_cross(ctx: TemplateContext, name: str, speed: float) -> list[ET.Element]:
-    return [event(name, [speed_action(speed, shape="step", over_s=0.5)], _trigger_for(ctx))]
+    # Off ego's approach, never off the clock: a cruising ego covers the DNA's 8 m in
+    # under a second, so a mid-clip cue would fire after it had already passed.
+    trigger = distance_trigger(ctx) if ctx.trigger_distance_m > 0.0 else _trigger_for(ctx)
+    return [event(name, [speed_action(speed, shape="step", over_s=0.5)], trigger)]
 
 
 def walker_cross_at_crosswalk(ctx: TemplateContext) -> list[ET.Element]:
@@ -175,21 +200,30 @@ def walker_cross_stop_go(ctx: TemplateContext) -> list[ET.Element]:
         event(
             "walker_hesitate",
             [speed_action(0.0, shape="step", over_s=0.1)],
-            time_trigger(SCRIPTED_CUE_S + 1.5, name="hesitate"),
+            time_trigger(ctx.cue_s(1.5), name="hesitate"),
         ),
         event(
             "walker_resume",
             [speed_action(WALK_SPEED_MPS, over_s=0.5)],
-            time_trigger(SCRIPTED_CUE_S + 2.5, name="resume"),
+            time_trigger(ctx.cue_s(2.5), name="resume"),
         ),
     ]
 
 
 def vehicle_lane_change_into_ego_lane(ctx: TemplateContext) -> list[ET.Element]:
+    """Pull into ego's lane and settle there slower than ego.
+
+    The actor rolls alongside until the cue, then slows while changing lanes. The
+    below-ego target speed keeps the maneuver on camera: at ego's speed the car simply
+    recedes into the distance instead of crowding it.
+    """
     return [
         event(
             "vehicle_cut_in",
-            [lane_change_action(_RIGHT, entity=ctx.entity, over_s=1.5)],
+            [
+                speed_action(ctx.target_speed_mps * 0.5, over_s=2.0),
+                lane_change_action(_RIGHT, entity=ctx.entity, over_s=1.5),
+            ],
             _trigger_for(ctx),
         )
     ]
@@ -275,7 +309,7 @@ def _ego_speed(name: str, factor: float, *, shape: str, over_s: float):
             event(
                 name,
                 [speed_action(ctx.target_speed_mps * factor, shape=shape, over_s=over_s)],
-                time_trigger(SCRIPTED_CUE_S, name=name),
+                _trigger_for(ctx),
             )
         ]
 
@@ -284,9 +318,7 @@ def _ego_speed(name: str, factor: float, *, shape: str, over_s: float):
 
 def _ego_offset(name: str, offset_m: float):
     def build(ctx: TemplateContext) -> list[ET.Element]:
-        return [
-            event(name, [lane_offset_action(offset_m)], time_trigger(SCRIPTED_CUE_S, name=name))
-        ]
+        return [event(name, [lane_offset_action(offset_m)], _trigger_for(ctx))]
 
     return build
 
@@ -297,7 +329,7 @@ def _ego_lane_change(name: str, direction: int):
             event(
                 name,
                 [lane_change_action(direction, entity=ctx.ego, over_s=2.0)],
-                time_trigger(SCRIPTED_CUE_S, name=name),
+                _trigger_for(ctx),
             )
         ]
 
@@ -310,12 +342,12 @@ def ego_swerve(ctx: TemplateContext) -> list[ET.Element]:
         event(
             "ego_swerve_out",
             [lane_offset_action(SWERVE_OFFSET_M)],
-            time_trigger(SCRIPTED_CUE_S, name="swerve_out"),
+            time_trigger(ctx.cue_s(), name="swerve_out"),
         ),
         event(
             "ego_swerve_back",
             [lane_offset_action(0.0)],
-            time_trigger(SCRIPTED_CUE_S + 1.5, name="swerve_back"),
+            time_trigger(ctx.cue_s(1.5), name="swerve_back"),
         ),
     ]
 
@@ -325,12 +357,14 @@ def ego_reverse(ctx: TemplateContext) -> list[ET.Element]:
         event(
             "ego_reverse",
             [speed_action(-abs(ctx.target_speed_mps), shape="linear", over_s=2.0)],
-            time_trigger(SCRIPTED_CUE_S, name="ego_reverse"),
+            _trigger_for(ctx),
         )
     ]
 
 
-TemplateBuilder = Callable[[TemplateContext], list[ET.Element]]
+# Evaluated at runtime, so it cannot use a subscripted builtin: the render stage imports
+# this package under the simulator image's py3.7.
+TemplateBuilder = Callable[[TemplateContext], List[ET.Element]]  # noqa: UP006
 
 #: Every ``maneuver_template`` and ``control_template`` name the catalog can emit.
 TEMPLATES: dict[str, TemplateBuilder] = {

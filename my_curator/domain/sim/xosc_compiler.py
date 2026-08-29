@@ -18,12 +18,15 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 
 from my_curator.domain.sim.catalog import ACTOR_CLASS
-from my_curator.domain.sim.road_index import RoadSelection
+from my_curator.domain.sim.road_index import RoadCandidate, RoadSelection
 from my_curator.domain.sim.spec import ActorSpec, ControlMode, SimSpec
 from my_curator.domain.sim.templates import (
     TemplateContext,
     build_events,
+    distance_trigger,
     el,
+    event,
+    lane_change_action,
     speed_action,
     time_trigger,
 )
@@ -145,17 +148,21 @@ def _properties(parent: ET.Element, values: dict[str, str]) -> None:
         el("Property", props, name=name, value=value)
 
 
-def _vehicle(parent: ET.Element, name: str, blueprint: str, category: str, role: str) -> None:
+def _vehicle(
+    parent: ET.Element, name: str, blueprint: str, category: str, role: str, state: str = ""
+) -> None:
     vehicle = el("Vehicle", parent, name=blueprint, vehicleCategory=category)
     _bounding_box(vehicle, _VEHICLE_BOX)
     el("Performance", vehicle, **_PERFORMANCE)
     axles = el("Axles", vehicle)
     el("FrontAxle", axles, **_AXLE)
     el("RearAxle", axles, **{**_AXLE, "maxSteering": 0.0, "positionX": 0.0})
-    _properties(vehicle, {"type": role, "blueprint_filter": blueprint, "entity": name})
+    _properties(
+        vehicle, {"type": role, "blueprint_filter": blueprint, "entity": name, "state": state}
+    )
 
 
-def _pedestrian(parent: ET.Element, name: str, blueprint: str) -> None:
+def _pedestrian(parent: ET.Element, name: str, blueprint: str, state: str = "") -> None:
     walker = el(
         "Pedestrian",
         parent,
@@ -165,7 +172,11 @@ def _pedestrian(parent: ET.Element, name: str, blueprint: str) -> None:
         pedestrianCategory="pedestrian",
     )
     _bounding_box(walker, _WALKER_BOX)
-    _properties(walker, {"type": "walker", "blueprint_filter": blueprint, "entity": name})
+    # The state travels with the entity because the executor cannot infer it: a pedestrian
+    # who crosses the road and one who walks along it differ only by their DNA state.
+    _properties(
+        walker, {"type": "walker", "blueprint_filter": blueprint, "entity": name, "state": state}
+    )
 
 
 def _entities(spec: SimSpec, actors: list[tuple[str, ActorSpec]]) -> ET.Element:
@@ -176,10 +187,10 @@ def _entities(spec: SimSpec, actors: list[tuple[str, ActorSpec]]) -> ET.Element:
     for name, actor in actors:
         obj = el("ScenarioObject", entities, name=name)
         if _is_walker(actor):
-            _pedestrian(obj, name, actor.blueprint_filter)
+            _pedestrian(obj, name, actor.blueprint_filter, actor.state)
         else:
             category = _VEHICLE_CATEGORY.get(actor.actor_class, "car")
-            _vehicle(obj, name, actor.blueprint_filter, category, "simulation")
+            _vehicle(obj, name, actor.blueprint_filter, category, "simulation", actor.state)
     return entities
 
 
@@ -200,18 +211,90 @@ def _teleport(road_id: int, lane_id: int, s: float, offset: float = 0.0) -> ET.E
     return action
 
 
-def _actor_placement(actor: ActorSpec, road: RoadSelection, ego_s: float) -> tuple[int, float]:
-    """Where an actor starts, relative to ego along the same road.
+#: States staged in a lane other than ego's, because the maneuver needs somewhere to come
+#: from. ``cutout`` is deliberately absent: leaving ego's lane requires starting in it.
+_NEIGHBOURING_LANE_STATES = frozenset({"cutin", "oncoming"})
 
-    Oncoming and cut-in traffic sit ahead of ego; a follower sits behind it. The lane is
-    the neighbouring one where the maneuver needs somewhere to come from.
+#: States in which the actor enters ego's path from outside it. A walker crosses the lane
+#: on cue; a vehicle cannot cross sideways, so it waits in the neighbouring lane and pulls
+#: into ego's instead.
+_CROSSING_STATES = frozenset({"crossing", "hesitating", "jaywalking", "emerging"})
+
+#: Minimum spacing between two placements on one lane. Identical positions spawn one actor
+#: on top of another, which then scatters under physics.
+_PLACEMENT_SPACING_M = 7.0
+
+#: Fastest speed a class is asked to hold; a cyclist cannot reach a car's target and falls
+#: out of frame trying.
+_CLASS_SPEED_CAP_MPS: dict[str, float] = {"cyclist": 7.0}
+
+
+def _neighbour_lane(candidate: RoadCandidate) -> int | None:
+    """A drivable lane beside ego's, travelling the same way — ``None`` if there is none.
+
+    Lane 0 is the reference line and is never a driving lane, so the search steps inward
+    first, then outward while the carriageway still has lanes. It never crosses the centre
+    line: the opposing carriageway is oncoming traffic, not a neighbour.
     """
-    lane = road.candidate.lane_id
-    if actor.state in {"cutin", "cutout", "oncoming"}:
-        lane = lane + 1 if lane < 0 else lane - 1
-    if actor.state == "tailing":
-        return lane, max(0.0, ego_s - actor.distance_m)
-    return lane, ego_s + actor.distance_m
+    lane = candidate.lane_id
+    inward = lane + 1 if lane < 0 else lane - 1
+    if inward != 0:
+        return inward
+    outward = lane - 1 if lane < 0 else lane + 1
+    if abs(outward) <= candidate.driving_lanes:
+        return outward
+    return None
+
+
+def _ego_at_record_s(ego_s: float, candidate: RoadCandidate, spec: SimSpec) -> float:
+    """Where ego will be when the cameras start.
+
+    Ego drives its Init speed through the whole unrecorded warm-up while adversaries are
+    held still, so the DNA's distance — the gap at the first recorded frame — is measured
+    from here rather than from ego's staged ``s``.
+    """
+    travel = spec.ego.target_speed_kph * KPH_TO_MPS * spec.warmup_s
+    return ego_s + candidate.travel_direction * travel
+
+
+def _actor_placement(
+    actor: ActorSpec, road: RoadSelection, ego_s: float, spec: SimSpec
+) -> tuple[int, float]:
+    """Where an actor starts, so that the DNA's gap holds at the first recorded frame.
+
+    Lane first: oncoming traffic takes the innermost opposing lane, cut-ins and
+    lane-entering vehicles a same-direction neighbour (ego's own lane when the carriageway
+    has none), everything else ego's lane. Then the gap, forward from
+    :func:`_ego_at_record_s` — backward only for a follower — clamped to leave a vehicle
+    length at either end of the section, whose edge is often unspawnable.
+    """
+    candidate = road.candidate
+    forward = candidate.travel_direction
+    lane = candidate.lane_id
+    if actor.state == "oncoming":
+        # Innermost opposing lane, not ego's mirror: on a multi-lane road the mirror lane
+        # is a whole carriageway away and the pass never reaches the camera.
+        lane = 1 if lane < 0 else -1
+    elif actor.state in _NEIGHBOURING_LANE_STATES or (
+        actor.state in _CROSSING_STATES and not _is_walker(actor)
+    ):
+        # With no same-direction neighbour the actor stages in ego's lane as slower traffic
+        # ahead — less than the DNA states, but not the head-on pass it never described.
+        # The executor drops the lane change that is then meaningless.
+        lane = _neighbour_lane(candidate) or candidate.lane_id
+
+    gap = max(actor.distance_m, 0.0)
+    if lane * candidate.lane_id < 0:
+        # Head-on pairs close at their combined speed, so a gap set for the first frame is
+        # spent within a few of them; staged to meet mid-segment the approach stays on film.
+        # The DNA's distance is a bucket for the moment of interest, not for frame zero.
+        gap += spec.ego.target_speed_kph * KPH_TO_MPS * spec.duration_s
+    offset = -gap if actor.state == "tailing" else gap
+
+    s = _ego_at_record_s(ego_s, candidate, spec) + forward * offset
+    low = candidate.lane_section_s + _PLACEMENT_SPACING_M
+    high = max(low, candidate.lane_section_end_s - _PLACEMENT_SPACING_M)
+    return lane, round(min(max(s, low), high), 3)
 
 
 # --- storyboard --------------------------------------------------------------------
@@ -228,12 +311,30 @@ def _init(spec: SimSpec, road: RoadSelection, actors: list[tuple[str, ActorSpec]
     private.append(_teleport(candidate.road_id, candidate.lane_id, ego_s))
     private.append(_speed_init(spec.ego.target_speed_kph * KPH_TO_MPS))
 
+    taken: list[tuple[int, float]] = [(candidate.lane_id, ego_s)]
     for name, actor in actors:
-        lane, s = _actor_placement(actor, road, ego_s)
+        lane, s = _actor_placement(actor, road, ego_s, spec)
+        s = _deconflict(lane, s, taken, candidate)
+        taken.append((lane, s))
         actor_private = el("Private", actions, entityRef=name)
         actor_private.append(_teleport(candidate.road_id, lane, s))
         actor_private.append(_speed_init(_initial_speed_mps(actor, spec)))
     return init
+
+
+def _deconflict(
+    lane: int, s: float, taken: list[tuple[int, float]], candidate: RoadCandidate
+) -> float:
+    """Push a placement along its lane until it overlaps nothing already placed there."""
+    step = candidate.travel_direction * _PLACEMENT_SPACING_M
+    while any(
+        other_lane == lane and abs(other_s - s) < _PLACEMENT_SPACING_M
+        for other_lane, other_s in taken
+    ):
+        s = min(max(s + step, candidate.lane_section_s), candidate.lane_section_end_s)
+        if s in (candidate.lane_section_s, candidate.lane_section_end_s):
+            break  # out of road — an edge overlap beats an infinite loop
+    return round(s, 3)
 
 
 def _speed_init(value_mps: float) -> ET.Element:
@@ -243,6 +344,16 @@ def _speed_init(value_mps: float) -> ET.Element:
 def _initial_speed_mps(actor: ActorSpec, spec: SimSpec) -> float:
     if actor.state in {"stopped", "parked", "static"}:
         return 0.0
+    if actor.state in _CROSSING_STATES:
+        # Waits for its cue; driven through the warm-up it leaves before recording starts.
+        return 0.0
+    if actor.state == "cutin":
+        # Rolls alongside rather than waiting — from rest a fast ego overtakes it before
+        # the cue and the cut-in happens behind the camera.
+        return min(
+            spec.ego.target_speed_kph * KPH_TO_MPS,
+            _CLASS_SPEED_CAP_MPS.get(actor.actor_class, float("inf")),
+        )
     if _is_walker(actor):
         return 0.0
     return spec.ego.target_speed_kph * KPH_TO_MPS
@@ -262,12 +373,26 @@ def _story(spec: SimSpec, actors: list[tuple[str, ActorSpec]]) -> ET.Element:
     story = el("Story", name="reconstructed_segment")
     act = el("Act", story, name="main")
 
+    # Ego reacts to the event actor at the DNA distance rather than on a fixed clock: the
+    # driver in the source clip reacted to the actor. Oncoming traffic is excluded — it
+    # passes in the opposing lane, so the longitudinal gap is never reached and the
+    # maneuver would never fire.
+    event_actor = next(
+        (
+            (name, actor)
+            for name, actor in actors
+            if actor.is_event_actor and actor.state != "oncoming"
+        ),
+        None,
+    )
     ego_ctx = TemplateContext(
-        entity=EGO_NAME,
+        entity=event_actor[0] if event_actor else EGO_NAME,
         ego=EGO_NAME,
         target_speed_mps=spec.ego.target_speed_kph * KPH_TO_MPS,
-        trigger_distance_m=0.0,
-        event_timed=False,
+        trigger_distance_m=event_actor[1].distance_m if event_actor else 0.0,
+        event_timed=event_actor is not None,
+        warmup_s=spec.warmup_s,
+        duration_s=spec.duration_s,
     )
     ego_events = build_events(spec.ego.control_template, ego_ctx)
     if ego_events:
@@ -284,8 +409,22 @@ def _story(spec: SimSpec, actors: list[tuple[str, ActorSpec]]) -> ET.Element:
             target_speed_mps=spec.ego.target_speed_kph * KPH_TO_MPS,
             trigger_distance_m=actor.distance_m,
             event_timed=actor.is_event_actor,
+            warmup_s=spec.warmup_s,
+            duration_s=spec.duration_s,
         )
         events = build_events(actor.maneuver_template, ctx)
+        if actor.state in _CROSSING_STATES and not _is_walker(actor):
+            # The vehicle waits in the neighbouring lane (see the placement); entering
+            # ego's path is a lane change, which the crossing templates — written for
+            # walkers, who cross by walking — do not state.
+            trigger = distance_trigger(ctx) if ctx.event_timed else time_trigger(ctx.cue_s())
+            events.append(
+                event(
+                    f"{name}_pulls_into_lane",
+                    [lane_change_action(-1, entity=name, over_s=2.0)],
+                    trigger,
+                )
+            )
         if events:
             act.append(_maneuver_group(name, name, events))
 
