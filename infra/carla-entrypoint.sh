@@ -15,10 +15,18 @@ QUALITY="${CARLA_QUALITY:-Low}"
 RESOLUTION="${CARLA_RESOLUTION:-800x600}"
 MAP="${CARLA_MAP:-}"
 
-MAP_ARG=()
+# The startup map comes from the engine config, not the command line: this packaged build
+# silently ignores a map passed as an argument (measured — `CarlaUE4 /Game/Carla/Maps/Town03`
+# still comes up on the configured default), and switching at runtime segfaults it.
+ENGINE_INI="/home/carla/CarlaUE4/Config/DefaultEngine.ini"
 if [ -n "$MAP" ]; then
-    MAP_ARG=("/Game/Carla/Maps/$MAP")
-    echo "[carla-entrypoint] booting on map $MAP"
+    if [ -w "$ENGINE_INI" ]; then
+        sed -i -E "s#^(GameDefaultMap|ServerDefaultMap)=.*#\\1=/Game/Carla/Maps/$MAP.$MAP#" \
+            "$ENGINE_INI"
+        echo "[carla-entrypoint] booting on map $MAP"
+    else
+        echo "[carla-entrypoint] WARNING: $ENGINE_INI is not writable; CARLA_MAP ignored" >&2
+    fi
 fi
 
 # The UE4 renderer needs Vulkan; without a working ICD it exits at startup.
@@ -26,7 +34,7 @@ export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
 
 if [ "$VIEWER" != "1" ]; then
     echo "[carla-entrypoint] headless, RPC on :2000"
-    exec ./CarlaUE4.sh "${MAP_ARG[@]}" -nosound -RenderOffScreen -carla-rpc-port=2000 \
+    exec ./CarlaUE4.sh -nosound -RenderOffScreen -carla-rpc-port=2000 \
         -quality-level="$QUALITY" "$@"
 fi
 
@@ -44,5 +52,5 @@ sleep 1
 websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
 
 echo "[carla-entrypoint] viewer on :6080, RPC on :2000"
-exec ./CarlaUE4/Binaries/Linux/CarlaUE4-Linux-Shipping CarlaUE4 "${MAP_ARG[@]}" -nosound \
+exec ./CarlaUE4/Binaries/Linux/CarlaUE4-Linux-Shipping CarlaUE4 -nosound \
     -carla-rpc-port=2000 -quality-level="$QUALITY" "$@"
