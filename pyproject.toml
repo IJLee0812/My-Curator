@@ -34,6 +34,9 @@ test = [
     "boto3==1.42.96",
     "hypothesis==6.152.3",
     "xmlschema==4.3.2",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "httpx2",
 ]
 lint = [
     "ruff>=0.15",
