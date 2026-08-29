@@ -24,9 +24,10 @@ from typing import Any
 from my_curator.domain.sim.reasons import DegradationCode
 from my_curator.domain.sim.spec import Degradation, RoadQuery
 
-#: How far into a lane section the ego is placed. Far enough that the entity is not
-#: sitting exactly on a section boundary, short enough to leave the section usable.
-ENTRY_MARGIN_M = 5.0
+#: How far into a lane section ego is placed. Far enough that a follower fits behind it
+#: (a vehicle is about 4.6 m long) and that ego is off the section boundary; short enough
+#: to leave the section usable ahead.
+ENTRY_MARGIN_M = 8.0
 
 
 @dataclass(frozen=True)
@@ -49,15 +50,34 @@ class RoadCandidate:
         return max(0.0, self.lane_section_end_s - self.lane_section_s)
 
     @property
+    def travel_direction(self) -> int:
+        """``+1`` if the lane is driven with increasing ``s``, ``-1`` if against it.
+
+        OpenDRIVE numbers lanes outward from the reference line — negative to its right,
+        positive to its left — and the left-hand lanes carry traffic the other way, so
+        every placement along the lane has to be signed by this.
+        """
+        return -1 if self.lane_id > 0 else 1
+
+    @property
     def entry_s(self) -> float:
-        """Where along the road an entity is placed."""
-        return self.lane_section_s + min(ENTRY_MARGIN_M, self.usable_length_m / 2.0)
+        """Where along the road an entity is placed, leaving room in front of it."""
+        margin = min(ENTRY_MARGIN_M, self.usable_length_m / 2.0)
+        if self.travel_direction < 0:
+            return self.lane_section_end_s - margin
+        return self.lane_section_s + margin
+
+    def s_ahead(self, metres: float) -> float:
+        """``metres`` in front of :attr:`entry_s`, clamped to the lane section."""
+        target = self.entry_s + self.travel_direction * metres
+        return min(max(target, self.lane_section_s), self.lane_section_end_s)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["lane_types"] = sorted(self.lane_types)
         data["junction_forms"] = sorted(self.junction_forms)
         data["entry_s"] = self.entry_s
+        data["travel_direction"] = self.travel_direction
         return data
 
 

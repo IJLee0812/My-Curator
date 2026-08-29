@@ -47,8 +47,22 @@ RUN python3.7 -m pip install --no-cache-dir \
         ephem==4.2 xmlschema==1.0.18 tabulate opencv-python==4.2.0.32 \
         matplotlib six simple-watchdog-timer antlr4-python3-runtime==4.10 graphviz
 
-# scenario_runner imports CARLA's own agents package, which is not on the wheel's path.
-ENV PYTHONPATH=/opt/scenario_runner:/home/carla/PythonAPI/carla
+# GStreamer (P5-4) — the render path. All video work happens in this image: the host has
+# base+good plugins only, so it can neither encode nor decode H.264. gstreamer1.0-x carries
+# textoverlay (the pango plugin) and gstreamer1.0-libav the decoder. ~135 MB installed.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gstreamer1.0-tools \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-plugins-ugly \
+        gstreamer1.0-libav \
+        gstreamer1.0-x \
+    && rm -rf /var/lib/apt/lists/*
+
+# scenario_runner imports CARLA's own agents package, which is not on the wheel's path;
+# /opt/my-curator is where the render code is bind-mounted.
+ENV PYTHONPATH=/opt/scenario_runner:/home/carla/PythonAPI/carla:/opt/my-curator
 
 COPY carla-entrypoint.sh /carla-entrypoint.sh
 RUN chmod +x /carla-entrypoint.sh

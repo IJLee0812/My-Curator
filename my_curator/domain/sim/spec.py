@@ -13,8 +13,10 @@ from typing import Any
 from my_curator.domain.sim.reasons import DegradationCode
 
 # The warm-up runs but is never recorded, so a synthetic clip and its source have
-# identical duration for the embedding comparison.
+# identical duration for the embedding comparison. The segment's own length is read from
+# its DNA; DEFAULT_SEGMENT_S is only the fallback for DNA that states no usable range.
 DEFAULT_SEGMENT_S = 5.0
+MIN_SEGMENT_S = 1.0
 WARMUP_S = 3.0
 
 # The source corpus has no recoverable camera intrinsics — mount, FOV and even

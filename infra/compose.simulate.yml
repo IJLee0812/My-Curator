@@ -39,6 +39,12 @@ services:
       # tree: these are rebuildable output, and the name would otherwise collide with
       # the unrelated MinIO `artifacts` bucket.
       - "${SIM_ARTIFACT_DIR:-${DATA_ROOT}/sim}:/opt/sim:ro"
+      # Rendered output (P5-4). The only writable mount: raw frames land here and are
+      # deleted once encoded, leaving the three MP4s for the host to upload.
+      - "${SIM_RENDER_DIR:-${DATA_ROOT}/render}:/opt/render"
+      # The render code, and the source clips the comparison view is built against.
+      - "../my_curator:/opt/my-curator/my_curator:ro"
+      - "${VIDEO_DATA_ROOT}:/video:ro"
     deploy:
       resources:
         reservations:

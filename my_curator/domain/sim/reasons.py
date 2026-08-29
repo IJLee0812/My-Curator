@@ -1,9 +1,11 @@
-"""Reason codes for the DNA -> SimSpec mapping.
+"""Reason codes for the DNA -> SimSpec mapping and for the render that follows.
 
-Two orthogonal vocabularies: :class:`ExclusionReason` means nothing can be staged and the
-segment drops out of the coverage numerator; :class:`DegradationCode` means the segment is
-staged but a compromise was made and recorded. Each code carries a ``note`` so the
-coverage report explains itself without a lookup table.
+Three orthogonal vocabularies: :class:`ExclusionReason` means nothing can be staged and
+the segment drops out of the coverage numerator; :class:`DegradationCode` means the
+segment is staged but a compromise was made and recorded; :class:`RenderFailure` means the
+scenario was staged on paper but something broke while executing it. The first two describe
+what could not be *mapped*, the third what broke at *runtime*, which is why they stay
+apart. Each code carries a ``note`` so a report explains itself without a lookup table.
 """
 
 from __future__ import annotations
@@ -106,5 +108,52 @@ _DEGRADATION_NOTES: dict[DegradationCode, str] = {
     ),
     DegradationCode.COLLISION_NOT_STAGED: (
         "a contact event is reproduced up to the pre-impact geometry only; no impact is forced"
+    ),
+}
+
+
+class RenderFailure(str, Enum):
+    """Why a staged scenario produced no video."""
+
+    SCENARIO_UNSUPPORTED = "scenario_unsupported"
+    STAGE_CRASHED = "stage_crashed"
+    SIMULATOR_UNREACHABLE = "simulator_unreachable"
+    WRONG_TOWN_LOADED = "wrong_town_loaded"
+    SPAWN_REJECTED = "spawn_rejected"
+    BLUEPRINT_MISSING = "blueprint_missing"
+    SENSOR_FRAMES_LOST = "sensor_frames_lost"
+    ENCODING_FAILED = "encoding_failed"
+    SOURCE_VIDEO_UNREADABLE = "source_video_unreadable"
+
+    @property
+    def note(self) -> str:
+        return _RENDER_FAILURE_NOTES[self]
+
+
+_RENDER_FAILURE_NOTES: dict[RenderFailure, str] = {
+    RenderFailure.SCENARIO_UNSUPPORTED: (
+        "the scenario uses an element outside the compiled subset the executor implements"
+    ),
+    RenderFailure.STAGE_CRASHED: (
+        "the staging process died without reporting a result — see its output for the cause"
+    ),
+    RenderFailure.SIMULATOR_UNREACHABLE: (
+        "the simulator did not accept a connection, or dropped it mid-render"
+    ),
+    RenderFailure.WRONG_TOWN_LOADED: (
+        "the running server is on a different town and this build segfaults on a map switch"
+    ),
+    RenderFailure.SPAWN_REJECTED: (
+        "the lane position is occupied or off-road, so an entity could not be placed"
+    ),
+    RenderFailure.BLUEPRINT_MISSING: (
+        "the blueprint the scenario names is absent from this simulator build"
+    ),
+    RenderFailure.SENSOR_FRAMES_LOST: (
+        "the cameras delivered fewer frames than the segment needs, so the video is short"
+    ),
+    RenderFailure.ENCODING_FAILED: "the recorded frames could not be encoded into a video",
+    RenderFailure.SOURCE_VIDEO_UNREADABLE: (
+        "the original clip could not be read, so the comparison view cannot be built"
     ),
 }

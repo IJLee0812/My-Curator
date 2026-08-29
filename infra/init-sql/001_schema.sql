@@ -121,4 +121,25 @@ CREATE TABLE IF NOT EXISTS sim_road_index (
 );
 CREATE INDEX IF NOT EXISTS idx_sim_road_town ON sim_road_index(town);
 
+-- sim_render (P5-4): one append-only row per render attempt, successful or not, so
+-- "rendered" and "attempted" stay in a single ledger.
+CREATE TABLE IF NOT EXISTS sim_render (
+    render_id      BIGSERIAL        PRIMARY KEY,
+    clip_id        UUID             NOT NULL REFERENCES clips(clip_id) ON DELETE CASCADE,
+    source_clip_id TEXT             NOT NULL,
+    segment_index  SMALLINT         NOT NULL,
+    status         TEXT             NOT NULL,
+    failure_reason TEXT,
+    town           TEXT,
+    road_id        INTEGER,
+    lane_id        INTEGER,
+    duration_s     DOUBLE PRECISION,
+    ego_key        TEXT,
+    chase_key      TEXT,
+    compare_key    TEXT,
+    rendered_at    TIMESTAMPTZ      NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sim_render_clip ON sim_render(clip_id);
+CREATE INDEX IF NOT EXISTS idx_sim_render_source ON sim_render(source_clip_id);
+
 COMMIT;
