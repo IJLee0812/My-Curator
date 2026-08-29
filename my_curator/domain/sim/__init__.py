@@ -11,7 +11,14 @@ from my_curator.domain.sim.compilation import (
 )
 from my_curator.domain.sim.coverage import CoverageReport, build_coverage_report
 from my_curator.domain.sim.mapper import MappingResult, map_dna
-from my_curator.domain.sim.reasons import DegradationCode, ExclusionReason
+from my_curator.domain.sim.reasons import DegradationCode, ExclusionReason, RenderFailure
+from my_curator.domain.sim.render import (
+    RenderOutcome,
+    RenderReport,
+    SegmentRef,
+    build_render_report,
+    select_segment,
+)
 from my_curator.domain.sim.road_index import RoadCandidate, RoadSelection, select_road
 from my_curator.domain.sim.spec import (
     ActorSpec,
@@ -34,13 +41,19 @@ __all__ = [
     "EgoSpec",
     "ExclusionReason",
     "MappingResult",
+    "RenderFailure",
+    "RenderOutcome",
+    "RenderReport",
     "RoadCandidate",
+    "SegmentRef",
     "RoadSelection",
     "SimSpec",
     "WorldSpec",
     "build_compilation_report",
     "build_coverage_report",
+    "build_render_report",
     "compile_scenario",
     "map_dna",
     "select_road",
+    "select_segment",
 ]
