@@ -14,7 +14,7 @@ As a feasibility demonstration, a curated clip can also be **re-staged in
 CARLA from its DNA alone** — road-network selection, OpenSCENARIO compilation,
 and dual-view rendering, with no access to the original video.
 
-**Live:** [ijlee0812.github.io/My-Curator](https://ijlee0812.github.io/My-Curator)
+**Live:** [ijlee0812.github.io/My-Curator](https://ijlee0812.github.io/My-Curator) -> deprecated.
 
 ---
 
